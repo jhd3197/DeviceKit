@@ -58,4 +58,27 @@ export const api = {
   getConfig: () => request('/config'),
   updateConfig: (data) =>
     request('/config', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Automations
+  getStepTypes: () => request('/automations/step-types'),
+  getAutomations: () => request('/automations'),
+  getAutomation: (id) => request(`/automations/${id}`),
+  createAutomation: (data) =>
+    request('/automations', { method: 'POST', body: JSON.stringify(data) }),
+  updateAutomation: (id, data) =>
+    request(`/automations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAutomation: (id) =>
+    request(`/automations/${id}`, { method: 'DELETE' }),
+  runAutomation: (id, deviceId) =>
+    request(`/automations/${id}/run`, {
+      method: 'POST',
+      body: JSON.stringify({ device_id: deviceId }),
+    }),
+  getAutomationRuns: (params) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/automations/runs${q ? `?${q}` : ''}`)
+  },
+  getAutomationRun: (id) => request(`/automations/runs/${id}`),
+  cancelAutomationRun: (id) =>
+    request(`/automations/runs/${id}/cancel`, { method: 'POST' }),
 }

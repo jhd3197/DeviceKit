@@ -1,6 +1,6 @@
 # DeviceKit
 
-Unified Android device management platform. Combines CrawlerAndroid's Python/Flask backend with a React frontend for fleet monitoring, remote ADB, pipeline automation, and device diagnostics.
+Unified Android device management platform. Combines CrawlerAndroid's Python/Flask backend with a React frontend for fleet monitoring, remote ADB, pipeline automation, device diagnostics, and workflow automations.
 
 ## Architecture
 
@@ -13,12 +13,12 @@ DeviceKit/
 │       ├── client.py           Mixin composition class
 │       ├── device_manager.py   Thread-safe device pool
 │       ├── tools.py            Utilities
-│       └── mixins/             ADB, UIAutomator2, CDP, DynamoDB, S3, Queue, Alerts, Activity, API
+│       └── mixins/             ADB, UIAutomator2, CDP, DynamoDB, S3, Queue, Alerts, Activity, Automation, API
 ├── frontend/         React 18 + Vite + Tailwind CSS
 │   └── src/
 │       ├── App.jsx   Router + sidebar layout
 │       ├── api.js    API client
-│       └── views/    Dashboard, NodeDetail, Pipeline, RemoteADB
+│       └── views/    Dashboard, NodeDetail, Pipeline, RemoteADB, Automations
 └── template/         HTML design references
 ```
 
@@ -48,9 +48,17 @@ npm run dev
 cp .env.example .env
 # Edit .env with your AWS credentials
 docker-compose up
-# Frontend: http://localhost:3000
-# API: http://localhost:5050
-# DynamoDB Local: http://localhost:8000
+# Frontend: http://localhost:3847
+# API: http://localhost:5890
+# DynamoDB Local: http://localhost:8321
+```
+
+### Docker (Dev)
+
+```bash
+docker-compose -f docker-compose.dev.yml up
+# Frontend: http://localhost:5891
+# API: http://localhost:5890
 ```
 
 ## Environment Variables
@@ -63,7 +71,7 @@ docker-compose up
 | `AWS_SECRET_ACCESS_KEY` | - | AWS credentials |
 | `AWS_REGION` | `us-east-1` | AWS region |
 | `DYNAMODB_TABLE_PREFIX` | `devicekit_` | Table name prefix |
-| `DYNAMODB_ENDPOINT` | - | Local DynamoDB URL (e.g. `http://localhost:8000`) |
+| `DYNAMODB_ENDPOINT` | - | Local DynamoDB URL (e.g. `http://localhost:8321`) |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `DEVICE_IDS` | - | Comma-separated device serials |
 | `LOG_LEVEL` | `INFO` | Logging level |
@@ -104,6 +112,18 @@ docker-compose up
 - `PUT /alerts/:id/dismiss` - Dismiss alert
 - `GET /activities` - List activities
 
+### Automations
+- `GET /automations/step-types` - Available step types
+- `GET /automations` - List automations
+- `POST /automations` - Create automation
+- `GET /automations/:id` - Automation detail
+- `PUT /automations/:id` - Update automation
+- `DELETE /automations/:id` - Delete automation
+- `POST /automations/:id/run` - Run automation on device
+- `GET /automations/runs` - List runs
+- `GET /automations/runs/:runId` - Run detail
+- `POST /automations/runs/:runId/cancel` - Cancel run
+
 ### Config
 - `GET /config` - Get configuration
 - `PUT /config` - Update configuration
@@ -116,6 +136,9 @@ docker-compose up
 | Node Detail | `/node/:id` | Phone mockup, live diagnostics, ADB shell, properties |
 | Pipeline | `/pipeline` | Build list, test execution stream, failure analysis |
 | Remote ADB | `/remote-adb` | Terminal, file explorer, command presets |
+| Automations | `/automations` | Create, edit, and run multi-step device automations |
+| Automation Editor | `/automations/new` | Visual step builder with drag-and-drop workflow design |
+| Automation Run Detail | `/automations/runs/:runId` | Live run progress, step results, and logs |
 
 ## Tech Stack
 

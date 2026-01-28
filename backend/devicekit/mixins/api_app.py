@@ -307,6 +307,93 @@ class ApiAppMixin:
             client._config.update(data)
             return jsonify(client._config)
 
+        # -----------------------------------------------------------
+        # Automations
+        # -----------------------------------------------------------
+        @app.route('/automations/step-types')
+        def automation_step_types():
+            return jsonify(client.get_step_types())
+
+        @app.route('/automations')
+        def automations_list():
+            automations = client.list_automations()
+            return jsonify({'automations': automations, 'count': len(automations)})
+
+        @app.route('/automations', methods=['POST'])
+        def automations_create():
+            data = request.get_json(silent=True) or {}
+            name = data.get('name', '')
+            if not name:
+                return jsonify({'error': 'Name is required'}), 400
+            automation = client.create_automation(
+                name=name,
+                description=data.get('description', ''),
+                steps=data.get('steps', []),
+                tags=data.get('tags', []),
+            )
+            return jsonify(automation), 201
+
+        @app.route('/automations/<automation_id>')
+        def automations_get(automation_id):
+            automation = client.get_automation(automation_id)
+            if automation:
+                return jsonify(automation)
+            return jsonify({'error': 'Automation not found'}), 404
+
+        @app.route('/automations/<automation_id>', methods=['PUT'])
+        def automations_update(automation_id):
+            data = request.get_json(silent=True) or {}
+            result = client.update_automation(automation_id, data)
+            if result is None:
+                return jsonify({'error': 'Automation not found'}), 404
+            updated = client.get_automation(automation_id)
+            return jsonify(updated)
+
+        @app.route('/automations/<automation_id>', methods=['DELETE'])
+        def automations_delete(automation_id):
+            if client.delete_automation(automation_id):
+                return '', 204
+            return jsonify({'error': 'Automation not found'}), 404
+
+        @app.route('/automations/<automation_id>/run', methods=['POST'])
+        def automations_run(automation_id):
+            data = request.get_json(silent=True) or {}
+            device_id = data.get('device_id')
+            if not device_id:
+                return jsonify({'error': 'device_id is required'}), 400
+            try:
+                run_record = client.execute_automation(automation_id, device_id)
+                return jsonify(run_record), 201
+            except ValueError as e:
+                return jsonify({'error': str(e)}), 404
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/automations/runs')
+        def automation_runs_list():
+            automation_id = request.args.get('automation_id')
+            device_id = request.args.get('device_id')
+            limit = int(request.args.get('limit', 50))
+            runs = client.list_automation_runs(
+                automation_id=automation_id,
+                device_id=device_id,
+                limit=limit,
+            )
+            return jsonify({'runs': runs, 'count': len(runs)})
+
+        @app.route('/automations/runs/<run_id>')
+        def automation_runs_get(run_id):
+            run = client.get_automation_run(run_id)
+            if run:
+                return jsonify(run)
+            return jsonify({'error': 'Run not found'}), 404
+
+        @app.route('/automations/runs/<run_id>/cancel', methods=['POST'])
+        def automation_runs_cancel(run_id):
+            if client.cancel_automation_run(run_id):
+                return jsonify({'status': 'cancelling'})
+            return jsonify({'error': 'Run not found or already finished'}), 404
+
         # Run
         app.run(host=host, port=port, debug=debug)
         return app

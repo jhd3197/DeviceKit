@@ -2,7 +2,7 @@ services:
   api:
     build: ./backend
     ports:
-      - "5050:5050"
+      - "5890:5050"
     env_file: .env
     depends_on:
       - dynamodb-local
@@ -12,12 +12,12 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "3847:80"
     depends_on:
       - api
 
   dynamodb-local:
     image: amazon/dynamodb-local
     ports:
-      - "8000:8000"
+      - "8321:8000"
     command: "-jar DynamoDBLocal.jar -sharedDb"

@@ -1,0 +1,28 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "5890:5050"
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    command: python app.py
+    environment:
+      - FLASK_DEBUG=1
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    ports:
+      - "5891:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - api
+    environment:
+      - VITE_API_URL=http://localhost:5890
+
+volumes:
+  frontend_node_modules:

@@ -12,6 +12,7 @@ from devicekit.mixins.api_app import ApiAppMixin
 from devicekit.mixins.queue import QueueMixin
 from devicekit.mixins.alerts import AlertMixin
 from devicekit.mixins.activity import ActivityMixin
+from devicekit.mixins.automation import AutomationMixin
 
 
 class Client(
@@ -20,6 +21,7 @@ class Client(
     CdpMixin,
     DynamodbMixin,
     AwsStorageMixin,
+    AutomationMixin,
     ApiAppMixin,
     QueueMixin,
     AlertMixin,
