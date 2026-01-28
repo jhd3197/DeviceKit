@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #000000;
+    color: #ededed;
+    margin: 0;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  .bg-card {
+    background-color: #0a0a0a;
+  }
+
+  .bg-card-alt {
+    background-color: #050505;
+  }
+
+  .border-main {
+    border-color: #1a1a1a;
+  }
+
+  .border-alt {
+    border-color: #2e2e2e;
+  }
+
+  .terminal-bg {
+    background-color: #020202;
+  }
+
+  .tab-active {
+    border-bottom: 2px solid #10b981;
+    color: #fff;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Subtle glow for active nodes */
+.active-glow {
+  box-shadow: 0 0 15px -5px rgba(16, 185, 129, 0.2);
+}
+
+/* Test result borders */
+.test-pass {
+  color: #10b981;
+  border-left: 2px solid #10b981;
+}
+.test-fail {
+  color: #ef4444;
+  border-left: 2px solid #ef4444;
+}
+.test-running {
+  color: #3b82f6;
+  border-left: 2px solid #3b82f6;
+}

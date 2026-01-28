@@ -1,0 +1,10 @@
+flask==3.1.0
+flask-cors==5.0.1
+boto3==1.35.0
+uiautomator2==3.2.3
+pychrome==0.2.4
+beautifulsoup4==4.12.3
+requests==2.32.3
+python-dotenv==1.0.1
+colorlog==6.9.0
+python-slugify==8.0.4

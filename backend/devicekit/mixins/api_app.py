@@ -1,0 +1,312 @@
+import logging
+import time
+import uuid
+import requests
+from bs4 import BeautifulSoup
+from flask import Flask, request, jsonify, Response
+from flask_cors import CORS
+
+logger = logging.getLogger(__name__)
+
+
+class ApiAppMixin:
+    # In-memory builds store for pipeline
+    _builds = []
+    _config = {}
+
+    def api_app(self, host='0.0.0.0', port=5050, debug=True):
+        try:
+            self.start_uiautomator2_server()
+        except Exception as e:
+            logger.warning(f"UIAutomator2 init skipped: {e}")
+
+        app = Flask(__name__)
+        CORS(app)
+        client = self
+
+        # -----------------------------------------------------------
+        # Health
+        # -----------------------------------------------------------
+        @app.route('/health')
+        def health():
+            return jsonify({'status': 'ok', 'timestamp': time.time()})
+
+        # -----------------------------------------------------------
+        # Devices
+        # -----------------------------------------------------------
+        @app.route('/devices')
+        def devices():
+            connected = client.get_devices()
+            return jsonify({'devices': connected, 'count': len(connected)})
+
+        @app.route('/devices/<device_id>')
+        def device_info(device_id):
+            info = client.get_device_info(device_id)
+            if info:
+                return jsonify(info)
+            return jsonify({'error': 'Device not found'}), 404
+
+        @app.route('/proxy/device/<device_id>')
+        def proxy_device(device_id):
+            url = f'https://uiauto.dev/android/{device_id}'
+            try:
+                resp = requests.get(url, timeout=10)
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                nav = soup.select_one('.p-tabview-nav-content')
+                if nav:
+                    nav['style'] = 'display: none;'
+                return Response(str(soup), content_type=resp.headers.get('content-type', 'text/html'))
+            except Exception as e:
+                return jsonify({'error': str(e)}), 502
+
+        # -----------------------------------------------------------
+        # Dashboard
+        # -----------------------------------------------------------
+        @app.route('/dashboard/stats')
+        def dashboard_stats():
+            connected = client.get_devices()
+            total = len(connected)
+            busy = sum(1 for d in connected if d and d.get('currentPackageName'))
+            utilization = round((busy / total * 100) if total > 0 else 0, 1)
+            alerts = client.get_alerts(limit=100)
+            critical = sum(1 for a in alerts if a['severity'] == 'critical')
+            health = 'Healthy' if critical == 0 else 'Degraded'
+            return jsonify({
+                'fleet_count': total,
+                'utilization': utilization,
+                'avg_response_ms': 12,
+                'health': health,
+                'active_alerts': len(alerts),
+            })
+
+        # -----------------------------------------------------------
+        # Device Control
+        # -----------------------------------------------------------
+        @app.route('/devices/<device_id>/adb', methods=['POST'])
+        def device_adb(device_id):
+            data = request.get_json(silent=True) or {}
+            command = data.get('command', '')
+            if not command:
+                return jsonify({'error': 'No command provided'}), 400
+            try:
+                output = client.run_adb_command(f"shell {command}", device=device_id)
+                client.log_activity('adb_command', device_id, {'command': command})
+                return jsonify({'output': output, 'device_id': device_id})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/reboot', methods=['POST'])
+        def device_reboot(device_id):
+            try:
+                client.reboot_device(device=device_id)
+                client.log_activity('reboot', device_id)
+                return jsonify({'status': 'rebooting', 'device_id': device_id})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/screenshot')
+        def device_screenshot(device_id):
+            try:
+                data = client.take_screenshot(device_id)
+                if data:
+                    return Response(data, mimetype='image/png')
+                return jsonify({'error': 'Screenshot failed'}), 500
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/battery')
+        def device_battery(device_id):
+            try:
+                info = client.get_device_battery(device=device_id)
+                return jsonify(info)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/diagnostics')
+        def device_diagnostics(device_id):
+            try:
+                battery = client.get_device_battery(device=device_id)
+                # CPU usage
+                cpu_out = client.run_adb_command(
+                    "shell top -n 1 -b | head -5", device=device_id
+                )
+                # Memory
+                mem_out = client.run_adb_command("shell cat /proc/meminfo", device=device_id)
+                mem_total = 0
+                mem_free = 0
+                for line in mem_out.split('\n'):
+                    if 'MemTotal' in line:
+                        mem_total = int(''.join(filter(str.isdigit, line))) // 1024
+                    elif 'MemAvailable' in line:
+                        mem_free = int(''.join(filter(str.isdigit, line))) // 1024
+                mem_used = mem_total - mem_free
+                # Uptime
+                uptime_out = client.run_adb_command("shell cat /proc/uptime", device=device_id)
+                uptime_secs = float(uptime_out.split()[0]) if uptime_out else 0
+
+                return jsonify({
+                    'battery_level': int(battery.get('level', 0)),
+                    'temperature': round(int(battery.get('temperature', 0)) / 10, 1),
+                    'cpu_raw': cpu_out[:200],
+                    'mem_total_mb': mem_total,
+                    'mem_used_mb': mem_used,
+                    'uptime_seconds': uptime_secs,
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/properties')
+        def device_properties(device_id):
+            try:
+                def prop(key):
+                    return client.run_adb_command(f"shell getprop {key}", device=device_id)
+
+                return jsonify({
+                    'os_version': prop('ro.build.version.release'),
+                    'sdk': prop('ro.build.version.sdk'),
+                    'kernel': prop('ro.build.display.id'),
+                    'hardware': prop('ro.hardware'),
+                    'model': prop('ro.product.model'),
+                    'manufacturer': prop('ro.product.manufacturer'),
+                    'resolution': client.run_adb_command("shell wm size", device=device_id),
+                    'density': client.run_adb_command("shell wm density", device=device_id),
+                })
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/files')
+        def device_files(device_id):
+            path = request.args.get('path', '/sdcard')
+            try:
+                output = client.run_adb_command(f"shell ls -la {path}", device=device_id)
+                entries = []
+                for line in output.split('\n'):
+                    parts = line.split()
+                    if len(parts) >= 8:
+                        name = parts[-1]
+                        is_dir = line.startswith('d')
+                        size = parts[4] if not is_dir else None
+                        entries.append({
+                            'name': name,
+                            'is_dir': is_dir,
+                            'size': size,
+                            'path': f"{path}/{name}",
+                        })
+                return jsonify({'path': path, 'entries': entries})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        # -----------------------------------------------------------
+        # Pipeline
+        # -----------------------------------------------------------
+        @app.route('/pipeline/builds')
+        def pipeline_builds():
+            return jsonify({
+                'builds': sorted(client._builds, key=lambda b: b['created_at'], reverse=True)
+            })
+
+        @app.route('/pipeline/builds/<build_id>')
+        def pipeline_build_detail(build_id):
+            build = next((b for b in client._builds if b['id'] == build_id), None)
+            if build:
+                return jsonify(build)
+            return jsonify({'error': 'Build not found'}), 404
+
+        @app.route('/pipeline/builds', methods=['POST'])
+        def pipeline_start_build():
+            build_num = len(client._builds) + 1
+            build = {
+                'id': str(build_num),
+                'number': build_num,
+                'title': f'Build #{build_num}',
+                'status': 'running',
+                'created_at': time.time(),
+                'success_rate': 0,
+                'tests': [],
+                'failures': [],
+            }
+            client._builds.append(build)
+            client.log_activity('build_started', details={'build_id': build['id']})
+            return jsonify(build), 201
+
+        @app.route('/pipeline/builds/<build_id>/failures')
+        def pipeline_build_failures(build_id):
+            build = next((b for b in client._builds if b['id'] == build_id), None)
+            if not build:
+                return jsonify({'error': 'Build not found'}), 404
+            return jsonify({'failures': build.get('failures', [])})
+
+        # -----------------------------------------------------------
+        # Queue
+        # -----------------------------------------------------------
+        @app.route('/queue/status')
+        def queue_status():
+            return jsonify(client.get_all_queue_status())
+
+        @app.route('/queue/<name>/send', methods=['POST'])
+        def queue_send(name):
+            data = request.get_json(silent=True) or {}
+            body = data.get('body', data)
+            msg_id = client.send_message(name, body)
+            return jsonify({'message_id': msg_id})
+
+        @app.route('/queue/<name>/receive', methods=['POST'])
+        def queue_receive(name):
+            msg = client.receive_message(name)
+            if msg:
+                return jsonify(msg)
+            return jsonify({'message': None}), 204
+
+        # -----------------------------------------------------------
+        # Alerts
+        # -----------------------------------------------------------
+        @app.route('/alerts')
+        def alerts_list():
+            type_filter = request.args.get('type')
+            limit = int(request.args.get('limit', 50))
+            alerts = client.get_alerts(limit=limit, type_filter=type_filter)
+            return jsonify({'alerts': alerts, 'count': len(alerts)})
+
+        @app.route('/alerts', methods=['POST'])
+        def alerts_create():
+            data = request.get_json(silent=True) or {}
+            alert = client.create_alert(
+                device_id=data.get('device_id', 'unknown'),
+                alert_type=data.get('type', 'error'),
+                message=data.get('message', ''),
+                severity=data.get('severity', 'warning'),
+            )
+            return jsonify(alert), 201
+
+        @app.route('/alerts/<alert_id>/dismiss', methods=['PUT'])
+        def alerts_dismiss(alert_id):
+            if client.dismiss_alert(alert_id):
+                return jsonify({'status': 'dismissed'})
+            return jsonify({'error': 'Alert not found'}), 404
+
+        # -----------------------------------------------------------
+        # Activities
+        # -----------------------------------------------------------
+        @app.route('/activities')
+        def activities_list():
+            device_id = request.args.get('device_id')
+            limit = int(request.args.get('limit', 50))
+            activities = client.get_activities(limit=limit, device_id_filter=device_id)
+            return jsonify({'activities': activities, 'count': len(activities)})
+
+        # -----------------------------------------------------------
+        # Config
+        # -----------------------------------------------------------
+        @app.route('/config')
+        def config_get():
+            return jsonify(client._config)
+
+        @app.route('/config', methods=['PUT'])
+        def config_update():
+            data = request.get_json(silent=True) or {}
+            client._config.update(data)
+            return jsonify(client._config)
+
+        # Run
+        app.run(host=host, port=port, debug=debug)
+        return app
