@@ -46,6 +46,10 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
 
+    // ViewPager2 + Fragments
+    implementation("androidx.viewpager2:viewpager2:1.0.0")
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
+
     // HTTP client
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 

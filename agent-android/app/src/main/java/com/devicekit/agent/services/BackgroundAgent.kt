@@ -10,6 +10,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.devicekit.agent.DeviceKitApp
 import com.devicekit.agent.DeviceState
+import com.devicekit.agent.LogBuffer
 import com.devicekit.agent.MainActivity
 import com.devicekit.agent.R
 import com.devicekit.agent.api.DeviceKitClient
@@ -22,6 +23,7 @@ import org.json.JSONObject
  * 2. Periodically pushes full device state
  * 3. Polls for commands from the server
  * 4. Survives activity destruction (runs in background)
+ * 5. Runs on-device metrics collection
  */
 class BackgroundAgent : Service() {
 
@@ -39,6 +41,7 @@ class BackgroundAgent : Service() {
     private val client = DeviceKitClient()
     private var heartbeatJob: Job? = null
     private var stateReportJob: Job? = null
+    private var metricsCollector: MetricsCollector? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -46,6 +49,7 @@ class BackgroundAgent : Service() {
         super.onCreate()
         isRunning = true
         Log.i(TAG, "Background Agent created")
+        LogBuffer.log("BackgroundAgent", "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -68,11 +72,14 @@ class BackgroundAgent : Service() {
                 if (registered) {
                     DeviceState.isConnected = true
                     updateNotification("Connected to ${DeviceState.serverUrl}")
+                    LogBuffer.log("BackgroundAgent", "Connected to ${DeviceState.serverUrl}")
                     startHeartbeat()
                     startStateReporting()
+                    startMetricsCollection()
                 } else {
                     DeviceState.isConnected = false
                     updateNotification("Failed to connect - retrying...")
+                    LogBuffer.log("BackgroundAgent", "Connection failed, retrying...", LogBuffer.Level.ERROR)
                     delay(5_000)
                 }
             }
@@ -96,6 +103,7 @@ class BackgroundAgent : Service() {
                 put("notification_listener")
                 put("state_reporting")
                 put("command_receiver")
+                put("metrics_collection")
             })
         }
 
@@ -103,6 +111,7 @@ class BackgroundAgent : Service() {
         if (deviceId != null) {
             DeviceState.deviceId = deviceId
             Log.i(TAG, "Registered with server, device_id=$deviceId")
+            LogBuffer.log("BackgroundAgent", "Registered: device_id=$deviceId")
             return true
         }
 
@@ -110,6 +119,7 @@ class BackgroundAgent : Service() {
         if (client.ping()) {
             DeviceState.deviceId = "${Build.MANUFACTURER}_${Build.MODEL}".replace(" ", "_")
             Log.i(TAG, "Server reachable, using fallback device_id=${DeviceState.deviceId}")
+            LogBuffer.log("BackgroundAgent", "Fallback registration: ${DeviceState.deviceId}")
             return true
         }
 
@@ -127,6 +137,7 @@ class BackgroundAgent : Service() {
                 if (!success) {
                     Log.w(TAG, "Heartbeat failed")
                     updateNotification("Connection lost - retrying...")
+                    LogBuffer.log("BackgroundAgent", "Heartbeat failed", LogBuffer.Level.ERROR)
                 }
                 delay(HEARTBEAT_INTERVAL_MS)
             }
@@ -145,6 +156,12 @@ class BackgroundAgent : Service() {
                 delay(STATE_REPORT_INTERVAL_MS)
             }
         }
+    }
+
+    private fun startMetricsCollection() {
+        metricsCollector?.stop()
+        metricsCollector = MetricsCollector(this).also { it.start() }
+        LogBuffer.log("BackgroundAgent", "Metrics collection started")
     }
 
     private fun buildNotification(text: String): Notification {
@@ -173,7 +190,10 @@ class BackgroundAgent : Service() {
         super.onDestroy()
         isRunning = false
         DeviceState.isConnected = false
+        metricsCollector?.stop()
+        metricsCollector = null
         scope.cancel()
         Log.i(TAG, "Background Agent destroyed")
+        LogBuffer.log("BackgroundAgent", "Service destroyed")
     }
 }

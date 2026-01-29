@@ -7,31 +7,26 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
-import android.widget.EditText
-import android.widget.LinearLayout
+import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import com.devicekit.agent.services.AccessibilityAgent
+import androidx.viewpager2.widget.ViewPager2
 import com.devicekit.agent.services.BackgroundAgent
-import com.devicekit.agent.services.NotificationAgent
-import com.google.android.material.button.MaterialButton
+import com.devicekit.agent.ui.TabPagerAdapter
+import com.google.android.material.tabs.TabLayout
+import com.google.android.material.tabs.TabLayoutMediator
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var statusDot: android.view.View
-    private lateinit var statusText: TextView
-    private lateinit var serverUrlInput: EditText
-    private lateinit var toggleButton: MaterialButton
-    private lateinit var liveStateText: TextView
+    private lateinit var headerStatusDot: View
+    private lateinit var headerStatusText: TextView
+    private lateinit var viewPager: ViewPager2
 
     private val handler = Handler(Looper.getMainLooper())
-    private var isAgentRunning = false
-
     private val updateRunnable = object : Runnable {
         override fun run() {
-            updateUI()
+            updateHeader()
             handler.postDelayed(this, 1_000)
         }
     }
@@ -42,26 +37,35 @@ class MainActivity : AppCompatActivity() {
 
         prefs = getSharedPreferences("devicekit", MODE_PRIVATE)
 
-        statusDot = findViewById(R.id.statusDot)
-        statusText = findViewById(R.id.statusText)
-        serverUrlInput = findViewById(R.id.serverUrlInput)
-        toggleButton = findViewById(R.id.toggleButton)
-        liveStateText = findViewById(R.id.liveStateText)
+        headerStatusDot = findViewById(R.id.headerStatusDot)
+        headerStatusText = findViewById(R.id.headerStatusText)
+        viewPager = findViewById(R.id.viewPager)
 
-        // Restore saved server URL
-        val savedUrl = prefs.getString("server_url", BuildConfig.DEVICEKIT_SERVER_URL)
-        serverUrlInput.setText(savedUrl)
+        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
 
-        toggleButton.setOnClickListener {
-            if (isAgentRunning) {
-                stopAgent()
-            } else {
-                startAgent()
-            }
+        // Setup ViewPager2 with adapter
+        val adapter = TabPagerAdapter(this)
+        viewPager.adapter = adapter
+
+        // Connect TabLayout with ViewPager2
+        TabLayoutMediator(tabLayout, viewPager) { tab, position ->
+            tab.text = TabPagerAdapter.TAB_TITLES[position]
+        }.attach()
+
+        // Handle intent extras for tab navigation
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleIntent(it) }
+    }
+
+    private fun handleIntent(intent: Intent) {
+        val tabIndex = intent.getIntExtra("tab_index", -1)
+        if (tabIndex in 0 until TabPagerAdapter.TAB_COUNT) {
+            viewPager.currentItem = tabIndex
         }
-
-        // Check if services need permissions
-        checkPermissions()
     }
 
     override fun onResume() {
@@ -74,110 +78,52 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(updateRunnable)
     }
 
-    private fun startAgent() {
-        val url = serverUrlInput.text.toString().trim()
-        if (url.isEmpty()) {
-            serverUrlInput.error = "Enter server URL"
-            return
-        }
+    private fun updateHeader() {
+        val connected = DeviceState.isConnected
+        val dot = headerStatusDot.background as? GradientDrawable ?: GradientDrawable()
+        dot.setColor(if (connected) Color.parseColor("#10B981") else Color.parseColor("#EF4444"))
+        dot.cornerRadius = 100f
+        headerStatusDot.background = dot
 
-        // Save URL
+        headerStatusText.text = when {
+            connected -> "Online"
+            BackgroundAgent.isRunning -> "Connecting..."
+            else -> "Offline"
+        }
+    }
+
+    /**
+     * Start the background agent. Called from DashboardFragment.
+     */
+    fun startAgent() {
+        val url = prefs.getString("server_url", DeviceState.serverUrl) ?: DeviceState.serverUrl
         DeviceState.serverUrl = url
         prefs.edit()
             .putString("server_url", url)
             .putBoolean("auto_start", true)
             .apply()
 
-        // Start background service
         val intent = Intent(this, BackgroundAgent::class.java).apply {
             putExtra("server_url", url)
         }
         startForegroundService(intent)
-
-        isAgentRunning = true
-        toggleButton.text = "Stop Agent"
+        LogBuffer.log("MainActivity", "Agent started")
     }
 
-    private fun stopAgent() {
+    /**
+     * Stop the background agent. Called from DashboardFragment.
+     */
+    fun stopAgent() {
         stopService(Intent(this, BackgroundAgent::class.java))
         prefs.edit().putBoolean("auto_start", false).apply()
-
-        isAgentRunning = false
         DeviceState.isConnected = false
-        toggleButton.text = "Start Agent"
-    }
-
-    private fun updateUI() {
-        isAgentRunning = BackgroundAgent.isRunning
-
-        // Connection status
-        val connected = DeviceState.isConnected
-        val dot = statusDot.background as? GradientDrawable ?: GradientDrawable()
-        dot.setColor(if (connected) Color.parseColor("#10B981") else Color.parseColor("#EF4444"))
-        dot.cornerRadius = 100f
-        statusDot.background = dot
-
-        statusText.text = when {
-            connected -> "Connected"
-            isAgentRunning -> "Connecting..."
-            else -> "Disconnected"
-        }
-
-        toggleButton.text = if (isAgentRunning) "Stop Agent" else "Start Agent"
-
-        // Service rows
-        updateServiceRow(R.id.accessibilityRow, "Accessibility", AccessibilityAgent.isRunning)
-        updateServiceRow(R.id.backgroundRow, "Background Agent", BackgroundAgent.isRunning)
-        updateServiceRow(R.id.notificationRow, "Notifications", NotificationAgent.isRunning)
-
-        // Live state
-        liveStateText.text = DeviceState.toDisplayString()
-    }
-
-    private fun updateServiceRow(rowId: Int, name: String, active: Boolean) {
-        val row = findViewById<LinearLayout>(rowId) ?: return
-        val dot = row.findViewById<android.view.View>(R.id.serviceDot)
-        val nameView = row.findViewById<TextView>(R.id.serviceName)
-        val statusView = row.findViewById<TextView>(R.id.serviceStatus)
-
-        nameView?.text = name
-        statusView?.text = if (active) "Active" else "Inactive"
-        statusView?.setTextColor(
-            if (active) Color.parseColor("#10B981") else Color.parseColor("#6B7280")
-        )
-
-        val dotBg = dot?.background as? GradientDrawable ?: GradientDrawable()
-        dotBg.setColor(
-            if (active) Color.parseColor("#10B981") else Color.parseColor("#6B7280")
-        )
-        dotBg.cornerRadius = 100f
-        dot?.background = dotBg
-    }
-
-    private fun checkPermissions() {
-        // Check accessibility service
-        if (!AccessibilityAgent.isRunning) {
-            // User needs to enable accessibility manually
-            // We can prompt but not auto-enable
-        }
-
-        // Check notification listener
-        if (!NotificationAgent.isRunning) {
-            // User needs to enable in Settings > Notification access
-        }
+        LogBuffer.log("MainActivity", "Agent stopped")
     }
 
     /**
-     * Opens accessibility settings so the user can enable our service.
+     * Navigate to a specific tab.
      */
-    fun openAccessibilitySettings() {
-        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-    }
-
-    /**
-     * Opens notification listener settings.
-     */
-    fun openNotificationSettings() {
-        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    fun navigateToTab(tabIndex: Int) {
+        viewPager.currentItem = tabIndex
     }
 }

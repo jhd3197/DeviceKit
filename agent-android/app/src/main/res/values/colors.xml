@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_primary">#0F0D1A</color>
+    <color name="bg_card">#1E1B2E</color>
+    <color name="bg_card_elevated">#2A2740</color>
+    <color name="indigo">#6366F1</color>
+    <color name="indigo_dark">#4F46E5</color>
+    <color name="green">#10B981</color>
+    <color name="green_dark">#059669</color>
+    <color name="red">#EF4444</color>
+    <color name="red_dark">#DC2626</color>
+    <color name="yellow">#F59E0B</color>
+    <color name="blue">#3B82F6</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#9CA3AF</color>
+    <color name="text_muted">#6B7280</color>
+    <color name="tab_indicator">#6366F1</color>
+    <color name="tab_selected">#FFFFFF</color>
+    <color name="tab_unselected">#6B7280</color>
+    <color name="chart_bg">#161327</color>
+    <color name="chart_grid">#2A2740</color>
+    <color name="chart_cpu">#10B981</color>
+    <color name="chart_ram">#6B7280</color>
+</resources>

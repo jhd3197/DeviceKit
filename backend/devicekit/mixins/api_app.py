@@ -223,7 +223,32 @@ class ApiAppMixin:
 
         @app.route('/devices/<device_id>/diagnostics')
         def device_diagnostics(device_id):
+            """Return device diagnostics, preferring agent-sourced metrics when available."""
             try:
+                # Check if we have recent agent-sourced metrics (< 10s old)
+                agent_data = _find_agent_device(device_id)
+                if agent_data:
+                    last_hb = agent_data.get('last_heartbeat', 0)
+                    if time.time() - last_hb < 10:
+                        state = agent_data.get('state', {})
+                        metrics = state.get('metrics', {})
+                        if metrics:
+                            network = metrics.get('network', {})
+                            return jsonify({
+                                'battery_level': metrics.get('battery_level', 0),
+                                'temperature': metrics.get('battery_temperature', 0),
+                                'cpu_percent': metrics.get('cpu_percent', 0),
+                                'mem_total_mb': metrics.get('ram_total_mb', 0),
+                                'mem_used_mb': metrics.get('ram_used_mb', 0),
+                                'is_charging': metrics.get('is_charging', False),
+                                'network_type': network.get('type', 'unknown'),
+                                'network_rx_rate': network.get('rx_rate', 0),
+                                'network_tx_rate': network.get('tx_rate', 0),
+                                'uptime_seconds': 0,
+                                'source': 'agent',
+                            })
+
+                # Fallback to ADB-sourced diagnostics
                 battery = client.get_device_battery(device=device_id)
                 # CPU usage
                 cpu_out = client.run_adb_command(
@@ -250,6 +275,7 @@ class ApiAppMixin:
                     'mem_total_mb': mem_total,
                     'mem_used_mb': mem_used,
                     'uptime_seconds': uptime_secs,
+                    'source': 'adb',
                 })
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
@@ -601,6 +627,7 @@ class ApiAppMixin:
         # In-memory store for agent device state
         _agent_device_states = {}
         _agent_device_events = []
+        _agent_device_serial_index = {}  # serial -> device_id mapping
 
         @app.route('/agent-device/register', methods=['POST'])
         def agent_device_register():
@@ -616,7 +643,11 @@ class ApiAppMixin:
                 'state': {},
                 'online': True,
             }
-            logger.info(f"Agent device registered: {device_id}")
+            # Index by serial number for ADB cross-reference
+            serial = data.get('serial')
+            if serial:
+                _agent_device_serial_index[serial] = device_id
+            logger.info(f"Agent device registered: {device_id} (serial={serial})")
             client.log_activity('agent_device_register', device_id, data)
             return jsonify({'device_id': device_id, 'status': 'registered'})
 
@@ -655,6 +686,41 @@ class ApiAppMixin:
             # Placeholder for command queue from server to on-device agent
             return jsonify({'commands': []})
 
+        @app.route('/agent-device/<device_id>/metrics')
+        def agent_device_metrics(device_id):
+            """Return raw agent-sourced metrics for a device."""
+            agent_data = _find_agent_device(device_id)
+            if not agent_data:
+                return jsonify({'error': 'Agent device not found'}), 404
+
+            state = agent_data.get('state', {})
+            metrics = state.get('metrics', {})
+            if not metrics:
+                return jsonify({'error': 'No metrics available'}), 404
+
+            last_hb = agent_data.get('last_heartbeat', 0)
+            network = metrics.get('network', {})
+            return jsonify({
+                'device_id': device_id,
+                'metrics': {
+                    'cpu_percent': metrics.get('cpu_percent', 0),
+                    'ram_used_mb': metrics.get('ram_used_mb', 0),
+                    'ram_total_mb': metrics.get('ram_total_mb', 0),
+                    'battery_level': metrics.get('battery_level', 0),
+                    'battery_temperature': metrics.get('battery_temperature', 0),
+                    'is_charging': metrics.get('is_charging', False),
+                    'network': {
+                        'type': network.get('type', 'unknown'),
+                        'rx_rate': network.get('rx_rate', 0),
+                        'tx_rate': network.get('tx_rate', 0),
+                    },
+                },
+                'last_heartbeat': last_hb,
+                'online': agent_data.get('online', False),
+                'age_seconds': round(time.time() - last_hb, 1) if last_hb else None,
+                'source': 'agent',
+            })
+
         @app.route('/agent-device/status')
         def agent_device_status():
             # Mark stale devices as offline (no heartbeat in 15s)
@@ -668,6 +734,25 @@ class ApiAppMixin:
         def agent_device_events():
             limit = int(request.args.get('limit', 50))
             return jsonify({'events': _agent_device_events[-limit:]})
+
+        def _find_agent_device(device_id):
+            """Find agent device state by device_id or serial number cross-reference."""
+            # Direct lookup
+            if device_id in _agent_device_states:
+                return _agent_device_states[device_id]
+            # Try serial number index (ADB device IDs may be serial numbers)
+            if device_id in _agent_device_serial_index:
+                mapped_id = _agent_device_serial_index[device_id]
+                return _agent_device_states.get(mapped_id)
+            # Fuzzy match: check if device_id is a substring of any agent device ID
+            for agent_id, state in _agent_device_states.items():
+                if device_id in agent_id or agent_id in device_id:
+                    return state
+                # Check serial in info
+                info = state.get('info', {})
+                if info.get('serial') == device_id:
+                    return state
+            return None
 
         # Run
         app.run(host=host, port=port, debug=debug)

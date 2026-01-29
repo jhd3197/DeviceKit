@@ -1,137 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0F0D1A"
-    android:padding="24dp">
+    android:background="@color/bg_primary">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="DeviceKit Agent"
-        android:textColor="#FFFFFF"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:layout_marginTop="32dp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="On-device companion for DeviceKit"
-        android:textColor="#9CA3AF"
-        android:textSize="14sp"
-        android:layout_marginTop="4dp" />
-
-    <!-- Connection status -->
+    <!-- Header bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="32dp"
-        android:background="#1E1B2E"
-        android:padding="16dp">
+        android:gravity="center_vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="DeviceKit Agent"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <View
-            android:id="@+id/statusDot"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
-            android:layout_gravity="center_vertical"
-            android:background="#EF4444" />
+            android:id="@+id/headerStatusDot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
+            android:layout_marginEnd="8dp"
+            android:background="@color/red" />
 
         <TextView
-            android:id="@+id/statusText"
+            android:id="@+id/headerStatusText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Disconnected"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:layout_marginStart="12dp" />
+            android:text="Offline"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Server URL -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Server URL"
-        android:textColor="#9CA3AF"
-        android:textSize="12sp"
-        android:layout_marginTop="24dp" />
-
-    <EditText
-        android:id="@+id/serverUrlInput"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="#1E1B2E"
-        android:textColor="#FFFFFF"
-        android:textColorHint="#6B7280"
-        android:hint="http://192.168.1.100:5050"
-        android:paddingHorizontal="12dp"
-        android:textSize="14sp"
-        android:inputType="textUri"
-        android:layout_marginTop="4dp"
-        android:singleLine="true" />
-
-    <!-- Start/Stop button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/toggleButton"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:text="Start Agent"
-        android:textAllCaps="false"
-        android:textSize="16sp"
-        android:layout_marginTop="16dp" />
-
-    <!-- Service status cards -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Services"
-        android:textColor="#9CA3AF"
-        android:textSize="12sp"
-        android:layout_marginTop="24dp" />
-
-    <LinearLayout
+    <!-- Tab layout -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:layout_marginTop="8dp">
+        android:background="@color/bg_primary"
+        app:tabMode="fixed"
+        app:tabGravity="fill"
+        app:tabIndicatorColor="@color/tab_indicator"
+        app:tabIndicatorHeight="3dp"
+        app:tabSelectedTextColor="@color/tab_selected"
+        app:tabTextColor="@color/tab_unselected"
+        app:tabTextAppearance="@style/TabTextStyle"
+        app:tabRippleColor="@android:color/transparent" />
 
-        <include layout="@layout/service_row"
-            android:id="@+id/accessibilityRow" />
-
-        <include layout="@layout/service_row"
-            android:id="@+id/backgroundRow" />
-
-        <include layout="@layout/service_row"
-            android:id="@+id/notificationRow" />
-    </LinearLayout>
-
-    <!-- Live state -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Live State"
-        android:textColor="#9CA3AF"
-        android:textSize="12sp"
-        android:layout_marginTop="24dp" />
-
-    <ScrollView
+    <!-- ViewPager2 for tab content -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/viewPager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:layout_marginTop="8dp"
-        android:background="#1E1B2E"
-        android:padding="12dp">
-
-        <TextView
-            android:id="@+id/liveStateText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="#10B981"
-            android:textSize="12sp"
-            android:fontFamily="monospace"
-            android:text="Waiting for agent to start..." />
-    </ScrollView>
+        android:layout_weight="1" />
 
 </LinearLayout>

@@ -33,12 +33,44 @@ object DeviceState {
     @Volatile var isConnected: Boolean = false
     @Volatile var deviceId: String? = null
 
+    // Metrics
+    @Volatile var latestMetrics: MetricsSnapshot? = null
+    private val _metricsHistory = ArrayDeque<MetricsSnapshot>(MAX_HISTORY)
+
+    private const val MAX_HISTORY = 60
+
+    val metricsHistory: List<MetricsSnapshot>
+        get() = synchronized(_metricsHistory) { _metricsHistory.toList() }
+
+    data class MetricsSnapshot(
+        val cpuPercent: Double = 0.0,
+        val ramUsedMb: Long = 0,
+        val ramTotalMb: Long = 0,
+        val batteryLevel: Int = 0,
+        val batteryTemperature: Double = 0.0,
+        val isCharging: Boolean = false,
+        val networkType: String = "unknown",
+        val networkRxRate: Long = 0,
+        val networkTxRate: Long = 0,
+        val timestamp: Long = System.currentTimeMillis()
+    )
+
     data class NotificationInfo(
         val packageName: String,
         val title: String?,
         val text: String?,
         val timestamp: Long
     )
+
+    fun updateMetrics(snapshot: MetricsSnapshot) {
+        latestMetrics = snapshot
+        synchronized(_metricsHistory) {
+            if (_metricsHistory.size >= MAX_HISTORY) {
+                _metricsHistory.removeFirst()
+            }
+            _metricsHistory.addLast(snapshot)
+        }
+    }
 
     fun addNotification(info: NotificationInfo) {
         synchronized(_recentNotifications) {
@@ -81,6 +113,23 @@ object DeviceState {
         })
         put("connected", isConnected)
         put("device_id", deviceId)
+
+        // Metrics
+        latestMetrics?.let { m ->
+            put("metrics", JSONObject().apply {
+                put("cpu_percent", Math.round(m.cpuPercent * 10.0) / 10.0)
+                put("ram_used_mb", m.ramUsedMb)
+                put("ram_total_mb", m.ramTotalMb)
+                put("battery_level", m.batteryLevel)
+                put("battery_temperature", m.batteryTemperature)
+                put("is_charging", m.isCharging)
+                put("network", JSONObject().apply {
+                    put("type", m.networkType)
+                    put("rx_rate", m.networkRxRate)
+                    put("tx_rate", m.networkTxRate)
+                })
+            })
+        }
     }
 
     fun toDisplayString(): String = buildString {
@@ -100,6 +149,15 @@ object DeviceState {
         appendLine("  connected: $isConnected")
         appendLine("  device_id: ${deviceId ?: "-"}")
         appendLine()
+        latestMetrics?.let { m ->
+            appendLine("== Metrics ==")
+            appendLine("  cpu: ${String.format("%.1f", m.cpuPercent)}%")
+            appendLine("  ram: ${m.ramUsedMb}/${m.ramTotalMb} MB")
+            appendLine("  battery: ${m.batteryLevel}% ${if (m.isCharging) "(charging)" else ""}")
+            appendLine("  temp: ${m.batteryTemperature}\u00B0C")
+            appendLine("  network: ${m.networkType} rx:${m.networkRxRate} tx:${m.networkTxRate} B/s")
+            appendLine()
+        }
         appendLine("== Notifications (${recentNotifications.size}) ==")
         recentNotifications.take(5).forEach { n ->
             appendLine("  [${n.packageName}] ${n.title}: ${n.text}")
