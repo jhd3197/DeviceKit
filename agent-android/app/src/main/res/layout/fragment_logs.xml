@@ -23,7 +23,6 @@
             android:textColor="@color/text_primary"
             android:textSize="12sp"
             android:background="@drawable/chip_background"
-            android:selected="true"
             android:layout_marginEnd="8dp" />
 
         <TextView
