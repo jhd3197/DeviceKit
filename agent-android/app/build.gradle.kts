@@ -56,6 +56,9 @@ dependencies {
     // JSON
     implementation("org.json:json:20231013")
 
+    // Embedded HTTP server (NanoHTTPD)
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

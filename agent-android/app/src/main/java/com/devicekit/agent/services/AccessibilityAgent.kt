@@ -23,6 +23,9 @@ class AccessibilityAgent : AccessibilityService() {
         private const val TAG = "AccessibilityAgent"
         var isRunning: Boolean = false
             private set
+        /** Exposed for UI hierarchy access by AgentHttpServer */
+        var instance: AccessibilityAgent? = null
+            private set
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -31,6 +34,7 @@ class AccessibilityAgent : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
+        instance = this
         Log.i(TAG, "Accessibility Agent connected")
     }
 
@@ -181,6 +185,7 @@ class AccessibilityAgent : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        instance = null
         scope.cancel()
         Log.i(TAG, "Accessibility Agent destroyed")
     }
