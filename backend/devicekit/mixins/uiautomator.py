@@ -1,3 +1,4 @@
+import io
 import time
 import logging
 import tempfile
@@ -161,12 +162,9 @@ class Uiautomator2Mixin:
         try:
             d = self.get_device(device_id)
             img = d.screenshot()
-            tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-            img.save(tmp.name)
-            with open(tmp.name, 'rb') as f:
-                data = f.read()
-            os.unlink(tmp.name)
-            return data
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            return buf.getvalue()
         except Exception as e:
             logger.error(f"Screenshot failed for {device_id}: {e}")
             return None
