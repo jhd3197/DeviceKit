@@ -4,12 +4,17 @@ import logging
 import tempfile
 import os
 
+import requests
+
 try:
     import uiautomator2 as u2
 except ImportError:
     u2 = None
 
 logger = logging.getLogger(__name__)
+
+GITHUB_RELEASES_API = "https://api.github.com/repos/jhd3197/DeviceKit/releases/latest"
+APK_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".apk_cache")
 
 
 class Uiautomator2Mixin:
@@ -173,3 +178,155 @@ class Uiautomator2Mixin:
         """Get device model string."""
         output = self.run_adb_command(["shell", "getprop", "ro.product.model"], device=device_id)
         return output.strip() if output else "Unknown"
+
+    # ------------------------------------------------------------------
+    # Agent APK onboarding
+    # ------------------------------------------------------------------
+    def get_installed_agent_version(self, device_id):
+        """Get the installed version of com.devicekit.agent, or None."""
+        try:
+            d = self.get_device(device_id)
+            app_info = d.app_info("com.devicekit.agent")
+            return app_info.get("versionName") if app_info else None
+        except Exception:
+            return None
+
+    def download_latest_agent_apk(self):
+        """Download the latest agent APK from GitHub Releases.
+
+        Returns dict with keys: path, version, cached (bool), error (str|None).
+        """
+        os.makedirs(APK_CACHE_DIR, exist_ok=True)
+        try:
+            resp = requests.get(GITHUB_RELEASES_API, timeout=15)
+            resp.raise_for_status()
+            release = resp.json()
+        except Exception as e:
+            logger.error(f"Failed to fetch latest release info: {e}")
+            return {"path": None, "version": None, "cached": False, "error": str(e)}
+
+        version = release.get("tag_name", "unknown")
+        assets = release.get("assets", [])
+
+        # Find the release APK asset
+        apk_asset = None
+        for asset in assets:
+            name = asset.get("name", "")
+            if name.endswith("-release.apk") or (name.endswith(".apk") and "release" in name.lower()):
+                apk_asset = asset
+                break
+        # Fallback: any .apk file
+        if apk_asset is None:
+            for asset in assets:
+                if asset.get("name", "").endswith(".apk"):
+                    apk_asset = asset
+                    break
+
+        if apk_asset is None:
+            logger.error(f"No APK asset found in release {version}")
+            return {"path": None, "version": version, "cached": False, "error": "No APK asset in release"}
+
+        filename = f"{version}_{apk_asset['name']}"
+        local_path = os.path.join(APK_CACHE_DIR, filename)
+
+        # Return cached file if it already exists
+        if os.path.isfile(local_path):
+            logger.info(f"Using cached APK: {local_path}")
+            return {"path": local_path, "version": version, "cached": True, "error": None}
+
+        # Download the APK
+        download_url = apk_asset.get("browser_download_url")
+        logger.info(f"Downloading agent APK {version} from {download_url}")
+        try:
+            dl = requests.get(download_url, timeout=60, stream=True)
+            dl.raise_for_status()
+            tmp_path = local_path + ".tmp"
+            with open(tmp_path, "wb") as f:
+                for chunk in dl.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            os.replace(tmp_path, local_path)
+            logger.info(f"APK downloaded to {local_path}")
+            return {"path": local_path, "version": version, "cached": False, "error": None}
+        except Exception as e:
+            logger.error(f"Failed to download APK: {e}")
+            if os.path.exists(local_path + ".tmp"):
+                os.remove(local_path + ".tmp")
+            return {"path": None, "version": version, "cached": False, "error": str(e)}
+
+    def ensure_agent_installed(self, device_id):
+        """Ensure com.devicekit.agent is installed (and up-to-date) on the device.
+
+        Returns dict with status info.
+        """
+        installed_version = self.get_installed_agent_version(device_id)
+
+        # Download latest release info + APK
+        apk_info = self.download_latest_agent_apk()
+        if apk_info["error"]:
+            logger.warning(f"Could not download agent APK for {device_id}: {apk_info['error']}")
+            return {
+                "device_id": device_id,
+                "action": "error",
+                "installed_version": installed_version,
+                "error": apk_info["error"],
+            }
+
+        latest_version = apk_info["version"]
+
+        # Already installed and up-to-date
+        if installed_version and installed_version == latest_version:
+            logger.info(f"Agent on {device_id} already up-to-date ({installed_version})")
+            return {
+                "device_id": device_id,
+                "action": "already_up_to_date",
+                "installed_version": installed_version,
+                "latest_version": latest_version,
+            }
+
+        # Need install or upgrade
+        action = "upgrade" if installed_version else "install"
+        logger.info(f"Agent {action} on {device_id}: {installed_version} -> {latest_version}")
+
+        success, output = self.install_apk(apk_info["path"], device=device_id)
+
+        if success:
+            self.log_activity(f"agent_{action}", device_id, {
+                "previous_version": installed_version,
+                "new_version": latest_version,
+            })
+
+        return {
+            "device_id": device_id,
+            "action": action,
+            "success": success,
+            "installed_version": installed_version,
+            "latest_version": latest_version,
+            "output": output,
+        }
+
+    def get_agent_apk_cache_status(self):
+        """Return info about the cached APK and latest release version."""
+        cached_files = []
+        if os.path.isdir(APK_CACHE_DIR):
+            for f in os.listdir(APK_CACHE_DIR):
+                if f.endswith(".apk"):
+                    full = os.path.join(APK_CACHE_DIR, f)
+                    cached_files.append({
+                        "filename": f,
+                        "size_bytes": os.path.getsize(full),
+                    })
+
+        # Fetch latest release version
+        latest_version = None
+        try:
+            resp = requests.get(GITHUB_RELEASES_API, timeout=10)
+            resp.raise_for_status()
+            latest_version = resp.json().get("tag_name")
+        except Exception:
+            pass
+
+        return {
+            "cache_dir": APK_CACHE_DIR,
+            "cached_files": cached_files,
+            "latest_version": latest_version,
+        }

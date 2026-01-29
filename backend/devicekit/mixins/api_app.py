@@ -43,6 +43,12 @@ class ApiAppMixin:
                     if device_id not in client.devices:
                         try:
                             client.get_device(device_id)
+                            # Auto-onboard: ensure agent APK is installed on new devices
+                            try:
+                                result = client.ensure_agent_installed(device_id)
+                                logger.info(f"Auto-onboard {device_id}: {result.get('action')}")
+                            except Exception as e:
+                                logger.warning(f"Auto-onboard failed for {device_id}: {e}")
                         except Exception as e:
                             logger.warning(f"Could not connect to {device_id}: {e}")
             except Exception as e:
@@ -56,6 +62,25 @@ class ApiAppMixin:
             if info:
                 return jsonify(info)
             return jsonify({'error': 'Device not found'}), 404
+
+        @app.route('/devices/<device_id>/onboard', methods=['POST'])
+        def device_onboard(device_id):
+            """Manually trigger agent APK onboarding for a device."""
+            try:
+                result = client.ensure_agent_installed(device_id)
+                client.log_activity('manual_onboard', device_id, result)
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/agent-apk/status')
+        def agent_apk_status():
+            """Check cached APK version and latest release info."""
+            try:
+                status = client.get_agent_apk_cache_status()
+                return jsonify(status)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
 
         @app.route('/proxy/device/<device_id>')
         def proxy_device(device_id):

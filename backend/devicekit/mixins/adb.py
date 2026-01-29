@@ -138,3 +138,27 @@ class AdbMixin:
     def reboot_device(self, device=None):
         """Reboot the device via ADB."""
         self.run_adb_command(["reboot"], device=device)
+
+    def install_apk(self, apk_path, device=None):
+        """Install an APK on the device via ADB. Returns (success, output)."""
+        cmd = [ADB_PATH]
+        if device:
+            cmd.extend(["-s", device])
+        cmd.extend(["install", "-r", apk_path])
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=120
+            )
+            output = result.stdout.strip()
+            success = "Success" in output
+            if success:
+                logger.info(f"APK installed on {device or 'default'}: {apk_path}")
+            else:
+                logger.error(f"APK install failed on {device or 'default'}: {output} {result.stderr.strip()}")
+            return success, output
+        except subprocess.TimeoutExpired:
+            logger.error(f"APK install timed out: {apk_path}")
+            return False, "Install timed out"
+        except Exception as e:
+            logger.error(f"APK install error: {e}")
+            return False, str(e)
