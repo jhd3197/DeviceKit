@@ -10,7 +10,9 @@ import android.net.TrafficStats
 import android.os.BatteryManager
 import android.util.Log
 import com.devicekit.agent.DeviceState
+import com.devicekit.agent.server.routes.EventRoutes
 import kotlinx.coroutines.*
+import org.json.JSONObject
 import java.io.RandomAccessFile
 
 /**
@@ -87,6 +89,17 @@ class MetricsCollector(private val context: Context) {
         )
 
         DeviceState.updateMetrics(snapshot)
+
+        // Broadcast to SSE clients
+        EventRoutes.broadcast("metrics", JSONObject().apply {
+            put("cpu_percent", Math.round(cpuPercent * 10.0) / 10.0)
+            put("ram_used_mb", ramInfo.first)
+            put("ram_total_mb", ramInfo.second)
+            put("battery_level", batteryInfo.level)
+            put("is_charging", batteryInfo.isCharging)
+            put("network_type", networkInfo.type)
+            put("timestamp", snapshot.timestamp)
+        })
     }
 
     // ---- CPU ----

@@ -42,6 +42,14 @@ class AgentHttpServer(
         routes.add(NotificationRoutes(context))
         routes.add(MetricsRoutes(context))
         routes.add(ClipboardRoutes(context))
+        routes.add(EventRoutes(context))
+        routes.add(ToastRoutes(context))
+        routes.add(GestureRoutes(context))
+        routes.add(StreamRoutes(context))
+        routes.add(LogcatRoutes(context))
+        routes.add(IntentRoutes(context))
+        routes.add(SettingsRoutes(context))
+        routes.add(ContactRoutes(context))
     }
 
     override fun start() {

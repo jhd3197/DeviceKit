@@ -15,6 +15,7 @@ import com.devicekit.agent.MainActivity
 import com.devicekit.agent.R
 import com.devicekit.agent.api.DeviceKitClient
 import com.devicekit.agent.server.AgentHttpServer
+import com.devicekit.agent.server.DiscoveryService
 import kotlinx.coroutines.*
 import org.json.JSONObject
 
@@ -44,6 +45,7 @@ class BackgroundAgent : Service() {
     private var stateReportJob: Job? = null
     private var metricsCollector: MetricsCollector? = null
     private var httpServer: AgentHttpServer? = null
+    private var discoveryService: DiscoveryService? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -62,6 +64,7 @@ class BackgroundAgent : Service() {
 
         startForeground(NOTIFICATION_ID, buildNotification("Connecting..."))
         startHttpServer()
+        startDiscoveryService()
         startAgent()
 
         return START_STICKY
@@ -172,6 +175,17 @@ class BackgroundAgent : Service() {
         }
     }
 
+    private fun startDiscoveryService() {
+        try {
+            discoveryService?.stop()
+            discoveryService = DiscoveryService(this).also { it.start() }
+            LogBuffer.log("BackgroundAgent", "Discovery service started on port ${DiscoveryService.DISCOVERY_PORT}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start discovery service: ${e.message}")
+            LogBuffer.log("BackgroundAgent", "Discovery service failed: ${e.message}", LogBuffer.Level.ERROR)
+        }
+    }
+
     private fun startMetricsCollection() {
         metricsCollector?.stop()
         metricsCollector = MetricsCollector(this).also { it.start() }
@@ -204,6 +218,8 @@ class BackgroundAgent : Service() {
         super.onDestroy()
         isRunning = false
         DeviceState.isConnected = false
+        discoveryService?.stop()
+        discoveryService = null
         httpServer?.stop()
         httpServer = null
         metricsCollector?.stop()

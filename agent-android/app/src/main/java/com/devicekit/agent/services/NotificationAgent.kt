@@ -5,6 +5,7 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.devicekit.agent.DeviceState
 import com.devicekit.agent.api.DeviceKitClient
+import com.devicekit.agent.server.routes.EventRoutes
 import kotlinx.coroutines.*
 import org.json.JSONObject
 
@@ -50,6 +51,14 @@ class NotificationAgent : NotificationListenerService() {
             timestamp = sbn.postTime
         )
         DeviceState.addNotification(info)
+
+        // Broadcast to SSE clients
+        EventRoutes.broadcast("notification", JSONObject().apply {
+            put("package", pkg)
+            put("title", title)
+            put("text", text)
+            put("post_time", sbn.postTime)
+        })
 
         // Forward to server
         val deviceId = DeviceState.deviceId ?: return

@@ -6,6 +6,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.devicekit.agent.DeviceState
 import com.devicekit.agent.api.DeviceKitClient
+import com.devicekit.agent.server.routes.EventRoutes
 import kotlinx.coroutines.*
 
 /**
@@ -78,6 +79,15 @@ class AccessibilityAgent : AccessibilityService() {
 
             Log.d(TAG, "Input field focused: $viewId (type=$className, pkg=${event.packageName})")
 
+            // Broadcast to SSE clients
+            EventRoutes.broadcast("keyboard", org.json.JSONObject().apply {
+                put("visible", true)
+                put("field_id", viewId)
+                put("field_type", extractInputType(source))
+                put("field_text", text)
+                put("package", event.packageName?.toString())
+            })
+
             // Notify server about keyboard/input event
             reportInputEvent("field_focused", viewId, className)
         } else {
@@ -111,6 +121,12 @@ class AccessibilityAgent : AccessibilityService() {
         if (pkg != null) {
             DeviceState.currentPackage = pkg
             DeviceState.currentActivity = cls
+
+            // Broadcast window change to SSE clients
+            EventRoutes.broadcast("window", org.json.JSONObject().apply {
+                put("package", pkg)
+                put("activity", cls)
+            })
 
             // Check if an input method window appeared (keyboard shown)
             if (pkg.contains("inputmethod") || cls?.contains("InputMethod") == true) {

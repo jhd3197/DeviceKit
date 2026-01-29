@@ -13,6 +13,13 @@ from .apps import AppManager
 from .clipboard import ClipboardManager
 from .notifications import NotificationManager
 from .metrics import MetricsManager
+from .events import EventManager
+from .gestures import GestureManager
+from .streaming import ScreenStream
+from .logcat import LogcatManager
+from .intents import IntentManager
+from .settings import SettingsManager
+from .contacts import ContactsManager, SmsManager
 from .ui.selector import UiSelector
 
 
@@ -47,6 +54,15 @@ class Device:
         d.app.launch("com.chrome")     # app management
         d.notifications.list()         # notifications
         d.metrics.snapshot()           # device metrics
+        d.events.stream()              # real-time SSE events
+        d.gestures.replay("name")      # gesture replay
+        d.screen_stream(fps=5)         # MJPEG mirroring
+        d.logcat.dump()                # logcat
+        d.intent.broadcast(...)        # fire intents
+        d.settings.wifi = False        # settings control
+        d.contacts.list()              # contacts
+        d.sms.list()                   # SMS
+        d.toast("Hello!")              # show toast
     """
 
     def __init__(self, conn: Connection):
@@ -59,6 +75,13 @@ class Device:
         self._clipboard = ClipboardManager(conn)
         self._notifications = NotificationManager(conn)
         self._metrics = MetricsManager(conn)
+        self._events = EventManager(conn)
+        self._gestures = GestureManager(conn)
+        self._logcat = LogcatManager(conn)
+        self._intent = IntentManager(conn)
+        self._settings = SettingsManager(conn)
+        self._contacts = ContactsManager(conn)
+        self._sms = SmsManager(conn)
         self._state = StateProxy(conn)
 
     # -- Properties --
@@ -101,6 +124,41 @@ class Device:
     @property
     def metrics(self) -> MetricsManager:
         return self._metrics
+
+    @property
+    def events(self) -> EventManager:
+        """Access real-time event streaming."""
+        return self._events
+
+    @property
+    def gestures(self) -> GestureManager:
+        """Gesture recording and replay."""
+        return self._gestures
+
+    @property
+    def logcat(self) -> LogcatManager:
+        """Logcat access."""
+        return self._logcat
+
+    @property
+    def intent(self) -> IntentManager:
+        """Intent firing."""
+        return self._intent
+
+    @property
+    def settings(self) -> SettingsManager:
+        """Device settings control."""
+        return self._settings
+
+    @property
+    def contacts(self) -> ContactsManager:
+        """Contacts access."""
+        return self._contacts
+
+    @property
+    def sms(self) -> SmsManager:
+        """SMS access."""
+        return self._sms
 
     @property
     def state(self) -> StateProxy:
@@ -152,6 +210,29 @@ class Device:
     def ping(self) -> bool:
         """Check if agent is responding."""
         return self._conn.ping()
+
+    def toast(self, message: str, duration: str = "short") -> dict:
+        """Show a toast message on the device screen."""
+        return self._conn.post_json("/toast", {"message": message, "duration": duration})
+
+    def open_url(self, url: str) -> dict:
+        """Open a URL in the default browser."""
+        return self._intent.open_url(url)
+
+    def screen_stream(self, fps: int = 5, quality: int = 50) -> ScreenStream:
+        """
+        Create an MJPEG screen stream.
+
+        Usage:
+            stream = d.screen_stream(fps=5)
+            stream.on_frame(lambda data, i: save(data))
+            stream.start()
+
+            # Or iterate:
+            for frame in d.screen_stream(fps=2):
+                process(frame)
+        """
+        return ScreenStream(self._conn, fps=fps, quality=quality)
 
     # -- UI Selector (uiautomator2-style) --
 
