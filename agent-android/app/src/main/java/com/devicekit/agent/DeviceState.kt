@@ -34,10 +34,9 @@ object DeviceState {
     @Volatile var deviceId: String? = null
 
     // Metrics
-    @Volatile var latestMetrics: MetricsSnapshot? = null
-    private val _metricsHistory = ArrayDeque<MetricsSnapshot>(MAX_HISTORY)
-
     private const val MAX_HISTORY = 60
+    @Volatile var latestMetrics: MetricsSnapshot? = null
+    private val _metricsHistory = ArrayDeque<MetricsSnapshot>()
 
     val metricsHistory: List<MetricsSnapshot>
         get() = synchronized(_metricsHistory) { _metricsHistory.toList() }
