@@ -1,6 +1,16 @@
 @echo off
 REM DeviceKit - Start backend and frontend in dev mode
 
+REM Add ADB to PATH if not already available
+where adb >nul 2>nul
+if errorlevel 1 (
+    if exist "C:\Program Files (x86)\Android\android-sdk\platform-tools\adb.exe" (
+        set "PATH=%PATH%;C:\Program Files (x86)\Android\android-sdk\platform-tools"
+    ) else if exist "%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe" (
+        set "PATH=%PATH%;%LOCALAPPDATA%\Android\Sdk\platform-tools"
+    )
+)
+
 echo Starting DeviceKit dev servers...
 echo.
 echo   Backend  : http://localhost:5050

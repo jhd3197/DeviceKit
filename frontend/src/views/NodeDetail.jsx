@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ChevronRight,
   RotateCw,
@@ -9,10 +9,17 @@ import {
   Circle,
   ChevronLeft,
   Camera,
+  Bot,
+  Send,
+  Play,
+  Square,
+  AlertTriangle,
+  Zap,
 } from 'lucide-react'
 import { api } from '../api'
 
 const REFRESH_INTERVAL = 5000
+const SCREEN_POLL_MS = 1000
 
 export default function NodeDetail() {
   const { id } = useParams()
@@ -28,7 +35,19 @@ export default function NodeDetail() {
   const shellRef = useRef(null)
   const inputRef = useRef(null)
 
-  // If no id, show a placeholder
+  // Screen mirror state
+  const [screenTs, setScreenTs] = useState(Date.now())
+  const [screenLoaded, setScreenLoaded] = useState(false)
+  const imgRef = useRef(null)
+
+  // Agent state
+  const [agentStatus, setAgentStatus] = useState({ status: 'stopped', current_action: null, cycle_count: 0 })
+  const [agentLogs, setAgentLogs] = useState([])
+  const [commandInput, setCommandInput] = useState('')
+  const [urgentCommand, setUrgentCommand] = useState(false)
+  const [hasProfile, setHasProfile] = useState(null)
+  const agentLogRef = useRef(null)
+
   const deviceId = id || ''
 
   const fetchData = useCallback(async () => {
@@ -42,24 +61,52 @@ export default function NodeDetail() {
       setDevice(dev)
       setDiagnostics(diag)
       setProperties(props)
-    } catch (e) {
+    } catch {
       // silent
     } finally {
       setLoading(false)
     }
   }, [deviceId])
 
-  useEffect(() => {
-    fetchData()
-    const tid = setInterval(fetchData, REFRESH_INTERVAL)
-    return () => clearInterval(tid)
-  }, [fetchData])
+  // Fetch agent status + logs
+  const fetchAgent = useCallback(async () => {
+    if (!deviceId) return
+    try {
+      const [status, logs, profile] = await Promise.all([
+        api.getAgentStatus(deviceId).catch(() => ({ status: 'stopped' })),
+        api.getAgentLogs(deviceId).catch(() => ({ logs: [] })),
+        api.getProfileByDevice(deviceId).catch(() => null),
+      ])
+      setAgentStatus(status)
+      setAgentLogs(logs.logs || [])
+      setHasProfile(!!profile)
+    } catch {
+      // silent
+    }
+  }, [deviceId])
 
   useEffect(() => {
-    if (shellRef.current) {
-      shellRef.current.scrollTop = shellRef.current.scrollHeight
-    }
+    fetchData()
+    fetchAgent()
+    const tid = setInterval(fetchData, REFRESH_INTERVAL)
+    const aid = setInterval(fetchAgent, 2000)
+    return () => { clearInterval(tid); clearInterval(aid) }
+  }, [fetchData, fetchAgent])
+
+  // Screen mirror polling
+  useEffect(() => {
+    if (!deviceId) return
+    const sid = setInterval(() => setScreenTs(Date.now()), SCREEN_POLL_MS)
+    return () => clearInterval(sid)
+  }, [deviceId])
+
+  useEffect(() => {
+    if (shellRef.current) shellRef.current.scrollTop = shellRef.current.scrollHeight
   }, [shellHistory])
+
+  useEffect(() => {
+    if (agentLogRef.current) agentLogRef.current.scrollTop = agentLogRef.current.scrollHeight
+  }, [agentLogs])
 
   const runCommand = async () => {
     const cmd = shellInput.trim()
@@ -71,6 +118,95 @@ export default function NodeDetail() {
       setShellHistory((h) => [...h, { type: 'output', text: res.output || '(no output)' }])
     } catch (e) {
       setShellHistory((h) => [...h, { type: 'error', text: `Error: ${e.message}` }])
+    }
+  }
+
+  // Screen tap handler
+  const handleScreenClick = async (e) => {
+    if (!imgRef.current || !device?.display) return
+    const img = imgRef.current
+    const rect = img.getBoundingClientRect()
+    const natW = img.naturalWidth
+    const natH = img.naturalHeight
+    if (!natW || !natH) return
+
+    // Calculate rendered image size within object-contain
+    const containerW = rect.width
+    const containerH = rect.height
+    const imgAspect = natW / natH
+    const containerAspect = containerW / containerH
+
+    let renderedW, renderedH, offsetX, offsetY
+    if (imgAspect > containerAspect) {
+      renderedW = containerW
+      renderedH = containerW / imgAspect
+      offsetX = 0
+      offsetY = (containerH - renderedH) / 2
+    } else {
+      renderedH = containerH
+      renderedW = containerH * imgAspect
+      offsetX = (containerW - renderedW) / 2
+      offsetY = 0
+    }
+
+    const clickX = e.clientX - rect.left - offsetX
+    const clickY = e.clientY - rect.top - offsetY
+
+    if (clickX < 0 || clickY < 0 || clickX > renderedW || clickY > renderedH) return
+
+    const devW = device.display.width || natW
+    const devH = device.display.height || natH
+    const tapX = Math.round((clickX / renderedW) * devW)
+    const tapY = Math.round((clickY / renderedH) * devH)
+
+    try {
+      await api.tap(deviceId, tapX, tapY)
+      // Refresh screen after tap
+      setTimeout(() => setScreenTs(Date.now()), 300)
+    } catch {
+      // silent
+    }
+  }
+
+  const handlePress = async (action) => {
+    try {
+      await api.press(deviceId, action)
+      setTimeout(() => setScreenTs(Date.now()), 300)
+    } catch {
+      // silent
+    }
+  }
+
+  const handleScreenshotDownload = () => {
+    const url = api.screenshotUrl(deviceId)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${deviceId}-screenshot.png`
+    a.click()
+  }
+
+  const handleAgentToggle = async () => {
+    try {
+      if (agentStatus.status !== 'stopped') {
+        await api.stopAgent(deviceId)
+      } else {
+        await api.startAgent(deviceId)
+      }
+      fetchAgent()
+    } catch {
+      // silent
+    }
+  }
+
+  const handleSendCommand = async () => {
+    const cmd = commandInput.trim()
+    if (!cmd) return
+    try {
+      await api.sendCommand(deviceId, cmd, urgentCommand ? 'urgent' : 'normal')
+      setCommandInput('')
+      fetchAgent()
+    } catch {
+      // silent
     }
   }
 
@@ -97,6 +233,12 @@ export default function NodeDetail() {
   const battery = diagnostics?.battery_level || 0
   const uptimeSecs = diagnostics?.uptime_seconds || 0
   const uptimeStr = formatUptime(uptimeSecs)
+
+  const statusColors = {
+    stopped: 'bg-zinc-700 text-zinc-400',
+    autonomous: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+    executing_command: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+  }
 
   return (
     <>
@@ -132,26 +274,50 @@ export default function NodeDetail() {
         {/* Main content */}
         <div className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto">
           <div className="grid grid-cols-12 gap-6">
-            {/* Phone mockup */}
+            {/* Phone mockup with live screen */}
             <div className="col-span-12 lg:col-span-5 flex flex-col items-center">
               <div className="relative group">
                 <div className="w-[280px] h-[580px] bg-[#0a0a0a] rounded-[3rem] border-[6px] border-[#1a1a1a] shadow-2xl relative overflow-hidden flex items-center justify-center">
                   <div className="absolute top-0 w-1/3 h-6 bg-[#1a1a1a] rounded-b-xl z-20" />
-                  <div className="w-full h-full bg-zinc-900 flex flex-col items-center justify-center relative">
-                    <Smartphone className="w-16 h-16 text-zinc-800 opacity-20 absolute" />
-                    <span className="text-[10px] mono text-zinc-600 z-10">
-                      WAITING FOR STREAM...
-                    </span>
-                  </div>
+                  {!screenLoaded && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10">
+                      <Smartphone className="w-16 h-16 text-zinc-800 opacity-20" />
+                      <span className="text-[10px] mono text-zinc-600 mt-2">
+                        CONNECTING TO SCREEN...
+                      </span>
+                    </div>
+                  )}
+                  <img
+                    ref={imgRef}
+                    src={`${api.screenshotUrl(deviceId)}?t=${screenTs}`}
+                    alt="Device screen"
+                    className={`w-full h-full object-contain cursor-crosshair ${screenLoaded ? '' : 'invisible'}`}
+                    onClick={handleScreenClick}
+                    onError={() => setScreenLoaded(false)}
+                    onLoad={() => setScreenLoaded(true)}
+                    draggable={false}
+                  />
                 </div>
                 <div className="absolute -right-16 top-0 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400" title="Home">
+                  <button
+                    onClick={() => handlePress('home')}
+                    className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400"
+                    title="Home"
+                  >
                     <Circle className="w-4 h-4" />
                   </button>
-                  <button className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400" title="Back">
+                  <button
+                    onClick={() => handlePress('back')}
+                    className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400"
+                    title="Back"
+                  >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <button className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400" title="Screenshot">
+                  <button
+                    onClick={handleScreenshotDownload}
+                    className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400"
+                    title="Download Screenshot"
+                  >
                     <Camera className="w-4 h-4" />
                   </button>
                 </div>
@@ -195,6 +361,116 @@ export default function NodeDetail() {
                   <PropRow label="Kernel" value={properties?.kernel} border />
                   <PropRow label="Resolution" value={properties?.resolution} />
                   <PropRow label="Hardware" value={properties?.hardware} border />
+                </div>
+              </div>
+
+              {/* AI Agent Panel */}
+              <div className="bg-card-alt border border-main rounded-xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-main bg-zinc-900/20 flex items-center justify-between">
+                  <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                    <Bot className="w-3 h-3" /> AI Agent
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[agentStatus.status] || statusColors.stopped}`}>
+                      {agentStatus.status}
+                    </span>
+                    {agentStatus.cycle_count > 0 && (
+                      <span className="text-[10px] text-zinc-600 mono">
+                        cycle #{agentStatus.cycle_count}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  {hasProfile === false && (
+                    <div className="flex items-center gap-2 bg-amber-950/50 border border-amber-900/50 rounded p-3 text-xs text-amber-400">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>
+                        No profile for this device.{' '}
+                        <Link to="/profiles/new" className="underline hover:no-underline">
+                          Create one
+                        </Link>{' '}
+                        to start the agent.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Start/Stop */}
+                  <button
+                    onClick={handleAgentToggle}
+                    disabled={hasProfile === false && agentStatus.status === 'stopped'}
+                    className={`w-full flex items-center justify-center gap-2 py-2 rounded text-xs font-bold transition-all ${
+                      agentStatus.status !== 'stopped'
+                        ? 'bg-red-950 text-red-400 border border-red-900/50 hover:bg-red-900'
+                        : 'bg-emerald-950 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-900 disabled:opacity-40 disabled:cursor-not-allowed'
+                    }`}
+                  >
+                    {agentStatus.status !== 'stopped' ? (
+                      <><Square className="w-3 h-3" /> Stop Agent</>
+                    ) : (
+                      <><Play className="w-3 h-3" /> Start Agent</>
+                    )}
+                  </button>
+
+                  {/* Current action */}
+                  {agentStatus.current_action && (
+                    <div className="text-xs text-zinc-400 bg-zinc-900/50 rounded p-2 mono">
+                      {agentStatus.current_action}
+                    </div>
+                  )}
+
+                  {/* Command input */}
+                  <div className="flex gap-2">
+                    <input
+                      value={commandInput}
+                      onChange={(e) => setCommandInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendCommand()}
+                      className="flex-1 bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-white"
+                      placeholder="Send command to agent..."
+                    />
+                    <button
+                      onClick={() => setUrgentCommand(!urgentCommand)}
+                      className={`p-2 rounded border text-xs ${
+                        urgentCommand
+                          ? 'bg-amber-950 border-amber-900/50 text-amber-400'
+                          : 'bg-zinc-900 border-main text-zinc-500'
+                      }`}
+                      title="Toggle urgent priority"
+                    >
+                      <Zap className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={handleSendCommand}
+                      className="p-2 bg-zinc-800 border border-main rounded hover:bg-zinc-700 text-zinc-400"
+                    >
+                      <Send className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Action log */}
+                  {agentLogs.length > 0 && (
+                    <div
+                      ref={agentLogRef}
+                      className="max-h-40 overflow-y-auto bg-[#020202] rounded p-3 space-y-1"
+                    >
+                      {agentLogs.map((log, i) => (
+                        <div key={i} className="flex gap-2 text-[10px] mono">
+                          <span className="text-zinc-600 shrink-0">
+                            {new Date(log.timestamp * 1000).toLocaleTimeString()}
+                          </span>
+                          <span className={
+                            log.action === 'error' ? 'text-red-400'
+                            : log.action === 'done' || log.action === 'command_done' ? 'text-emerald-400'
+                            : log.action === 'command_start' ? 'text-amber-400'
+                            : 'text-zinc-400'
+                          }>
+                            [{log.action}]
+                          </span>
+                          <span className="text-zinc-500 truncate">{log.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

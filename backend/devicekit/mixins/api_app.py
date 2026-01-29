@@ -36,6 +36,17 @@ class ApiAppMixin:
         # -----------------------------------------------------------
         @app.route('/devices')
         def devices():
+            # Refresh device list from ADB on each request
+            try:
+                adb_devices = client.get_connected_devices()
+                for device_id in adb_devices:
+                    if device_id not in client.devices:
+                        try:
+                            client.get_device(device_id)
+                        except Exception as e:
+                            logger.warning(f"Could not connect to {device_id}: {e}")
+            except Exception as e:
+                logger.warning(f"Device refresh failed: {e}")
             connected = client.get_devices()
             return jsonify({'devices': connected, 'count': len(connected)})
 
@@ -111,6 +122,57 @@ class ApiAppMixin:
                 if data:
                     return Response(data, mimetype='image/png')
                 return jsonify({'error': 'Screenshot failed'}), 500
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/tap', methods=['POST'])
+        def device_tap(device_id):
+            data = request.get_json(silent=True) or {}
+            x = data.get('x')
+            y = data.get('y')
+            if x is None or y is None:
+                return jsonify({'error': 'x and y are required'}), 400
+            try:
+                client.click(int(x), int(y), device_id)
+                client.log_activity('tap', device_id, {'x': x, 'y': y})
+                return jsonify({'status': 'ok', 'x': x, 'y': y})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/press', methods=['POST'])
+        def device_press(device_id):
+            data = request.get_json(silent=True) or {}
+            action = data.get('action')
+            if not action:
+                return jsonify({'error': 'action is required'}), 400
+            try:
+                client.press_action(action, device_id)
+                client.log_activity('press', device_id, {'action': action})
+                return jsonify({'status': 'ok', 'action': action})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/swipe', methods=['POST'])
+        def device_swipe(device_id):
+            data = request.get_json(silent=True) or {}
+            direction = data.get('direction', 'up')
+            duration = int(data.get('duration', 500))
+            try:
+                d = client.get_device(device_id)
+                info = d.info
+                w = info.get('displayWidth', 1080)
+                h = info.get('displayHeight', 1920)
+                cx, cy = w // 2, h // 2
+                swipe_map = {
+                    'up': (cx, h * 3 // 4, cx, h // 4),
+                    'down': (cx, h // 4, cx, h * 3 // 4),
+                    'left': (w * 3 // 4, cy, w // 4, cy),
+                    'right': (w // 4, cy, w * 3 // 4, cy),
+                }
+                coords = swipe_map.get(direction, swipe_map['up'])
+                d.swipe(*coords, duration=duration / 1000)
+                client.log_activity('swipe', device_id, {'direction': direction})
+                return jsonify({'status': 'ok', 'direction': direction})
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 
@@ -393,6 +455,108 @@ class ApiAppMixin:
             if client.cancel_automation_run(run_id):
                 return jsonify({'status': 'cancelling'})
             return jsonify({'error': 'Run not found or already finished'}), 404
+
+        # -----------------------------------------------------------
+        # Profiles
+        # -----------------------------------------------------------
+        @app.route('/profiles')
+        def profiles_list():
+            profiles = client.list_profiles()
+            return jsonify({'profiles': profiles, 'count': len(profiles)})
+
+        @app.route('/profiles', methods=['POST'])
+        def profiles_create():
+            data = request.get_json(silent=True) or {}
+            device_id = data.get('device_id')
+            name = data.get('name')
+            if not device_id or not name:
+                return jsonify({'error': 'device_id and name are required'}), 400
+            profile = client.create_profile(
+                device_id=device_id,
+                name=name,
+                personality=data.get('personality', ''),
+                niche=data.get('niche', ''),
+                interests=data.get('interests', []),
+                behavior_patterns=data.get('behavior_patterns'),
+                apps=data.get('apps', []),
+            )
+            return jsonify(profile), 201
+
+        @app.route('/profiles/<profile_id>')
+        def profiles_get(profile_id):
+            profile = client.get_profile(profile_id)
+            if profile:
+                return jsonify(profile)
+            return jsonify({'error': 'Profile not found'}), 404
+
+        @app.route('/profiles/device/<device_id>')
+        def profiles_by_device(device_id):
+            profile = client.get_profile_by_device(device_id)
+            if profile:
+                return jsonify(profile)
+            return jsonify({'error': 'No profile for this device'}), 404
+
+        @app.route('/profiles/<profile_id>', methods=['PUT'])
+        def profiles_update(profile_id):
+            data = request.get_json(silent=True) or {}
+            result = client.update_profile(profile_id, data)
+            if result is None:
+                return jsonify({'error': 'Profile not found'}), 404
+            return jsonify(result)
+
+        @app.route('/profiles/<profile_id>', methods=['DELETE'])
+        def profiles_delete(profile_id):
+            if client.delete_profile(profile_id):
+                return '', 204
+            return jsonify({'error': 'Profile not found'}), 404
+
+        # -----------------------------------------------------------
+        # AI Agent
+        # -----------------------------------------------------------
+        @app.route('/agent/status')
+        def agent_status_all():
+            return jsonify(client.get_all_agent_status())
+
+        @app.route('/agent/<device_id>/status')
+        def agent_status(device_id):
+            return jsonify(client.get_agent_status(device_id))
+
+        @app.route('/agent/<device_id>/start', methods=['POST'])
+        def agent_start(device_id):
+            profile = client.get_profile_by_device(device_id)
+            if not profile:
+                return jsonify({'error': 'No profile found for this device. Create a profile first.'}), 400
+            result = client.start_agent(device_id, profile)
+            if 'error' in result:
+                return jsonify(result), 409
+            client.log_activity('agent_start', device_id)
+            return jsonify(result)
+
+        @app.route('/agent/<device_id>/stop', methods=['POST'])
+        def agent_stop(device_id):
+            result = client.stop_agent(device_id)
+            client.log_activity('agent_stop', device_id)
+            return jsonify(result)
+
+        @app.route('/agent/<device_id>/command', methods=['POST'])
+        def agent_command(device_id):
+            data = request.get_json(silent=True) or {}
+            command = data.get('command', '')
+            if not command:
+                return jsonify({'error': 'command is required'}), 400
+            priority = data.get('priority', 'normal')
+            cmd = client.enqueue_command(device_id, command, priority)
+            client.log_activity('agent_command', device_id, {'command': command, 'priority': priority})
+            return jsonify(cmd), 201
+
+        @app.route('/agent/<device_id>/commands')
+        def agent_commands(device_id):
+            return jsonify({'commands': client.get_command_queue(device_id)})
+
+        @app.route('/agent/<device_id>/logs')
+        def agent_logs(device_id):
+            limit = int(request.args.get('limit', 50))
+            return jsonify({'logs': client.get_agent_logs(device_id, limit)})
 
         # Run
         app.run(host=host, port=port, debug=debug)

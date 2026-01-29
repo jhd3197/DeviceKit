@@ -1,13 +1,48 @@
 import subprocess
 import logging
+import os
+import shutil
 
 logger = logging.getLogger(__name__)
+
+# Resolve ADB binary: check PATH first, then common install locations
+_ADB_SEARCH_PATHS = [
+    os.path.join(os.environ.get("ANDROID_HOME", ""), "platform-tools"),
+    os.path.join(os.environ.get("ANDROID_SDK_ROOT", ""), "platform-tools"),
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk", "platform-tools"),
+    r"C:\Program Files (x86)\Android\android-sdk\platform-tools",
+    r"C:\Android\platform-tools",
+    r"C:\platform-tools",
+    os.path.expanduser("~/Android/Sdk/platform-tools"),
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+]
+
+
+def _find_adb():
+    """Find the adb executable."""
+    found = shutil.which("adb")
+    if found:
+        return found
+    for search_dir in _ADB_SEARCH_PATHS:
+        if not search_dir:
+            continue
+        for name in ("adb.exe", "adb"):
+            candidate = os.path.join(search_dir, name)
+            if os.path.isfile(candidate):
+                logger.info(f"Found ADB at: {candidate}")
+                return candidate
+    return "adb"  # fallback, hope it's on PATH
+
+
+ADB_PATH = _find_adb()
+logger.info(f"Using ADB: {ADB_PATH}")
 
 
 class AdbMixin:
     def run_adb_command(self, args, device=None):
         """Run an ADB command and return stdout."""
-        cmd = ["adb"]
+        cmd = [ADB_PATH]
         if device:
             cmd.extend(["-s", device])
 
@@ -34,7 +69,7 @@ class AdbMixin:
     def get_connected_devices(self):
         """Get list of connected devices using ADB."""
         try:
-            output = subprocess.check_output(["adb", "devices"]).decode('utf-8')
+            output = subprocess.check_output([ADB_PATH, "devices"]).decode('utf-8')
             lines = output.strip().split('\n')[1:]
             devices = []
             for line in lines:
@@ -68,7 +103,7 @@ class AdbMixin:
         """Perform a swipe up gesture."""
         try:
             output = subprocess.check_output(
-                ["adb"] + (["-s", device] if device else []) + ["shell", "wm", "size"]
+                [ADB_PATH] + (["-s", device] if device else []) + ["shell", "wm", "size"]
             ).decode('utf-8')
             width, height = map(int, output.strip().split(': ')[1].split('x'))
             start_x = width // 2

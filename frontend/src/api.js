@@ -81,4 +81,47 @@ export const api = {
   getAutomationRun: (id) => request(`/automations/runs/${id}`),
   cancelAutomationRun: (id) =>
     request(`/automations/runs/${id}/cancel`, { method: 'POST' }),
+
+  // Device interaction
+  tap: (id, x, y) =>
+    request(`/devices/${id}/tap`, {
+      method: 'POST',
+      body: JSON.stringify({ x, y }),
+    }),
+  press: (id, action) =>
+    request(`/devices/${id}/press`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    }),
+  swipe: (id, direction) =>
+    request(`/devices/${id}/swipe`, {
+      method: 'POST',
+      body: JSON.stringify({ direction }),
+    }),
+
+  // Profiles
+  getProfiles: () => request('/profiles'),
+  getProfile: (id) => request(`/profiles/${id}`),
+  getProfileByDevice: (deviceId) => request(`/profiles/device/${deviceId}`),
+  createProfile: (data) =>
+    request('/profiles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProfile: (id, data) =>
+    request(`/profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProfile: (id) =>
+    request(`/profiles/${id}`, { method: 'DELETE' }),
+
+  // AI Agent
+  getAgentStatusAll: () => request('/agent/status'),
+  getAgentStatus: (deviceId) => request(`/agent/${deviceId}/status`),
+  startAgent: (deviceId) =>
+    request(`/agent/${deviceId}/start`, { method: 'POST' }),
+  stopAgent: (deviceId) =>
+    request(`/agent/${deviceId}/stop`, { method: 'POST' }),
+  sendCommand: (deviceId, command, priority = 'normal') =>
+    request(`/agent/${deviceId}/command`, {
+      method: 'POST',
+      body: JSON.stringify({ command, priority }),
+    }),
+  getAgentCommands: (deviceId) => request(`/agent/${deviceId}/commands`),
+  getAgentLogs: (deviceId) => request(`/agent/${deviceId}/logs`),
 }

@@ -9,6 +9,7 @@ import {
   Settings,
   PlayCircle,
   Workflow,
+  Bot,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -18,6 +19,8 @@ import RemoteADB from './views/RemoteADB'
 import Automations from './views/Automations'
 import AutomationEditor from './views/AutomationEditor'
 import AutomationRunDetail from './views/AutomationRunDetail'
+import Profiles from './views/Profiles'
+import ProfileEditor from './views/ProfileEditor'
 
 const navSections = [
   {
@@ -34,6 +37,12 @@ const navSections = [
       { to: '/pipeline', icon: PlayCircle, label: 'Pipeline' },
       { to: '/automations', icon: Workflow, label: 'Automations' },
       { to: '/settings', icon: Settings, label: 'SamanLabs Config' },
+    ],
+  },
+  {
+    label: 'AI',
+    items: [
+      { to: '/profiles', icon: Bot, label: 'Profiles' },
     ],
   },
 ]
@@ -110,6 +119,9 @@ export default function App() {
           <Route path="/automations/:id/edit" element={<AutomationEditor />} />
           <Route path="/automations/runs/:runId" element={<AutomationRunDetail />} />
           <Route path="/remote-adb" element={<RemoteADB />} />
+          <Route path="/profiles" element={<Profiles />} />
+          <Route path="/profiles/new" element={<ProfileEditor />} />
+          <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
         </Routes>
       </main>
     </div>
