@@ -56,7 +56,7 @@ class AccessibilityAgent : AccessibilityService() {
         val isEditable = source.isEditable
         val className = source.className?.toString() ?: ""
         val viewId = source.viewIdResourceName
-        val text = source.text?.joinToString("") ?: ""
+        val text = source.text?.toString() ?: ""
 
         // Detect if this is a text input field
         val isInputField = isEditable ||
@@ -91,7 +91,7 @@ class AccessibilityAgent : AccessibilityService() {
      * Text changed in a focused field - the user (or automation) is typing.
      */
     private fun handleTextChanged(event: AccessibilityEvent) {
-        val text = event.text?.joinToString("") ?: ""
+        val text = event.text?.mapNotNull { it?.toString() }?.joinToString("") ?: ""
         DeviceState.focusedFieldText = text
 
         Log.d(TAG, "Text changed: ${text.take(50)}...")
