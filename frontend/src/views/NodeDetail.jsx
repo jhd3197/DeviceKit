@@ -15,6 +15,16 @@ import {
   Square,
   AlertTriangle,
   Zap,
+  Home,
+  ArrowLeft,
+  Menu,
+  Volume2,
+  VolumeX,
+  Power,
+  ArrowUp,
+  ArrowDown,
+  Type,
+  CornerUpLeft,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -39,6 +49,10 @@ export default function NodeDetail() {
   const [screenTs, setScreenTs] = useState(Date.now())
   const [screenLoaded, setScreenLoaded] = useState(false)
   const imgRef = useRef(null)
+
+  // Drag/swipe gesture state
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, startTime: 0 })
+  const [swipeTrail, setSwipeTrail] = useState(null) // {x1,y1,x2,y2} in px relative to img container
 
   // Agent state
   const [agentStatus, setAgentStatus] = useState({ status: 'stopped', current_action: null, cycle_count: 0 })
@@ -108,6 +122,31 @@ export default function NodeDetail() {
     if (agentLogRef.current) agentLogRef.current.scrollTop = agentLogRef.current.scrollHeight
   }, [agentLogs])
 
+  // Keyboard shortcuts (only when not focused on an input)
+  useEffect(() => {
+    if (!deviceId) return
+    const handler = (e) => {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+      const refresh = () => setTimeout(() => setScreenTs(Date.now()), 300)
+      switch (e.key) {
+        case 'h': e.preventDefault(); api.press(deviceId, 'home').then(refresh).catch(() => {}); break
+        case 'b': e.preventDefault(); api.press(deviceId, 'back').then(refresh).catch(() => {}); break
+        case 'r': e.preventDefault(); api.press(deviceId, 'recent').then(refresh).catch(() => {}); break
+        case 'm': e.preventDefault(); api.press(deviceId, 'menu').then(refresh).catch(() => {}); break
+        case 'Enter': e.preventDefault(); api.press(deviceId, 'enter').then(refresh).catch(() => {}); break
+        case 'ArrowUp': e.preventDefault(); api.swipe(deviceId, 'up').then(refresh).catch(() => {}); break
+        case 'ArrowDown': e.preventDefault(); api.swipe(deviceId, 'down').then(refresh).catch(() => {}); break
+        case 'ArrowLeft': e.preventDefault(); api.swipe(deviceId, 'left').then(refresh).catch(() => {}); break
+        case 'ArrowRight': e.preventDefault(); api.swipe(deviceId, 'right').then(refresh).catch(() => {}); break
+        default: break
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [deviceId])
+
   const runCommand = async () => {
     const cmd = shellInput.trim()
     if (!cmd || !deviceId) return
@@ -121,16 +160,15 @@ export default function NodeDetail() {
     }
   }
 
-  // Screen tap handler
-  const handleScreenClick = async (e) => {
-    if (!imgRef.current || !device?.display) return
+  // Map a mouse event to device coordinates; returns null if outside image area
+  const mapToDevice = (e) => {
+    if (!imgRef.current || !device?.display) return null
     const img = imgRef.current
     const rect = img.getBoundingClientRect()
     const natW = img.naturalWidth
     const natH = img.naturalHeight
-    if (!natW || !natH) return
+    if (!natW || !natH) return null
 
-    // Calculate rendered image size within object-contain
     const containerW = rect.width
     const containerH = rect.height
     const imgAspect = natW / natH
@@ -149,22 +187,79 @@ export default function NodeDetail() {
       offsetY = 0
     }
 
-    const clickX = e.clientX - rect.left - offsetX
-    const clickY = e.clientY - rect.top - offsetY
-
-    if (clickX < 0 || clickY < 0 || clickX > renderedW || clickY > renderedH) return
+    const px = e.clientX - rect.left - offsetX
+    const py = e.clientY - rect.top - offsetY
+    if (px < 0 || py < 0 || px > renderedW || py > renderedH) return null
 
     const devW = device.display.width || natW
     const devH = device.display.height || natH
-    const tapX = Math.round((clickX / renderedW) * devW)
-    const tapY = Math.round((clickY / renderedH) * devH)
+    return {
+      devX: Math.round((px / renderedW) * devW),
+      devY: Math.round((py / renderedH) * devH),
+      px: e.clientX - rect.left,
+      py: e.clientY - rect.top,
+    }
+  }
+
+  const SWIPE_THRESHOLD = 15 // px minimum drag distance to count as swipe
+
+  const handleMouseDown = (e) => {
+    e.preventDefault()
+    const pt = mapToDevice(e)
+    if (!pt) return
+    dragRef.current = { active: true, startX: pt.devX, startY: pt.devY, startTime: Date.now(), px: pt.px, py: pt.py }
+    setSwipeTrail(null)
+  }
+
+  const handleMouseMove = (e) => {
+    if (!dragRef.current.active) return
+    const img = imgRef.current
+    if (!img) return
+    const rect = img.getBoundingClientRect()
+    const curPx = e.clientX - rect.left
+    const curPy = e.clientY - rect.top
+    const dx = curPx - dragRef.current.px
+    const dy = curPy - dragRef.current.py
+    if (Math.sqrt(dx * dx + dy * dy) > SWIPE_THRESHOLD) {
+      setSwipeTrail({ x1: dragRef.current.px, y1: dragRef.current.py, x2: curPx, y2: curPy })
+    }
+  }
+
+  const handleMouseUp = async (e) => {
+    if (!dragRef.current.active) return
+    dragRef.current.active = false
+    const pt = mapToDevice(e)
+    setSwipeTrail(null)
+
+    if (!pt) return
+    const { startX, startY } = dragRef.current
+    const img = imgRef.current
+    const rect = img.getBoundingClientRect()
+    const pxDist = Math.sqrt(
+      Math.pow(e.clientX - rect.left - dragRef.current.px, 2) +
+      Math.pow(e.clientY - rect.top - dragRef.current.py, 2)
+    )
 
     try {
-      await api.tap(deviceId, tapX, tapY)
-      // Refresh screen after tap
+      if (pxDist < SWIPE_THRESHOLD) {
+        // Short drag = tap
+        await api.tap(deviceId, startX, startY)
+      } else {
+        // Long drag = swipe
+        const elapsed = Date.now() - dragRef.current.startTime
+        const duration = Math.max(200, Math.min(elapsed, 1500))
+        await api.swipeCoords(deviceId, startX, startY, pt.devX, pt.devY, duration)
+      }
       setTimeout(() => setScreenTs(Date.now()), 300)
     } catch {
       // silent
+    }
+  }
+
+  const handleMouseLeave = () => {
+    if (dragRef.current.active) {
+      dragRef.current.active = false
+      setSwipeTrail(null)
     }
   }
 
@@ -274,11 +369,22 @@ export default function NodeDetail() {
         {/* Main content */}
         <div className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto">
           <div className="grid grid-cols-12 gap-6">
-            {/* Phone mockup with live screen */}
-            <div className="col-span-12 lg:col-span-5 flex flex-col items-center">
-              <div className="relative group">
-                <div className="w-[280px] h-[580px] bg-[#0a0a0a] rounded-[3rem] border-[6px] border-[#1a1a1a] shadow-2xl relative overflow-hidden flex items-center justify-center">
-                  <div className="absolute top-0 w-1/3 h-6 bg-[#1a1a1a] rounded-b-xl z-20" />
+            {/* Phone mockup with side buttons */}
+            <div className="col-span-12 lg:col-span-5 flex flex-col items-center gap-3">
+              <div className="flex items-center gap-0">
+                {/* Left side buttons (volume + power) */}
+                <div className="flex flex-col gap-3 mr-1.5">
+                  <SideButton icon={Volume2} label="Vol+" shortcut="" onClick={() => handlePress('volume_up')} />
+                  <SideButton icon={VolumeX} label="Vol-" shortcut="" onClick={() => handlePress('volume_down')} />
+                  <div className="h-4" />
+                  <SideButton icon={Power} label="Power" shortcut="" onClick={() => handlePress('power')} />
+                </div>
+
+                {/* Phone frame */}
+                <div className={`w-[260px] h-[560px] bg-black relative overflow-hidden flex items-center justify-center select-none shadow-2xl shadow-black/60 border-[3px] border-[#222] ${screenLoaded ? 'rounded-2xl' : 'rounded-[2.5rem]'} transition-all duration-300`}>
+                  {!screenLoaded && (
+                    <div className="absolute top-2 w-24 h-5 bg-[#111] rounded-full z-20" />
+                  )}
                   {!screenLoaded && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10">
                       <Smartphone className="w-16 h-16 text-zinc-800 opacity-20" />
@@ -291,37 +397,60 @@ export default function NodeDetail() {
                     ref={imgRef}
                     src={`${api.screenshotUrl(deviceId)}?t=${screenTs}`}
                     alt="Device screen"
-                    className={`w-full h-full object-contain cursor-crosshair ${screenLoaded ? '' : 'invisible'}`}
-                    onClick={handleScreenClick}
+                    className={`w-full h-full object-cover cursor-crosshair ${screenLoaded ? '' : 'invisible'}`}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseLeave}
                     onError={() => setScreenLoaded(false)}
                     onLoad={() => setScreenLoaded(true)}
                     draggable={false}
                   />
+                  {swipeTrail && (
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-30">
+                      <line
+                        x1={swipeTrail.x1} y1={swipeTrail.y1}
+                        x2={swipeTrail.x2} y2={swipeTrail.y2}
+                        stroke="rgba(16,185,129,0.7)" strokeWidth="3" strokeLinecap="round"
+                      />
+                      <circle cx={swipeTrail.x1} cy={swipeTrail.y1} r="4" fill="rgba(16,185,129,0.9)" />
+                      <circle cx={swipeTrail.x2} cy={swipeTrail.y2} r="4" fill="white" />
+                    </svg>
+                  )}
                 </div>
-                <div className="absolute -right-16 top-0 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => handlePress('home')}
-                    className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400"
-                    title="Home"
-                  >
-                    <Circle className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handlePress('back')}
-                    className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400"
-                    title="Back"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={handleScreenshotDownload}
-                    className="p-2 bg-zinc-900 border border-main rounded hover:bg-zinc-800 text-zinc-400"
-                    title="Download Screenshot"
-                  >
-                    <Camera className="w-4 h-4" />
-                  </button>
+
+                {/* Right side buttons (swipe + screenshot) */}
+                <div className="flex flex-col gap-3 ml-1.5">
+                  <SideButton icon={ArrowUp} label="↑" shortcut="" onClick={() => { api.swipe(deviceId, 'up').catch(() => {}); setTimeout(() => setScreenTs(Date.now()), 400) }} />
+                  <SideButton icon={ArrowDown} label="↓" shortcut="" onClick={() => { api.swipe(deviceId, 'down').catch(() => {}); setTimeout(() => setScreenTs(Date.now()), 400) }} />
+                  <div className="h-4" />
+                  <SideButton icon={Camera} label="Save" shortcut="" onClick={handleScreenshotDownload} />
                 </div>
               </div>
+
+              {/* Android nav bar */}
+              <div className="flex gap-2 justify-center">
+                {[
+                  { icon: ArrowLeft, label: 'Back', key: 'B', action: 'back' },
+                  { icon: Circle, label: 'Home', key: 'H', action: 'home' },
+                  { icon: Square, label: 'Recent', key: 'R', action: 'recent' },
+                ].map((btn) => (
+                  <button
+                    key={btn.action}
+                    onClick={() => handlePress(btn.action)}
+                    className="w-16 flex flex-col items-center gap-0.5 py-2 bg-zinc-900/80 border border-zinc-800 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-all group"
+                    title={`${btn.label} (${btn.key})`}
+                  >
+                    <btn.icon className="w-4 h-4" />
+                    <span className="text-[8px] text-zinc-600 group-hover:text-zinc-400">{btn.key}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Keyboard hint */}
+              <p className="text-[9px] text-zinc-600 text-center">
+                H home &middot; B back &middot; R recent &middot; M menu &middot; Arrow keys swipe &middot; Enter confirm
+              </p>
             </div>
 
             {/* Right panels */}
@@ -541,6 +670,18 @@ export default function NodeDetail() {
         </div>
       </div>
     </>
+  )
+}
+
+function SideButton({ icon: Icon, label, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-9 h-9 flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-700 hover:border-zinc-600 text-zinc-500 hover:text-white transition-all"
+      title={label}
+    >
+      <Icon className="w-3.5 h-3.5" />
+    </button>
   )
 }
 

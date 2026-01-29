@@ -155,10 +155,22 @@ class ApiAppMixin:
         @app.route('/devices/<device_id>/swipe', methods=['POST'])
         def device_swipe(device_id):
             data = request.get_json(silent=True) or {}
-            direction = data.get('direction', 'up')
-            duration = int(data.get('duration', 500))
+            duration = int(data.get('duration', 400))
             try:
                 d = client.get_device(device_id)
+                # Freeform swipe: startX, startY, endX, endY
+                if 'startX' in data and 'startY' in data and 'endX' in data and 'endY' in data:
+                    sx = int(data['startX'])
+                    sy = int(data['startY'])
+                    ex = int(data['endX'])
+                    ey = int(data['endY'])
+                    d.swipe(sx, sy, ex, ey, duration=duration / 1000)
+                    client.log_activity('swipe', device_id, {
+                        'startX': sx, 'startY': sy, 'endX': ex, 'endY': ey,
+                    })
+                    return jsonify({'status': 'ok', 'startX': sx, 'startY': sy, 'endX': ex, 'endY': ey})
+                # Directional swipe
+                direction = data.get('direction', 'up')
                 info = d.info
                 w = info.get('displayWidth', 1080)
                 h = info.get('displayHeight', 1920)
@@ -557,6 +569,80 @@ class ApiAppMixin:
         def agent_logs(device_id):
             limit = int(request.args.get('limit', 50))
             return jsonify({'logs': client.get_agent_logs(device_id, limit)})
+
+        # -----------------------------------------------------------
+        # Agent Device (on-device DeviceKitAgent APK endpoints)
+        # -----------------------------------------------------------
+        # In-memory store for agent device state
+        _agent_device_states = {}
+        _agent_device_events = []
+
+        @app.route('/agent-device/register', methods=['POST'])
+        def agent_device_register():
+            data = request.get_json(silent=True) or {}
+            model = data.get('model', 'unknown')
+            manufacturer = data.get('manufacturer', 'unknown')
+            device_id = f"{manufacturer}_{model}".replace(' ', '_')
+            _agent_device_states[device_id] = {
+                'device_id': device_id,
+                'info': data,
+                'registered_at': time.time(),
+                'last_heartbeat': time.time(),
+                'state': {},
+                'online': True,
+            }
+            logger.info(f"Agent device registered: {device_id}")
+            client.log_activity('agent_device_register', device_id, data)
+            return jsonify({'device_id': device_id, 'status': 'registered'})
+
+        @app.route('/agent-device/state', methods=['POST'])
+        def agent_device_state():
+            data = request.get_json(silent=True) or {}
+            device_id = data.get('device_id')
+            if device_id and device_id in _agent_device_states:
+                _agent_device_states[device_id]['state'] = data
+                _agent_device_states[device_id]['last_heartbeat'] = time.time()
+            return jsonify({'status': 'ok'})
+
+        @app.route('/agent-device/heartbeat', methods=['POST'])
+        def agent_device_heartbeat():
+            data = request.get_json(silent=True) or {}
+            device_id = data.get('device_id')
+            if device_id and device_id in _agent_device_states:
+                _agent_device_states[device_id]['last_heartbeat'] = time.time()
+                _agent_device_states[device_id]['online'] = True
+            return jsonify({'status': 'ok'})
+
+        @app.route('/agent-device/event', methods=['POST'])
+        def agent_device_event():
+            data = request.get_json(silent=True) or {}
+            _agent_device_events.append(data)
+            # Keep last 500 events
+            if len(_agent_device_events) > 500:
+                _agent_device_events.pop(0)
+            device_id = data.get('device_id', 'unknown')
+            event_type = data.get('event', 'unknown')
+            logger.info(f"Agent device event: {device_id} -> {event_type}")
+            return jsonify({'status': 'ok'})
+
+        @app.route('/agent-device/<device_id>/commands')
+        def agent_device_commands(device_id):
+            # Placeholder for command queue from server to on-device agent
+            return jsonify({'commands': []})
+
+        @app.route('/agent-device/status')
+        def agent_device_status():
+            # Mark stale devices as offline (no heartbeat in 15s)
+            now = time.time()
+            for d in _agent_device_states.values():
+                if now - d.get('last_heartbeat', 0) > 15:
+                    d['online'] = False
+            return jsonify({'devices': list(_agent_device_states.values())})
+
+        @app.route('/agent-device/events')
+        def agent_device_events():
+            limit = int(request.args.get('limit', 50))
+            return jsonify({'events': _agent_device_events[-limit:]})
 
         # Run
         app.run(host=host, port=port, debug=debug)

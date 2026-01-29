@@ -98,6 +98,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ direction }),
     }),
+  swipeCoords: (id, startX, startY, endX, endY, duration = 400) =>
+    request(`/devices/${id}/swipe`, {
+      method: 'POST',
+      body: JSON.stringify({ startX, startY, endX, endY, duration }),
+    }),
 
   // Profiles
   getProfiles: () => request('/profiles'),

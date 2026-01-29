@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DeviceKit Agent</string>
+    <string name="accessibility_description">DeviceKit Agent monitors UI state, focused input fields, and keyboard visibility to report device state back to the DeviceKit management server.</string>
+    <string name="notification_channel_name">DeviceKit Agent</string>
+    <string name="notification_channel_description">Background agent status</string>
+</resources>
