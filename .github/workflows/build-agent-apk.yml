@@ -5,6 +5,17 @@ on:
     tags:
       - 'agent-v*'
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub Release with the APKs'
+        required: false
+        default: true
+        type: boolean
+      version:
+        description: 'Version label (e.g. 1.0.0)'
+        required: false
+        default: 'dev'
+        type: string
 
 jobs:
   build:
@@ -39,24 +50,35 @@ jobs:
       - name: Build release APK
         run: ./gradlew assembleRelease
 
-      - name: Upload debug APK
+      - name: Rename APKs for release
+        run: |
+          VERSION="${{ github.event.inputs.version || 'dev' }}"
+          if [[ "${{ github.ref }}" == refs/tags/agent-v* ]]; then
+            VERSION="${GITHUB_REF_NAME#agent-v}"
+          fi
+          mkdir -p release
+          cp app/build/outputs/apk/debug/*.apk "release/DeviceKitAgent-${VERSION}-debug.apk"
+          cp app/build/outputs/apk/release/*.apk "release/DeviceKitAgent-${VERSION}-release.apk"
+
+      - name: Upload APKs as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: devicekit-agent-debug
-          path: agent-android/app/build/outputs/apk/debug/*.apk
+          name: DeviceKitAgent-APKs
+          path: agent-android/release/*.apk
 
-      - name: Upload release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: devicekit-agent-release
-          path: agent-android/app/build/outputs/apk/release/*.apk
-
-      - name: Create GitHub Release
+      - name: Create GitHub Release (tag push)
         if: startsWith(github.ref, 'refs/tags/agent-v')
         uses: softprops/action-gh-release@v2
         with:
           name: "DeviceKit Agent ${{ github.ref_name }}"
-          files: |
-            agent-android/app/build/outputs/apk/debug/*.apk
-            agent-android/app/build/outputs/apk/release/*.apk
+          files: agent-android/release/*.apk
+          generate_release_notes: true
+
+      - name: Create GitHub Release (manual)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "agent-v${{ github.event.inputs.version }}"
+          name: "DeviceKit Agent v${{ github.event.inputs.version }}"
+          files: agent-android/release/*.apk
           generate_release_notes: true

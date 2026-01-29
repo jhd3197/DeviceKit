@@ -61,20 +61,20 @@ class BackgroundAgent : Service() {
     }
 
     private fun startAgent() {
-        // Register with server
         scope.launch {
-            val registered = registerWithServer()
-            if (registered) {
-                DeviceState.isConnected = true
-                updateNotification("Connected to ${DeviceState.serverUrl}")
-                startHeartbeat()
-                startStateReporting()
-            } else {
-                DeviceState.isConnected = false
-                updateNotification("Failed to connect - retrying...")
-                // Retry after delay
-                delay(5_000)
-                startAgent()
+            var registered = false
+            while (!registered) {
+                registered = registerWithServer()
+                if (registered) {
+                    DeviceState.isConnected = true
+                    updateNotification("Connected to ${DeviceState.serverUrl}")
+                    startHeartbeat()
+                    startStateReporting()
+                } else {
+                    DeviceState.isConnected = false
+                    updateNotification("Failed to connect - retrying...")
+                    delay(5_000)
+                }
             }
         }
     }
@@ -88,7 +88,7 @@ class BackgroundAgent : Service() {
             put("android_version", Build.VERSION.RELEASE)
             put("product", Build.PRODUCT)
             put("device", Build.DEVICE)
-            put("serial", Build.SERIAL)
+            put("serial", Build.BOARD)
             put("agent_version", "1.0.0")
             put("capabilities", org.json.JSONArray().apply {
                 put("accessibility")
