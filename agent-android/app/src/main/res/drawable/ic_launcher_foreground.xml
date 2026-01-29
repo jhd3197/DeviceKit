@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Device icon centered in adaptive icon safe zone -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,25H46c-2.2,0 -4,1.8 -4,4v50c0,2.2 1.8,4 4,4h16c2.2,0 4,-1.8 4,-4V29C66,26.8 64.2,25 62,25zM62,71H46V33h16V71zM54,75c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2s-2,0.9 -2,2S52.9,75 54,75z" />
+</vector>

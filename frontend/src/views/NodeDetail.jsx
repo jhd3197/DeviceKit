@@ -64,6 +64,9 @@ export default function NodeDetail() {
 
   const deviceId = id || ''
 
+  // Metrics history for step charts (max 60 entries = ~5 min at 5s intervals)
+  const metricsHistory = useRef([])
+
   const fetchData = useCallback(async () => {
     if (!deviceId) return
     try {
@@ -329,6 +332,15 @@ export default function NodeDetail() {
   const uptimeSecs = diagnostics?.uptime_seconds || 0
   const uptimeStr = formatUptime(uptimeSecs)
 
+  // Push metrics into history when diagnostics updates
+  useEffect(() => {
+    if (diagnostics) {
+      const hist = metricsHistory.current
+      hist.push({ time: Date.now(), cpu: cpuPercent, mem: memPercent })
+      if (hist.length > 60) hist.shift()
+    }
+  }, [diagnostics, cpuPercent, memPercent])
+
   const statusColors = {
     stopped: 'bg-zinc-700 text-zinc-400',
     autonomous: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
@@ -460,17 +472,20 @@ export default function NodeDetail() {
                 <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-6">
                   Live Diagnostics
                 </h3>
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <ProgressBar label="CPU Core Usage" value={cpuPercent} color="bg-emerald-500" valueText={`${cpuPercent}%`} />
-                    <ProgressBar
-                      label="RAM Occupancy"
-                      value={memPercent}
-                      color="bg-zinc-400"
-                      valueText={`${(memUsed / 1024).toFixed(1)}GB / ${(memTotal / 1024).toFixed(1)}GB`}
-                    />
-                  </div>
-                  <div className="space-y-4">
+                <div className="space-y-4">
+                  <StepChart
+                    data={metricsHistory.current.map((d) => d.cpu)}
+                    color="#10b981"
+                    label="CPU Core Usage"
+                    currentValue={`${cpuPercent}%`}
+                  />
+                  <StepChart
+                    data={metricsHistory.current.map((d) => d.mem)}
+                    color="#71717a"
+                    label="RAM Occupancy"
+                    currentValue={`${(memUsed / 1024).toFixed(1)}GB / ${(memTotal / 1024).toFixed(1)}GB`}
+                  />
+                  <div className="grid grid-cols-3 gap-4 pt-2">
                     <DiagRow label="Temp" value={`${temp}°C`} />
                     <DiagRow label="Battery" value={`${battery}%`} />
                     <DiagRow label="Uptime" value={uptimeStr} />
@@ -695,6 +710,86 @@ function ProgressBar({ label, value, color, valueText }) {
       <div className="w-full h-1 bg-zinc-900 rounded-full">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${value}%` }} />
       </div>
+    </div>
+  )
+}
+
+function StepChart({ data, color, label, currentValue }) {
+  const W = 300
+  const H = 80
+  const PAD_L = 28
+  const PAD_R = 4
+  const PAD_T = 4
+  const PAD_B = 4
+  const plotW = W - PAD_L - PAD_R
+  const plotH = H - PAD_T - PAD_B
+  const MAX_POINTS = 60
+
+  const pts = data.length > 0 ? data : [0]
+  const n = pts.length
+
+  const toX = (i) => PAD_L + (n === 1 ? plotW : (i / (MAX_POINTS - 1)) * plotW)
+  const toY = (v) => PAD_T + plotH - (Math.min(100, Math.max(0, v)) / 100) * plotH
+
+  // Build step polyline
+  let linePath = ''
+  let fillPath = ''
+  if (n >= 1) {
+    linePath = `M${toX(0)},${toY(pts[0])}`
+    for (let i = 1; i < n; i++) {
+      linePath += ` L${toX(i)},${toY(pts[i - 1])} L${toX(i)},${toY(pts[i])}`
+    }
+    fillPath = linePath + ` L${toX(n - 1)},${PAD_T + plotH} L${toX(0)},${PAD_T + plotH} Z`
+  }
+
+  const gridLines = [25, 50, 75]
+  const gradientId = `grad-${label.replace(/\s/g, '')}`
+
+  return (
+    <div>
+      <div className="flex justify-between text-[10px] mono mb-1">
+        <span className="text-zinc-500 uppercase">{label}</span>
+        <span className="text-white">{currentValue}</span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full bg-[#020202] rounded border border-zinc-800/50"
+        preserveAspectRatio="none"
+        style={{ height: 100 }}
+      >
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Grid lines */}
+        {gridLines.map((pct) => {
+          const y = toY(pct)
+          return (
+            <g key={pct}>
+              <line x1={PAD_L} y1={y} x2={W - PAD_R} y2={y} stroke="#27272a" strokeWidth="0.5" />
+              <text x={PAD_L - 4} y={y + 3} textAnchor="end" fill="#52525b" fontSize="7" fontFamily="monospace">
+                {pct}
+              </text>
+            </g>
+          )
+        })}
+        {/* 0 and 100 labels */}
+        <text x={PAD_L - 4} y={toY(0) + 3} textAnchor="end" fill="#52525b" fontSize="7" fontFamily="monospace">0</text>
+        <text x={PAD_L - 4} y={toY(100) + 3} textAnchor="end" fill="#52525b" fontSize="7" fontFamily="monospace">100</text>
+        {/* Fill under step line */}
+        {n >= 1 && <path d={fillPath} fill={`url(#${gradientId})`} />}
+        {/* Step line */}
+        {n >= 1 && <path d={linePath} fill="none" stroke={color} strokeWidth="1.5" />}
+        {/* Glowing end dot */}
+        {n >= 1 && (
+          <>
+            <circle cx={toX(n - 1)} cy={toY(pts[n - 1])} r="4" fill={color} opacity="0.3" />
+            <circle cx={toX(n - 1)} cy={toY(pts[n - 1])} r="2" fill={color} />
+          </>
+        )}
+      </svg>
     </div>
   )
 }
