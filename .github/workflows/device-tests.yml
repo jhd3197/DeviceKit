@@ -1,0 +1,82 @@
+name: Device Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+  DEVICEKIT_URL: ${{ secrets.DEVICEKIT_URL || 'http://127.0.0.1:5050' }}
+  DEVICEKIT_API_KEY: ${{ secrets.DEVICEKIT_API_KEY }}
+
+jobs:
+  device-tests:
+    runs-on: self-hosted
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install droidlink
+        run: |
+          pip install -e ./droidlink
+          pip install pytest pytest-junitxml
+
+      - name: Verify ADB devices
+        run: |
+          adb devices -l
+          echo "---"
+          echo "Connected devices:"
+          adb devices | grep -v "^$" | grep -v "List"
+
+      - name: Start DeviceKit backend
+        run: |
+          cd backend
+          pip install -r requirements.txt 2>/dev/null || true
+          python app.py &
+          echo "Waiting for backend to start..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:5050/health > /dev/null 2>&1; then
+              echo "Backend is ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run device tests
+        run: |
+          pytest tests/ \
+            --devicekit-url=${{ env.DEVICEKIT_URL }} \
+            --devicekit-api-key=${{ env.DEVICEKIT_API_KEY }} \
+            --screenshot-on-failure \
+            --junitxml=test-results/junit.xml \
+            -v
+        env:
+          DROIDLINK_DEVICE: ${{ vars.DEVICE_SERIAL || '' }}
+          DROIDLINK_DEVICE_WIFI: ${{ vars.DEVICE_WIFI || '' }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+
+      - name: Publish test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Device Test Results
+          path: test-results/junit.xml
+          reporter: java-junit
+          fail-on-error: false

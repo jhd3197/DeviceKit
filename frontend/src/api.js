@@ -59,8 +59,29 @@ export const api = {
   // Pipeline
   getBuilds: () => request('/pipeline/builds'),
   getBuild: (id) => request(`/pipeline/builds/${id}`),
-  startBuild: () => request('/pipeline/builds', { method: 'POST' }),
+  startBuild: (data) =>
+    request('/pipeline/builds', { method: 'POST', body: JSON.stringify(data || {}) }),
   getBuildFailures: (id) => request(`/pipeline/builds/${id}/failures`),
+  updateBuildStatus: (id, status) =>
+    request(`/pipeline/builds/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    }),
+  getBuildScreenshot: (buildId, testIndex) =>
+    `${API}/pipeline/builds/${buildId}/screenshots/${testIndex}`,
+
+  // Device locking
+  getAvailableDevices: () => request('/devices/available'),
+  lockDevice: (id, owner, timeout) =>
+    request(`/devices/${id}/lock`, {
+      method: 'POST',
+      body: JSON.stringify({ owner, ...(timeout ? { timeout } : {}) }),
+    }),
+  unlockDevice: (id, owner) =>
+    request(`/devices/${id}/unlock`, {
+      method: 'POST',
+      body: JSON.stringify({ owner }),
+    }),
 
   // Queue
   getQueueStatus: () => request('/queue/status'),
@@ -260,6 +281,12 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('bulk_action_complete', (e) => {
     handlers.onBulkActionComplete?.(JSON.parse(e.data))
+  })
+  es.addEventListener('pipeline_test', (e) => {
+    handlers.onPipelineTest?.(JSON.parse(e.data))
+  })
+  es.addEventListener('pipeline_build', (e) => {
+    handlers.onPipelineBuild?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()

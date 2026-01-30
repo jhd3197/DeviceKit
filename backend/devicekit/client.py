@@ -16,6 +16,7 @@ from devicekit.mixins.automation import AutomationMixin
 from devicekit.mixins.profile import ProfileMixin
 from devicekit.mixins.agent import AgentMixin
 from devicekit.mixins.fleet import FleetMixin
+from devicekit.mixins.device_lock import DeviceLockMixin
 from devicekit.mixins.auth import AuthMixin
 
 
@@ -29,6 +30,7 @@ class Client(
     ProfileMixin,
     AgentMixin,
     FleetMixin,
+    DeviceLockMixin,
     ApiAppMixin,
     QueueMixin,
     AlertMixin,

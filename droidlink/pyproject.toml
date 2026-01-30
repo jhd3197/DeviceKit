@@ -22,5 +22,8 @@ dev = [
 [project.scripts]
 droidlink = "droidlink.cli:main"
 
+[project.entry-points."pytest11"]
+droidlink = "droidlink.pytest_plugin"
+
 [tool.setuptools.packages.find]
 where = ["."]
