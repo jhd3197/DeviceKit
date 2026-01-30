@@ -140,10 +140,6 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 - Dashboard: replaced 10s polling with SSE, live connection indicator (green/red), real CPU + battery mini-bars per device row
 - NodeDetail: SSE subscription for real-time diagnostics (2s updates), polling fallback reduced to 30s, battery level chart added alongside CPU/RAM
 
----
-
-## Upcoming Phases
-
 ### Phase 12: Multi-Device Fleet Management ✅
 **Goal**: Manage multiple Android devices simultaneously.
 
@@ -198,21 +194,115 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 - [x] GitHub Actions workflow template: `.github/workflows/device-tests.yml` (self-hosted runner, pytest, JUnit artifacts, dorny/test-reporter)
 - [x] CI setup documentation: `docs/ci-setup.md` (runner requirements, secrets, WiFi config, device locking conftest example, troubleshooting)
 
-### Phase 16: Prompture Integration — Device Personalities & Conversational Agents
+### Phase 16: Prompture Integration — Device Personalities & Conversational Agents ✅
 **Goal**: Replace direct Anthropic/OpenAI calls with Prompture for multi-provider conversations, tool use, memory, and structured output. Devices become persistent conversational agents with personalities.
 
-- [ ] Add `prompture` to backend dependencies
-- [ ] Create `PromptureAgentMixin` replacing raw AI calls with `Conversation` + `ToolRegistry`
-- [ ] Register droidlink device actions as Prompture tools (tap, swipe, type, press, open_app, screenshot)
-- [ ] Per-device `Conversation` instances with system prompts built from profile (personality, niche, interests)
-- [ ] Conversation memory: device remembers prior interactions across agent cycles
-- [ ] Multi-provider support via Prompture drivers (switch between Claude, GPT-4, Groq, Ollama, etc. per device)
-- [ ] Structured action output via Pydantic models instead of raw JSON parsing
-- [ ] `UsageSession` per device for token/cost tracking on the dashboard
-- [ ] `DriverCallbacks` hooks for real-time agent observability (log every AI request/response)
-- [ ] Streaming responses via `ask_stream()` for live "thinking" feedback on frontend
-- [ ] Conversation export/import for persistence across backend restarts
-- [ ] Frontend: model selector per device profile, token usage display, conversation history view
-- [ ] API endpoints: `/devices/:id/conversation/history`, `/devices/:id/conversation/clear`, `/devices/:id/agent/usage`
+- [x] Add `prompture>=0.0.36` to backend dependencies, remove direct `anthropic` dep
+- [x] Create `PromptureAgentMixin` replacing raw AI calls with `Conversation` + `ToolRegistry`
+- [x] Register device actions as Prompture tools (tap, swipe, type_text, press_key, open_app)
+- [x] Per-device `DeviceConversation` instances with system prompts built from profile (personality, niche, interests, behavior)
+- [x] Conversation memory: device remembers prior interactions across agent stop/start cycles
+- [x] Multi-provider support via Prompture drivers (switch between Claude, GPT-4, Groq, Ollama, Google per device)
+- [x] `DeviceAction` Pydantic model for structured action output instead of raw JSON parsing
+- [x] `UsageSession` per device for token/cost tracking (prompt_tokens, completion_tokens, total_cost, call_count, errors)
+- [x] `DriverCallbacks` hooks for real-time agent observability (record every AI request/response/error)
+- [x] `PROMPTURE_DEFAULT_MODEL` config + `.env.example` with multi-provider API key placeholders
+- [x] Profile schema: `model_name` field in create/update for per-device model selection
+- [x] API endpoints: `GET /devices/:id/conversation/history`, `DELETE /devices/:id/conversation`, `GET /devices/:id/agent/usage`, `PATCH /devices/:id/agent/model`
+- [x] Frontend NodeDetail: model badge, usage panel (tokens/cost/calls), model selector dropdown, conversation history toggle, clear conversation button
+- [x] Frontend Dashboard: Fleet AI Cost metric card aggregating cost across all active agents
+- [x] Frontend ProfileEditor: AI Model section with 5 presets + custom input
+- [ ] Streaming responses via `ask_stream()` for live "thinking" feedback on frontend (deferred)
+- [ ] Conversation export/import for persistence across backend restarts (deferred)
 
 See [prompture_integration.md](./prompture_integration.md) for full technical design.
+
+---
+
+## Upcoming Phases
+
+### Phase 17: Natural Language Automation Builder
+**Goal**: Bridge the Prompture AI layer and the automation engine so users can describe automations in plain English and get executable step sequences. Add self-healing capabilities to automation steps.
+
+- [ ] `POST /automations/generate` endpoint: accepts `{ prompt, device_id }`, returns generated automation steps via Prompture conversation with tool definitions matching automation step types
+- [ ] Prompture system prompt with full automation step schema (tap, swipe, type, press, shell, open_app, file_op, wait, assert) so LLM generates valid steps
+- [ ] Frontend: "Generate with AI" button in AutomationEditor — text area for natural language description, preview generated steps before saving
+- [ ] Step refinement: user can select a generated step and ask AI to modify it ("make this wait longer", "use a different selector")
+- [ ] Self-healing automation steps: when a tap/UI step fails, capture accessibility tree + screenshot, ask Prompture to re-locate the target element and retry
+- [ ] `AccessibilityTreeMixin`: new backend mixin that fetches UI hierarchy XML from agent `/ui/dump` endpoint, parses into structured context for LLM
+- [ ] Accessibility context injection: autonomous agent loop sends UI hierarchy alongside screenshots for better element targeting
+- [ ] Frontend: "Self-heal" toggle per automation (enabled by default), retry count config, heal log in run detail view
+- [ ] `POST /automations/:id/explain` endpoint: AI summarizes what an automation does in plain English (reverse of generate)
+
+### Phase 18: Real-Time Device Streaming
+**Goal**: Replace screenshot polling with live video streaming for a true remote desktop experience. Enable session recording and playback.
+
+- [ ] Backend WebSocket proxy: `/devices/<id>/stream/ws` — bridges frontend WebSocket to agent MJPEG `/stream` endpoint, transcodes frames
+- [ ] Frontend: replace `<img>` screenshot polling in NodeDetail with `<canvas>` WebSocket receiver rendering at 15-30fps
+- [ ] Adaptive quality: auto-adjust resolution/fps based on network bandwidth (low/medium/high presets)
+- [ ] Touch overlay: render tap/swipe indicators on the stream canvas in real-time (ghost fingers)
+- [ ] Session recording: `POST /devices/<id>/sessions/record` starts capturing frames + input events + timestamps to storage
+- [ ] Session playback: `GET /devices/<id>/sessions/:id/play` returns recorded session as seekable video with event timeline overlay
+- [ ] Frontend Sessions panel: list recorded sessions per device, play/download/delete, timeline scrubber with action markers
+- [ ] Multi-viewer support: multiple frontend clients can watch the same device stream simultaneously
+- [ ] Latency indicator: show round-trip latency (ms) on the stream overlay
+- [ ] Fallback: graceful degradation to 1s screenshot polling when WebSocket is unavailable (existing behavior)
+
+### Phase 19: Visual Regression Testing
+**Goal**: Add screenshot-based assertions to automations so tests can verify what they see, not just what they do. Use AI to distinguish meaningful UI changes from noise.
+
+- [ ] New automation step type: `screenshot_assert` — captures screenshot and compares against a stored baseline
+- [ ] Baseline management: `POST /automations/:id/baselines` to capture and store baseline screenshots per step, per device model
+- [ ] Pixel-diff engine: compute structural similarity (SSIM) between baseline and current screenshot, configurable threshold (default 95%)
+- [ ] AI-powered diff analysis: when pixel diff exceeds threshold, send both images to Prompture and ask "Is this a meaningful UI change or noise (timestamps, animations, dynamic content)?"
+- [ ] Diff overlay visualization: frontend renders side-by-side (baseline vs actual) with highlighted diff regions in the run detail view
+- [ ] Mask regions: allow users to mark areas to ignore (clocks, ads, dynamic banners) via drag-select on the baseline image
+- [ ] Multi-device baselines: store separate baselines per screen resolution/density so the same automation works across different devices
+- [ ] `GET /automations/:id/baselines` — list all baselines with thumbnails, allow re-capture and version history
+- [ ] Regression report: summary of all visual assertions in a run (passed/failed/needs-review) with confidence scores
+- [ ] Frontend: baseline capture mode in AutomationEditor — run step, preview screenshot, click "Set as Baseline"
+
+### Phase 20: Fleet Query Language
+**Goal**: Enable SQL-like queries across the device fleet for filtering, reporting, and bulk action targeting.
+
+- [ ] Query DSL parser: simple expression language — `android_version < 13 AND battery > 20 AND status = 'idle'`
+- [ ] Supported fields: `device_id`, `model`, `manufacturer`, `android_version`, `sdk`, `battery`, `cpu`, `ram_used`, `ram_total`, `temperature`, `online`, `status`, `agent_status`, `group`, `tags`, `model_name`
+- [ ] Operators: `=`, `!=`, `<`, `>`, `<=`, `>=`, `LIKE`, `IN`, `NOT IN`, `AND`, `OR`, parentheses for grouping
+- [ ] `GET /fleet/query?q=<expression>` endpoint: evaluates query against live device state, returns matching devices
+- [ ] Frontend: query bar on Dashboard with autocomplete for field names and operators, live result count as you type
+- [ ] Query → bulk action: pipe query results into bulk operations (reboot, install agent, run automation, send command)
+- [ ] Saved queries: `POST /fleet/queries` to save named queries (e.g., "Low battery devices", "Outdated Android")
+- [ ] Frontend: saved query dropdown, quick-select presets ("All offline", "Critical health", "Idle devices")
+- [ ] Query in automation triggers: run automation on devices matching a query instead of a static device list
+- [ ] Fleet reports: `GET /fleet/query?q=...&format=csv` for exporting query results
+
+### Phase 21: Failure Debug Bundles
+**Goal**: When a test or automation step fails, auto-package all relevant diagnostics into a single downloadable bundle for fast debugging.
+
+- [ ] `DebugBundleMixin`: collects screenshot, logcat (last 100 lines), device state (CPU/RAM/battery/active app), UI hierarchy XML, last 10 agent actions, and device properties
+- [ ] Auto-trigger: bundle generated on automation step failure, pipeline test failure, or manual request
+- [ ] `POST /devices/<id>/debug-bundle` endpoint: on-demand bundle generation, returns bundle ID
+- [ ] `GET /debug-bundles/<id>` endpoint: download bundle as ZIP (screenshot.png, logcat.txt, state.json, ui_hierarchy.xml, actions.json, properties.json)
+- [ ] Automation integration: failed steps in `AutomationMixin` auto-generate a bundle, bundle ID stored in step result
+- [ ] Pipeline integration: `DroidLinkReporter` captures bundle on test failure alongside screenshot, uploads to backend
+- [ ] AI failure analysis: send bundle contents to Prompture, ask for root cause hypothesis and suggested fix
+- [ ] Frontend AutomationRunDetail: "Download Debug Bundle" button on failed steps, inline AI analysis summary
+- [ ] Frontend Pipeline view: bundle download link per failed test, expandable AI analysis section
+- [ ] Bundle retention policy: auto-delete bundles older than N days (configurable, default 30)
+- [ ] Shareable bundle URL: `/debug-bundles/<id>/share` generates a time-limited public link
+
+### Phase 22: Predictive Device Health
+**Goal**: Use historical device metrics to predict failures before they happen and surface proactive alerts on the dashboard.
+
+- [ ] `MetricsHistoryMixin`: persist device metrics (CPU, RAM, battery, temperature, storage) to DynamoDB at configurable intervals (default 5min)
+- [ ] `GET /devices/<id>/metrics/history?hours=24` endpoint: return time-series metrics data for charting
+- [ ] Battery degradation tracking: compare charge capacity over time, detect batteries holding less charge than baseline
+- [ ] Storage fill rate: linear projection of when device will run out of storage based on recent consumption trend
+- [ ] Thermal throttling detection: flag devices with sustained temperature above threshold, correlate with CPU performance drops
+- [ ] Predictive alerts: new alert types — `battery_degraded`, `storage_fill_predicted`, `thermal_pattern`, `device_unreliable` (frequent disconnects)
+- [ ] Health score: composite 0-100 score per device based on battery health, storage headroom, thermal history, uptime stability
+- [ ] `GET /fleet/health/predictions` endpoint: list all devices with active predictions and estimated time-to-issue
+- [ ] Frontend Dashboard: "Predictions" card showing devices at risk with estimated timeline ("Device X: storage full in ~3 days")
+- [ ] Frontend NodeDetail: metrics history charts (24h/7d/30d) for CPU, RAM, battery, temperature, storage
+- [ ] Fleet-wide trends: `GET /fleet/metrics/trends` — aggregate metrics across fleet over time (avg battery health declining, storage usage growing)
+- [ ] Anomaly detection: flag devices deviating significantly from fleet averages (e.g., one device running 30% hotter than peers)
