@@ -114,10 +114,10 @@ export const api = {
     request(`/automations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAutomation: (id) =>
     request(`/automations/${id}`, { method: 'DELETE' }),
-  runAutomation: (id, deviceId) =>
+  runAutomation: (id, deviceId, selfHeal = false) =>
     request(`/automations/${id}/run`, {
       method: 'POST',
-      body: JSON.stringify({ device_id: deviceId }),
+      body: JSON.stringify({ device_id: deviceId, self_heal: selfHeal }),
     }),
   getAutomationRuns: (params) => {
     const q = new URLSearchParams(params).toString()
@@ -169,6 +169,20 @@ export const api = {
   exportAutomation: (id) => request(`/automations/${id}/export`),
   importAutomation: (data) =>
     request('/automations/import', { method: 'POST', body: JSON.stringify(data) }),
+
+  // NL Automation (AI-powered)
+  generateSteps: (description, deviceId) =>
+    request('/automations/generate', {
+      method: 'POST',
+      body: JSON.stringify({ description, device_id: deviceId }),
+    }),
+  refineStep: (step, instruction, deviceId) =>
+    request('/automations/refine-step', {
+      method: 'POST',
+      body: JSON.stringify({ step, instruction, device_id: deviceId }),
+    }),
+  explainAutomation: (id) => request(`/automations/${id}/explain`),
+  getUiHierarchy: (deviceId) => request(`/devices/${deviceId}/ui-hierarchy`),
 
   // Device interaction
   tap: (id, x, y) =>

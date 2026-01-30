@@ -196,7 +196,7 @@ class AutomationMixin:
     # ---------------------------------------------------------------
     # Execution
     # ---------------------------------------------------------------
-    def execute_automation(self, automation_id, device_id):
+    def execute_automation(self, automation_id, device_id, self_heal=False):
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
@@ -215,6 +215,7 @@ class AutomationMixin:
             "current_step_index": 0,
             "step_results": [],
             "error": None,
+            "self_heal": self_heal,
         }
         self._automation_runs.append(run_record)
 
@@ -231,8 +232,11 @@ class AutomationMixin:
         return run_record
 
     def _run_automation_thread(self, run_record, steps, device_id, cancel_event):
+        from devicekit.mixins.nl_automation import UI_TARGETING_STEP_TYPES
+
         step_results = []
         completed = 0
+        self_heal_enabled = run_record.get("self_heal", False)
 
         for idx, step in enumerate(steps):
             if cancel_event.is_set():
@@ -267,39 +271,72 @@ class AutomationMixin:
                 result["duration_ms"] = elapsed
                 completed += 1
             except Exception as e:
-                elapsed = int((time.time() - start_ts) * 1000)
-                result["status"] = "failed"
-                result["error"] = str(e)
-                result["duration_ms"] = elapsed
-                # Best-effort screenshot capture on failure
-                try:
-                    screenshot_data = self.take_screenshot(device_id)
-                    if screenshot_data:
-                        result["failure_screenshot"] = base64.b64encode(screenshot_data).decode('ascii')
-                except Exception:
-                    pass
-                step_results.append(result)
-                # Mark remaining steps as skipped
-                for remaining in steps[idx + 1:]:
-                    step_results.append({
-                        "step_id": remaining.get("id", ""),
-                        "step_type": remaining.get("type", "unknown"),
-                        "label": remaining.get("label", ""),
-                        "status": "skipped",
-                        "output": None,
-                        "error": None,
-                        "duration_ms": 0,
+                error_str = str(e)
+                step_type = step.get("type", "")
+
+                # Attempt self-healing for UI-targeting steps
+                healed = False
+                if self_heal_enabled and step_type in UI_TARGETING_STEP_TYPES:
+                    try:
+                        heal_result = self.self_heal_step(device_id, step, error_str)
+                        if heal_result.get("healed"):
+                            # Re-execute with healed step config
+                            healed_step = heal_result["new_step"]
+                            heal_start = time.time()
+                            output = self._execute_step(healed_step, device_id)
+                            elapsed = int((time.time() - start_ts) * 1000)
+                            result["status"] = "completed"
+                            result["output"] = str(output) if output else None
+                            result["duration_ms"] = elapsed
+                            result["healed"] = True
+                            result["original_step"] = copy.deepcopy(step)
+                            result["healed_step"] = healed_step
+                            result["heal_reasoning"] = heal_result.get("reasoning", "")
+                            completed += 1
+                            healed = True
+                        else:
+                            # Heal attempted but failed
+                            result["healed"] = False
+                            result["heal_reasoning"] = heal_result.get("reasoning", "Could not find element")
+                    except Exception as heal_err:
+                        logger.warning(f"Self-heal error for step {idx}: {heal_err}")
+                        result["healed"] = False
+                        result["heal_reasoning"] = f"Heal error: {heal_err}"
+
+                if not healed:
+                    elapsed = int((time.time() - start_ts) * 1000)
+                    result["status"] = "failed"
+                    result["error"] = error_str
+                    result["duration_ms"] = elapsed
+                    # Best-effort screenshot capture on failure
+                    try:
+                        screenshot_data = self.take_screenshot(device_id)
+                        if screenshot_data:
+                            result["failure_screenshot"] = base64.b64encode(screenshot_data).decode('ascii')
+                    except Exception:
+                        pass
+                    step_results.append(result)
+                    # Mark remaining steps as skipped
+                    for remaining in steps[idx + 1:]:
+                        step_results.append({
+                            "step_id": remaining.get("id", ""),
+                            "step_type": remaining.get("type", "unknown"),
+                            "label": remaining.get("label", ""),
+                            "status": "skipped",
+                            "output": None,
+                            "error": None,
+                            "duration_ms": 0,
+                        })
+                    run_record.update({
+                        "status": "failed",
+                        "finished_at": time.time(),
+                        "completed_steps": completed,
+                        "current_step_index": idx,
+                        "step_results": step_results,
+                        "error": error_str,
                     })
-                run_record.update({
-                    "status": "failed",
-                    "finished_at": time.time(),
-                    "completed_steps": completed,
-                    "current_step_index": idx,
-                    "step_results": step_results,
-                    "error": str(e),
-                })
-                self._active_runs.pop(run_record["id"], None)
-                return
+                    self._active_runs.pop(run_record["id"], None)
+                    return
 
             step_results.append(result)
             run_record["completed_steps"] = completed

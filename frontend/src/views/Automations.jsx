@@ -13,6 +13,8 @@ import {
   Upload,
   Timer,
   Pause,
+  Lightbulb,
+  HeartPulse,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -29,6 +31,7 @@ export default function Automations() {
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState('')
   const [launching, setLaunching] = useState(false)
+  const [selfHeal, setSelfHeal] = useState(false)
 
   // Schedule dialog state
   const [scheduleDialog, setScheduleDialog] = useState(null) // automation object or null
@@ -36,6 +39,11 @@ export default function Automations() {
   const [schedDevice, setSchedDevice] = useState('')
   const [schedInterval, setSchedInterval] = useState(60)
   const [creatingSched, setCreatingSched] = useState(false)
+
+  // Explain modal
+  const [explainModal, setExplainModal] = useState(null) // { automationId, name }
+  const [explanation, setExplanation] = useState('')
+  const [explaining, setExplaining] = useState(false)
 
   // Import
   const importRef = React.useRef(null)
@@ -73,6 +81,7 @@ export default function Automations() {
   const openRunDialog = async (automation) => {
     setRunDialog(automation)
     setSelectedDevice('')
+    setSelfHeal(false)
     try {
       const res = await api.getDevices()
       setDevices(res.devices || [])
@@ -88,7 +97,7 @@ export default function Automations() {
     if (!selectedDevice || !runDialog) return
     setLaunching(true)
     try {
-      const run = await api.runAutomation(runDialog.id, selectedDevice)
+      const run = await api.runAutomation(runDialog.id, selectedDevice, selfHeal)
       setRunDialog(null)
       navigate(`/automations/runs/${run.id}`)
     } catch (e) {
@@ -159,6 +168,20 @@ export default function Automations() {
       console.error('Failed to import:', err)
     }
     e.target.value = ''
+  }
+
+  const handleExplain = async (automation) => {
+    setExplainModal({ automationId: automation.id, name: automation.name })
+    setExplanation('')
+    setExplaining(true)
+    try {
+      const result = await api.explainAutomation(automation.id)
+      setExplanation(result.explanation || result.error || 'No explanation available.')
+    } catch (e) {
+      setExplanation(`Failed: ${e.message}`)
+    } finally {
+      setExplaining(false)
+    }
   }
 
   const filtered = automations.filter(
@@ -277,6 +300,13 @@ export default function Automations() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => handleExplain(a)}
+                          className="p-1.5 rounded hover:bg-zinc-800 text-amber-500 hover:text-amber-400 transition-colors"
+                          title="Explain"
+                        >
+                          <Lightbulb className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => navigate(`/automations/${a.id}/edit`)}
                           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
@@ -468,6 +498,24 @@ export default function Automations() {
                 ))}
               </select>
             )}
+
+            {/* Self-heal toggle */}
+            <label className="flex items-center gap-2 mb-4 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={selfHeal}
+                onChange={(e) => setSelfHeal(e.target.checked)}
+                className="rounded border-zinc-600 bg-black text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+              />
+              <span className="text-xs text-zinc-400 group-hover:text-zinc-300 transition-colors flex items-center gap-1.5">
+                <HeartPulse className="w-3 h-3 text-amber-500" />
+                Enable self-healing
+              </span>
+              <span className="text-[10px] text-zinc-600" title="When a UI step fails, AI will attempt to find the correct element and retry">
+                (?)
+              </span>
+            </label>
+
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setRunDialog(null)}
@@ -554,6 +602,43 @@ export default function Automations() {
                   <Timer className="w-3 h-3" />
                 )}
                 Create Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explain modal */}
+      {explainModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-card border border-main rounded-lg w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Lightbulb className="w-4 h-4 text-amber-400" />
+                Explain: {explainModal.name}
+              </h3>
+              <button
+                onClick={() => setExplainModal(null)}
+                className="text-zinc-500 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {explaining ? (
+              <div className="flex items-center gap-2 py-8 justify-center text-zinc-500 text-xs">
+                <Loader className="w-4 h-4 animate-spin" /> Generating explanation...
+              </div>
+            ) : (
+              <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed max-h-[60vh] overflow-y-auto">
+                {explanation}
+              </div>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => setExplainModal(null)}
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

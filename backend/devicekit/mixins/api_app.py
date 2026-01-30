@@ -900,8 +900,9 @@ class ApiAppMixin:
             device_id = data.get('device_id')
             if not device_id:
                 return jsonify({'error': 'device_id is required'}), 400
+            self_heal = bool(data.get('self_heal', False))
             try:
-                run_record = client.execute_automation(automation_id, device_id)
+                run_record = client.execute_automation(automation_id, device_id, self_heal=self_heal)
                 return jsonify(run_record), 201
             except ValueError as e:
                 return jsonify({'error': str(e)}), 404
@@ -1063,6 +1064,54 @@ class ApiAppMixin:
             try:
                 automation = client.import_automation(data)
                 return jsonify(automation), 201
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        # ── NL Automation (AI-powered) ──
+        @app.route('/automations/generate', methods=['POST'])
+        def automations_generate():
+            data = request.get_json(silent=True) or {}
+            description = data.get('description', '')
+            if not description:
+                return jsonify({'error': 'description is required'}), 400
+            device_id = data.get('device_id')
+            try:
+                result = client.generate_automation_steps(description, device_id=device_id)
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/automations/refine-step', methods=['POST'])
+        def automations_refine_step():
+            data = request.get_json(silent=True) or {}
+            step = data.get('step')
+            instruction = data.get('instruction', '')
+            if not step or not instruction:
+                return jsonify({'error': 'step and instruction are required'}), 400
+            device_id = data.get('device_id')
+            try:
+                refined = client.refine_step(step, instruction, device_id=device_id)
+                return jsonify(refined)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/automations/<automation_id>/explain')
+        def automations_explain(automation_id):
+            try:
+                result = client.explain_automation(automation_id)
+                if 'error' in result and result['error'] == 'Automation not found':
+                    return jsonify(result), 404
+                return jsonify(result)
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/ui-hierarchy')
+        def device_ui_hierarchy(device_id):
+            try:
+                hierarchy = client.fetch_ui_hierarchy(device_id)
+                if hierarchy:
+                    return jsonify(hierarchy)
+                return jsonify({'error': 'Could not fetch UI hierarchy'}), 500
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 

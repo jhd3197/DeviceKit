@@ -11,6 +11,12 @@ import {
   ArrowLeft,
   Copy,
   Download,
+  Sparkles,
+  Wand2,
+  Check,
+  XCircle,
+  Loader,
+  ChevronRight,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -31,6 +37,20 @@ export default function AutomationEditor() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!isNew)
 
+  // AI generation state
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiDeviceId, setAiDeviceId] = useState('')
+  const [aiDevices, setAiDevices] = useState([])
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiPreview, setAiPreview] = useState(null) // { steps: [], explanation: '' }
+  const [aiError, setAiError] = useState('')
+
+  // Per-step refinement state
+  const [refineStepId, setRefineStepId] = useState(null)
+  const [refineInstruction, setRefineInstruction] = useState('')
+  const [refining, setRefining] = useState(false)
+
   useEffect(() => {
     api.getStepTypes().then(setStepTypes).catch(() => {})
   }, [])
@@ -49,6 +69,15 @@ export default function AutomationEditor() {
         .finally(() => setLoading(false))
     }
   }, [id, isNew])
+
+  // Fetch devices when AI panel opens
+  useEffect(() => {
+    if (aiOpen && aiDevices.length === 0) {
+      api.getDevices().then((res) => {
+        setAiDevices(res.devices || [])
+      }).catch(() => {})
+    }
+  }, [aiOpen])
 
   const addStep = (type) => {
     const typeDef = stepTypes[type] || {}
@@ -153,6 +182,99 @@ export default function AutomationEditor() {
     }
   }
 
+  // AI generation
+  const handleGenerate = async () => {
+    if (!aiPrompt.trim()) return
+    setAiGenerating(true)
+    setAiError('')
+    setAiPreview(null)
+    try {
+      const result = await api.generateSteps(aiPrompt.trim(), aiDeviceId || undefined)
+      if (result.error) {
+        setAiError(result.error)
+      } else {
+        setAiPreview(result)
+      }
+    } catch (e) {
+      setAiError(e.message || 'Generation failed')
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
+  const acceptAllGenerated = () => {
+    if (!aiPreview?.steps) return
+    const newSteps = aiPreview.steps.map((s, i) => ({
+      id: crypto.randomUUID(),
+      order: steps.length + i,
+      type: s.type,
+      config: s.config || {},
+      label: s.label || s.type,
+    }))
+    setSteps((prev) => [...prev, ...newSteps])
+    setAiPreview(null)
+    setAiPrompt('')
+  }
+
+  const replaceAllGenerated = () => {
+    if (!aiPreview?.steps) return
+    const newSteps = aiPreview.steps.map((s, i) => ({
+      id: crypto.randomUUID(),
+      order: i,
+      type: s.type,
+      config: s.config || {},
+      label: s.label || s.type,
+    }))
+    setSteps(newSteps)
+    setAiPreview(null)
+    setAiPrompt('')
+  }
+
+  const acceptSingleGenerated = (index) => {
+    const s = aiPreview.steps[index]
+    const step = {
+      id: crypto.randomUUID(),
+      order: steps.length,
+      type: s.type,
+      config: s.config || {},
+      label: s.label || s.type,
+    }
+    setSteps((prev) => [...prev, step])
+    setAiPreview((prev) => ({
+      ...prev,
+      steps: prev.steps.filter((_, i) => i !== index),
+    }))
+  }
+
+  const rejectSingleGenerated = (index) => {
+    setAiPreview((prev) => ({
+      ...prev,
+      steps: prev.steps.filter((_, i) => i !== index),
+    }))
+  }
+
+  // Per-step refinement
+  const handleRefine = async (step) => {
+    if (!refineInstruction.trim()) return
+    setRefining(true)
+    try {
+      const refined = await api.refineStep(step, refineInstruction.trim(), aiDeviceId || undefined)
+      setSteps((prev) =>
+        prev.map((s) =>
+          s.id === step.id
+            ? { ...s, type: refined.type || s.type, config: refined.config || s.config, label: refined.label || s.label }
+            : s
+        )
+      )
+      setRefineStepId(null)
+      setRefineInstruction('')
+    } catch (e) {
+      console.error('Refinement failed:', e)
+    } finally {
+      setRefining(false)
+    }
+  }
+
   // Group step types by category
   const grouped = {}
   Object.entries(stepTypes).forEach(([key, val]) => {
@@ -252,6 +374,125 @@ export default function AutomationEditor() {
           />
         </div>
 
+        {/* AI Generation Panel */}
+        <div className="bg-card border border-main rounded overflow-hidden">
+          <button
+            onClick={() => setAiOpen(!aiOpen)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-900/30 transition-colors text-left"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-xs font-bold text-zinc-300 flex-1">Generate with AI</span>
+            <ChevronRight className={`w-4 h-4 text-zinc-500 transition-transform ${aiOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {aiOpen && (
+            <div className="px-4 pb-4 border-t border-main space-y-3 pt-3">
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Describe what the automation should do, e.g. &quot;Open Instagram, scroll feed, like 3 posts&quot;"
+                rows={3}
+                className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none"
+              />
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
+                    Device context (optional)
+                  </label>
+                  <select
+                    value={aiDeviceId}
+                    onChange={(e) => setAiDeviceId(e.target.value)}
+                    className="w-full bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+                  >
+                    <option value="">No device context</option>
+                    {aiDevices.map((d) => (
+                      <option key={d.device_id} value={d.device_id}>
+                        {d.name || d.device_id} ({d.device_id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleGenerate}
+                  disabled={!aiPrompt.trim() || aiGenerating}
+                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2 shrink-0"
+                >
+                  {aiGenerating ? (
+                    <Loader className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3 h-3" />
+                  )}
+                  Generate
+                </button>
+              </div>
+
+              {aiError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded p-3 text-xs text-red-400">
+                  {aiError}
+                </div>
+              )}
+
+              {/* Preview generated steps */}
+              {aiPreview && aiPreview.steps?.length > 0 && (
+                <div className="space-y-2">
+                  {aiPreview.explanation && (
+                    <p className="text-[10px] text-zinc-400 italic">{aiPreview.explanation}</p>
+                  )}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase">
+                      Generated {aiPreview.steps.length} steps
+                    </span>
+                    <div className="flex-1" />
+                    <button
+                      onClick={acceptAllGenerated}
+                      className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors px-2 py-1 rounded border border-emerald-500/30 hover:border-emerald-500/60"
+                    >
+                      Accept All
+                    </button>
+                    <button
+                      onClick={replaceAllGenerated}
+                      className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-colors px-2 py-1 rounded border border-amber-500/30 hover:border-amber-500/60"
+                    >
+                      Replace All
+                    </button>
+                  </div>
+                  {aiPreview.steps.map((gs, gi) => (
+                    <div
+                      key={gi}
+                      className="bg-black border border-amber-500/20 rounded p-3 flex items-center gap-3 text-xs"
+                    >
+                      <span className="text-[10px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded uppercase font-bold shrink-0">
+                        {gs.type}
+                      </span>
+                      <span className="flex-1 text-zinc-300 truncate">
+                        {gs.label || JSON.stringify(gs.config)}
+                      </span>
+                      <button
+                        onClick={() => acceptSingleGenerated(gi)}
+                        className="p-1 text-emerald-500 hover:text-emerald-400 transition-colors"
+                        title="Accept"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => rejectSingleGenerated(gi)}
+                        className="p-1 text-red-500 hover:text-red-400 transition-colors"
+                        title="Reject"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {aiPreview && aiPreview.steps?.length === 0 && (
+                <p className="text-[10px] text-zinc-500">All generated steps have been processed.</p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Steps */}
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -268,13 +509,14 @@ export default function AutomationEditor() {
 
           {steps.length === 0 ? (
             <div className="bg-card border border-main rounded p-8 text-center text-zinc-600 text-xs">
-              No steps yet. Click "Add Step" to start building your automation.
+              No steps yet. Click "Add Step" or use "Generate with AI" above.
             </div>
           ) : (
             <div className="space-y-2">
               {steps.map((step, idx) => {
                 const typeDef = stepTypes[step.type] || {}
                 const isExpanded = expandedStep === step.id
+                const isRefining = refineStepId === step.id
                 return (
                   <div
                     key={step.id}
@@ -309,6 +551,17 @@ export default function AutomationEditor() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
+                            setRefineStepId(isRefining ? null : step.id)
+                            setRefineInstruction('')
+                          }}
+                          className="p-1 text-amber-500 hover:text-amber-400 transition-colors"
+                          title="Refine with AI"
+                        >
+                          <Wand2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
                             moveStep(idx, -1)
                           }}
                           disabled={idx === 0}
@@ -337,6 +590,37 @@ export default function AutomationEditor() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Inline AI refinement */}
+                    {isRefining && (
+                      <div className="px-4 py-2.5 border-t border-amber-500/20 bg-amber-500/5 flex items-center gap-2">
+                        <Wand2 className="w-3 h-3 text-amber-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={refineInstruction}
+                          onChange={(e) => setRefineInstruction(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRefine(step)
+                          }}
+                          placeholder="e.g. change to swipe down, use resource ID instead..."
+                          className="flex-1 bg-transparent text-xs focus:outline-none text-zinc-300 placeholder:text-zinc-600"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleRefine(step)}
+                          disabled={!refineInstruction.trim() || refining}
+                          className="text-[10px] font-bold text-amber-400 hover:text-amber-300 disabled:opacity-50 px-2 py-1 rounded border border-amber-500/30 transition-colors flex items-center gap-1"
+                        >
+                          {refining ? <Loader className="w-3 h-3 animate-spin" /> : 'Refine'}
+                        </button>
+                        <button
+                          onClick={() => { setRefineStepId(null); setRefineInstruction('') }}
+                          className="p-1 text-zinc-500 hover:text-white transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
 
                     {/* Step config (expanded) */}
                     {isExpanded && Object.keys(typeDef.config || {}).length > 0 && (

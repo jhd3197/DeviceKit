@@ -9,6 +9,7 @@ import {
   Clock,
   SkipForward,
   AlertTriangle,
+  HeartPulse,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -135,6 +136,11 @@ export default function AutomationRunDetail() {
               <span className="text-xs text-zinc-300 font-medium">
                 {run.automation_name}
               </span>
+              {run.self_heal && (
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400">
+                  Self-heal on
+                </span>
+              )}
             </div>
             <span className="text-[10px] mono text-zinc-500">
               Device: {run.device_id}
@@ -212,6 +218,17 @@ export default function AutomationRunDetail() {
                       {sr.label && (
                         <span className="text-zinc-300">{sr.label}</span>
                       )}
+                      {/* Self-healed badge */}
+                      {sr.healed === true && (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 flex items-center gap-1">
+                          <HeartPulse className="w-3 h-3" /> Self-healed
+                        </span>
+                      )}
+                      {sr.healed === false && sr.heal_reasoning && (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-red-500/10 text-red-400 flex items-center gap-1">
+                          <HeartPulse className="w-3 h-3" /> Heal failed
+                        </span>
+                      )}
                     </div>
                     <span className="mono text-zinc-600 text-[10px]">
                       {sr.duration_ms > 0 ? `${sr.duration_ms}ms` : ''}
@@ -227,6 +244,39 @@ export default function AutomationRunDetail() {
                       {sr.error}
                     </p>
                   )}
+
+                  {/* Self-heal details */}
+                  {sr.healed === true && (
+                    <div className="mt-2 ml-8 bg-amber-500/5 border border-amber-500/20 rounded p-2.5 space-y-1.5">
+                      {sr.heal_reasoning && (
+                        <p className="text-[10px] text-amber-300">{sr.heal_reasoning}</p>
+                      )}
+                      {sr.original_step && sr.healed_step && (
+                        <div className="flex gap-4 text-[10px] mono">
+                          <div>
+                            <span className="text-zinc-500 block mb-0.5">Original:</span>
+                            <span className="text-zinc-400">
+                              {sr.original_step.type} &mdash; {JSON.stringify(sr.original_step.config)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-amber-400 block mb-0.5">Healed:</span>
+                            <span className="text-amber-300">
+                              {sr.healed_step.type} &mdash; {JSON.stringify(sr.healed_step.config)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {sr.healed === false && sr.heal_reasoning && (
+                    <div className="mt-2 ml-8 bg-red-500/5 border border-red-500/20 rounded p-2.5">
+                      <p className="text-[10px] text-red-300">
+                        Heal attempted but failed: {sr.heal_reasoning}
+                      </p>
+                    </div>
+                  )}
+
                   {sr.failure_screenshot && (
                     <div className="mt-2 pl-8">
                       <img
