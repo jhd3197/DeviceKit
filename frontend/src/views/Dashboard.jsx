@@ -13,14 +13,31 @@ export default function Dashboard() {
   const [sseConnected, setSseConnected] = useState(false)
   const [fleetHealth, setFleetHealth] = useState(null)
   const [toasts, setToasts] = useState([])
+  const [fleetAiCost, setFleetAiCost] = useState(0)
 
   const fetchData = useCallback(async () => {
     try {
-      const [s, d, fh] = await Promise.all([api.getStats(), api.getDevices(), api.getFleetHealth().catch(() => null)])
+      const [s, d, fh, agentStatuses] = await Promise.all([
+        api.getStats(),
+        api.getDevices(),
+        api.getFleetHealth().catch(() => null),
+        api.getAgentStatusAll().catch(() => ({})),
+      ])
       setStats(s)
       setDevices(d.devices || [])
       setFleetHealth(fh)
       setError(null)
+
+      // Aggregate AI cost from all active agents
+      let totalCost = 0
+      if (agentStatuses && typeof agentStatuses === 'object') {
+        for (const status of Object.values(agentStatuses)) {
+          if (status?.usage?.total_cost) {
+            totalCost += status.usage.total_cost
+          }
+        }
+      }
+      setFleetAiCost(totalCost)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -119,7 +136,7 @@ export default function Dashboard() {
         )}
 
         {/* Metric Cards */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-5 gap-4">
           <MetricCard label="Global Fleet" value={stats?.fleet_count ?? 0} unit="Nodes" />
           <MetricCard
             label="Active Utilization"
@@ -133,6 +150,11 @@ export default function Dashboard() {
             valueClass={
               stats?.health === 'Healthy' ? 'text-emerald-400' : 'text-red-400'
             }
+          />
+          <MetricCard
+            label="Fleet AI Cost"
+            value={`$${fleetAiCost.toFixed(2)}`}
+            valueClass={fleetAiCost > 0 ? 'text-blue-400' : 'text-zinc-400'}
           />
         </div>
 

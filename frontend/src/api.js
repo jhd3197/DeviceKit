@@ -250,6 +250,16 @@ export const api = {
     }),
   getAgentCommands: (deviceId) => request(`/agent/${deviceId}/commands`),
   getAgentLogs: (deviceId) => request(`/agent/${deviceId}/logs`),
+
+  // AI Agent (Prompture)
+  getConversationHistory: (deviceId) => request(`/devices/${deviceId}/conversation/history`),
+  clearConversation: (deviceId) => request(`/devices/${deviceId}/conversation`, { method: 'DELETE' }),
+  getAgentUsage: (deviceId) => request(`/devices/${deviceId}/agent/usage`),
+  switchAgentModel: (deviceId, modelName) =>
+    request(`/devices/${deviceId}/agent/model`, {
+      method: 'PATCH',
+      body: JSON.stringify({ model_name: modelName }),
+    }),
 }
 
 export function subscribeToEvents(handlers = {}) {

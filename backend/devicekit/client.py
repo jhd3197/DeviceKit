@@ -14,7 +14,7 @@ from devicekit.mixins.alerts import AlertMixin
 from devicekit.mixins.activity import ActivityMixin
 from devicekit.mixins.automation import AutomationMixin
 from devicekit.mixins.profile import ProfileMixin
-from devicekit.mixins.agent import AgentMixin
+from devicekit.mixins.prompture_agent import PromptureAgentMixin
 from devicekit.mixins.fleet import FleetMixin
 from devicekit.mixins.device_lock import DeviceLockMixin
 from devicekit.mixins.auth import AuthMixin
@@ -28,7 +28,7 @@ class Client(
     AwsStorageMixin,
     AutomationMixin,
     ProfileMixin,
-    AgentMixin,
+    PromptureAgentMixin,
     FleetMixin,
     DeviceLockMixin,
     ApiAppMixin,

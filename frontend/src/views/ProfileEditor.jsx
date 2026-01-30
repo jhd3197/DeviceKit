@@ -24,6 +24,7 @@ export default function ProfileEditor() {
     interests: [],
     behavior_patterns: { ...DEFAULT_BEHAVIOR },
     apps: [],
+    model_name: '',
   })
   const [interestInput, setInterestInput] = useState('')
   const [appInput, setAppInput] = useState('')
@@ -42,6 +43,7 @@ export default function ProfileEditor() {
           interests: p.interests || [],
           behavior_patterns: { ...DEFAULT_BEHAVIOR, ...p.behavior_patterns },
           apps: p.apps || [],
+          model_name: p.model_name || '',
         })
       }).catch(() => setError('Profile not found'))
     }
@@ -156,6 +158,49 @@ export default function ProfileEditor() {
                 placeholder="e.g. fitness, cooking, tech"
               />
             </div>
+          </div>
+
+          {/* AI Model */}
+          <div className="bg-card-alt border border-main rounded-xl p-6 space-y-4">
+            <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">AI Model</h3>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1">LLM Model (provider/model format)</label>
+              <select
+                value={[
+                  'claude/claude-sonnet-4-20250514',
+                  'openai/gpt-4o',
+                  'groq/llama-3.1-70b-versatile',
+                  'ollama/llama3.1:8b',
+                  'google/gemini-2.0-flash',
+                ].includes(form.model_name) ? form.model_name : '__custom__'}
+                onChange={(e) => {
+                  if (e.target.value !== '__custom__') set('model_name', e.target.value)
+                }}
+                className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+              >
+                <option value="">Default (from server config)</option>
+                <option value="claude/claude-sonnet-4-20250514">claude/claude-sonnet-4-20250514</option>
+                <option value="openai/gpt-4o">openai/gpt-4o</option>
+                <option value="groq/llama-3.1-70b-versatile">groq/llama-3.1-70b-versatile</option>
+                <option value="ollama/llama3.1:8b">ollama/llama3.1:8b</option>
+                <option value="google/gemini-2.0-flash">google/gemini-2.0-flash</option>
+                <option value="__custom__">Custom...</option>
+              </select>
+            </div>
+            {![
+              '', 'claude/claude-sonnet-4-20250514', 'openai/gpt-4o',
+              'groq/llama-3.1-70b-versatile', 'ollama/llama3.1:8b', 'google/gemini-2.0-flash',
+            ].includes(form.model_name) && (
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1">Custom Model Name</label>
+                <input
+                  value={form.model_name}
+                  onChange={(e) => set('model_name', e.target.value)}
+                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white mono"
+                  placeholder="provider/model-name"
+                />
+              </div>
+            )}
           </div>
 
           {/* Personality */}

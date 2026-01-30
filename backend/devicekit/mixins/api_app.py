@@ -1089,6 +1089,7 @@ class ApiAppMixin:
                 interests=data.get('interests', []),
                 behavior_patterns=data.get('behavior_patterns'),
                 apps=data.get('apps', []),
+                model_name=data.get('model_name', ''),
             )
             return jsonify(profile), 201
 
@@ -1442,7 +1443,8 @@ class ApiAppMixin:
             profile = client.get_profile_by_device(device_id)
             if not profile:
                 return jsonify({'error': 'No profile found for this device. Create a profile first.'}), 400
-            result = client.start_agent(device_id, profile)
+            model_name = profile.get('model_name', '') or None
+            result = client.start_agent(device_id, profile, model_name=model_name)
             if 'error' in result:
                 return jsonify(result), 409
             client.log_activity('agent_start', device_id)
@@ -1473,6 +1475,30 @@ class ApiAppMixin:
         def agent_logs(device_id):
             limit = int(request.args.get('limit', 50))
             return jsonify({'logs': client.get_agent_logs(device_id, limit)})
+
+        @app.route('/devices/<device_id>/conversation/history')
+        def conversation_history(device_id):
+            messages = client.get_conversation_history(device_id)
+            return jsonify({'messages': messages, 'turn_count': len(messages)})
+
+        @app.route('/devices/<device_id>/conversation', methods=['DELETE'])
+        def conversation_clear(device_id):
+            result = client.clear_conversation(device_id)
+            return jsonify(result)
+
+        @app.route('/devices/<device_id>/agent/usage')
+        def agent_usage(device_id):
+            usage = client.get_agent_usage(device_id)
+            return jsonify(usage)
+
+        @app.route('/devices/<device_id>/agent/model', methods=['PATCH'])
+        def agent_model_switch(device_id):
+            data = request.get_json(silent=True) or {}
+            model_name = data.get('model_name', '')
+            if not model_name:
+                return jsonify({'error': 'model_name is required'}), 400
+            result = client.switch_agent_model(device_id, model_name)
+            return jsonify(result)
 
         # -----------------------------------------------------------
         # Agent Device (on-device DeviceKitAgent APK endpoints)

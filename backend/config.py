@@ -24,6 +24,9 @@ DEVICE_IDS = [d.strip() for d in os.getenv("DEVICE_IDS", "").split(",") if d.str
 API_KEY = os.getenv("API_KEY", "")  # Empty = auth disabled (dev mode)
 AGENT_TOKENS = [t.strip() for t in os.getenv("AGENT_TOKENS", "").split(",") if t.strip()]
 
+# AI Agent (Prompture)
+PROMPTURE_DEFAULT_MODEL = os.environ.get("PROMPTURE_DEFAULT_MODEL", "claude/claude-sonnet-4-20250514")
+
 # Debug
 DEBUG_MODE = os.getenv("DEBUG_MODE", "true").lower() in ("true", "1", "yes")
 

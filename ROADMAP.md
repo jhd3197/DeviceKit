@@ -181,14 +181,22 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 - [ ] Agent-side HTTPS/token support (deferred — requires Kotlin changes + APK rebuild)
 - [ ] Agent app signing for release builds (deferred)
 
-### Phase 15: CI/CD Integration
+### Phase 15: CI/CD Integration ✅
 **Goal**: Use DeviceKit in CI/CD pipelines.
 
-- [ ] droidlink pytest plugin for test framework integration
-- [ ] GitHub Actions workflow templates
-- [ ] Pipeline view: map to real CI builds
-- [ ] Test result reporting with screenshots on failure
-- [ ] Device allocation for parallel test execution
+- [x] `DeviceLockMixin`: thread-safe device allocation with auto-expiring locks for parallel test runners
+- [x] Device lock API: `POST /devices/<id>/lock`, `POST /devices/<id>/unlock`, `GET /devices/available`
+- [x] Enhanced pipeline build lifecycle: `created → running → completed/failed` with UUID IDs, source tracking, CI URL
+- [x] Test result reporting: `POST /pipeline/builds/<id>/tests` (single) and `.../tests/bulk` (batch) with SSE broadcast
+- [x] Failure screenshots: `POST` with `screenshot_b64` → `GET /pipeline/builds/<id>/screenshots/<index>` serves PNG
+- [x] `pytest-droidlink` plugin: `device` and `device_pool` fixtures, `DroidLinkReporter` with fire-and-forget backend calls
+- [x] Plugin CLI options: `--device`, `--device-wifi`, `--devicekit-url`, `--devicekit-api-key`, `--no-report`, `--screenshot-on-failure`
+- [x] Plugin hooks: session start/finish (build lifecycle), `pytest_runtest_makereport` (per-test reporting with screenshot capture)
+- [x] `pyproject.toml` entry point: `pytest11` → `droidlink.pytest_plugin`
+- [x] Frontend Pipeline view: real API data, 5s polling + SSE, loading/empty states, status badges, CI link, screenshot modal, stats bar
+- [x] Frontend API: `updateBuildStatus`, `getBuildScreenshot`, `getAvailableDevices`, `lockDevice`, `unlockDevice`, SSE `pipeline_test`/`pipeline_build`
+- [x] GitHub Actions workflow template: `.github/workflows/device-tests.yml` (self-hosted runner, pytest, JUnit artifacts, dorny/test-reporter)
+- [x] CI setup documentation: `docs/ci-setup.md` (runner requirements, secrets, WiFi config, device locking conftest example, troubleshooting)
 
 ### Phase 16: Prompture Integration — Device Personalities & Conversational Agents
 **Goal**: Replace direct Anthropic/OpenAI calls with Prompture for multi-provider conversations, tool use, memory, and structured output. Devices become persistent conversational agents with personalities.

@@ -26,6 +26,11 @@ import {
   Type,
   CornerUpLeft,
   Disc,
+  MessageSquare,
+  DollarSign,
+  Trash2,
+  ChevronDown,
+  Cpu,
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 
@@ -68,6 +73,13 @@ export default function NodeDetail() {
   const [recordingSessionId, setRecordingSessionId] = useState(null)
   const [recordedCount, setRecordedCount] = useState(0)
 
+  // Prompture agent state
+  const [agentUsage, setAgentUsage] = useState(null)
+  const [conversationHistory, setConversationHistory] = useState([])
+  const [showConversation, setShowConversation] = useState(false)
+  const [showModelSelector, setShowModelSelector] = useState(false)
+  const [modelInput, setModelInput] = useState('')
+
   const deviceId = id || ''
 
   // Metrics history for step charts (max 60 entries = ~5 min at 5s intervals)
@@ -91,18 +103,20 @@ export default function NodeDetail() {
     }
   }, [deviceId])
 
-  // Fetch agent status + logs
+  // Fetch agent status + logs + usage
   const fetchAgent = useCallback(async () => {
     if (!deviceId) return
     try {
-      const [status, logs, profile] = await Promise.all([
+      const [status, logs, profile, usage] = await Promise.all([
         api.getAgentStatus(deviceId).catch(() => ({ status: 'stopped' })),
         api.getAgentLogs(deviceId).catch(() => ({ logs: [] })),
         api.getProfileByDevice(deviceId).catch(() => null),
+        api.getAgentUsage(deviceId).catch(() => null),
       ])
       setAgentStatus(status)
       setAgentLogs(logs.logs || [])
       setHasProfile(!!profile)
+      if (usage) setAgentUsage(usage)
     } catch {
       // silent
     }
@@ -622,6 +636,12 @@ export default function NodeDetail() {
                     <Bot className="w-3 h-3" /> AI Agent
                   </h3>
                   <div className="flex items-center gap-3">
+                    {agentStatus.model_name && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 mono">
+                        <Cpu className="w-2.5 h-2.5 inline mr-1" />
+                        {agentStatus.model_name.split('/').pop()}
+                      </span>
+                    )}
                     <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[agentStatus.status] || statusColors.stopped}`}>
                       {agentStatus.status}
                     </span>
@@ -720,6 +740,151 @@ export default function NodeDetail() {
                           <span className="text-zinc-500 truncate">{log.description}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Usage panel */}
+                  {agentUsage && (agentUsage.call_count > 0 || agentUsage.total_tokens > 0) && (
+                    <div className="bg-zinc-900/50 rounded p-3 space-y-2">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase">
+                        <DollarSign className="w-3 h-3" /> Usage
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[10px] mono">
+                        <div>
+                          <span className="text-zinc-600">Prompt</span>
+                          <p className="text-zinc-300">{(agentUsage.prompt_tokens || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-600">Completion</span>
+                          <p className="text-zinc-300">{(agentUsage.completion_tokens || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-600">Cost</span>
+                          <p className="text-emerald-400">${(agentUsage.total_cost || 0).toFixed(4)}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 text-[10px] mono text-zinc-500">
+                        <span>Calls: {agentUsage.call_count || 0}</span>
+                        {agentUsage.errors > 0 && (
+                          <span className="text-red-400">Errors: {agentUsage.errors}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Model selector */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowModelSelector(!showModelSelector)}
+                      className="w-full flex items-center justify-between bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 transition-all"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Cpu className="w-3 h-3" />
+                        {agentStatus.model_name || 'Select model...'}
+                      </span>
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {showModelSelector && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-main rounded shadow-lg z-10">
+                        {[
+                          'claude/claude-sonnet-4-20250514',
+                          'openai/gpt-4o',
+                          'groq/llama-3.1-70b-versatile',
+                          'ollama/llama3.1:8b',
+                          'google/gemini-2.0-flash',
+                        ].map((m) => (
+                          <button
+                            key={m}
+                            onClick={async () => {
+                              try { await api.switchAgentModel(deviceId, m) } catch {}
+                              setShowModelSelector(false)
+                              fetchAgent()
+                            }}
+                            className="w-full text-left px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all mono"
+                          >
+                            {m}
+                          </button>
+                        ))}
+                        <div className="flex border-t border-main">
+                          <input
+                            value={modelInput}
+                            onChange={(e) => setModelInput(e.target.value)}
+                            className="flex-1 bg-transparent px-3 py-2 text-xs text-white outline-none mono"
+                            placeholder="Custom model..."
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!modelInput.trim()) return
+                              try { await api.switchAgentModel(deviceId, modelInput.trim()) } catch {}
+                              setModelInput('')
+                              setShowModelSelector(false)
+                              fetchAgent()
+                            }}
+                            className="px-3 text-xs text-emerald-400 hover:text-emerald-300"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Conversation history toggle + clear */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!showConversation) {
+                          try {
+                            const res = await api.getConversationHistory(deviceId)
+                            setConversationHistory(res.messages || [])
+                          } catch {}
+                        }
+                        setShowConversation(!showConversation)
+                      }}
+                      className="flex-1 flex items-center justify-center gap-2 bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 transition-all"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      {showConversation ? 'Hide' : 'Show'} Conversation ({conversationHistory.length})
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.clearConversation(deviceId)
+                          setConversationHistory([])
+                        } catch {}
+                      }}
+                      className="flex items-center gap-1 bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all"
+                      title="Clear conversation memory"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Conversation history */}
+                  {showConversation && (
+                    <div className="max-h-60 overflow-y-auto bg-[#020202] rounded p-3 space-y-2">
+                      {conversationHistory.length === 0 ? (
+                        <p className="text-[10px] text-zinc-600 text-center py-4">No conversation history yet.</p>
+                      ) : (
+                        conversationHistory.map((msg, i) => (
+                          <div key={i} className={`text-[10px] p-2 rounded ${
+                            msg.role === 'assistant'
+                              ? 'bg-zinc-900 text-zinc-300'
+                              : msg.role === 'user'
+                              ? 'bg-zinc-800 text-zinc-400'
+                              : 'bg-zinc-900/50 text-zinc-500'
+                          }`}>
+                            <span className="font-bold text-zinc-500 uppercase mr-2">
+                              {msg.role || 'system'}
+                            </span>
+                            <span className="break-words">
+                              {typeof msg.content === 'string'
+                                ? msg.content.slice(0, 500)
+                                : JSON.stringify(msg.content || '').slice(0, 500)}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>

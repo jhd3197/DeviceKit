@@ -1,0 +1,397 @@
+import base64
+import logging
+import time
+import threading
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+MAX_COMMAND_STEPS = 20
+
+
+class DeviceAction(BaseModel):
+    """Structured action the AI agent wants to execute on the device."""
+    action: Literal["tap", "swipe", "type", "press", "open_app", "wait", "done"]
+    x: Optional[int] = None
+    y: Optional[int] = None
+    direction: Optional[Literal["up", "down", "left", "right"]] = None
+    text: Optional[str] = None
+    key: Optional[Literal["home", "back", "enter", "recent"]] = None
+    package: Optional[str] = None
+    description: str = Field(description="Brief explanation of why this action is taken")
+    wait_seconds: float = Field(default=2.0, ge=0, le=30)
+
+
+def build_device_tools(mixin, device_id):
+    """Create tool registry with device actions bound to a specific device."""
+    from prompture import ToolRegistry
+
+    registry = ToolRegistry()
+
+    @registry.tool
+    def tap(x: int, y: int) -> str:
+        """Tap at screen coordinates (x, y)."""
+        mixin.click(x, y, device_id)
+        return f"Tapped at ({x}, {y})"
+
+    @registry.tool
+    def swipe(direction: str) -> str:
+        """Swipe the screen. Direction: up, down, left, right."""
+        d = mixin.get_device(device_id)
+        info = d.info
+        w = info.get("displayWidth", 1080)
+        h = info.get("displayHeight", 1920)
+        cx, cy = w // 2, h // 2
+        swipe_map = {
+            "up": (cx, h * 3 // 4, cx, h // 4),
+            "down": (cx, h // 4, cx, h * 3 // 4),
+            "left": (w * 3 // 4, cy, w // 4, cy),
+            "right": (w // 4, cy, w * 3 // 4, cy),
+        }
+        coords = swipe_map.get(direction, swipe_map["up"])
+        d.swipe(*coords, duration=0.5)
+        return f"Swiped {direction}"
+
+    @registry.tool
+    def type_text(text: str) -> str:
+        """Type text into the currently focused input field."""
+        d = mixin.get_device(device_id)
+        d.send_keys(text)
+        return f"Typed: {text}"
+
+    @registry.tool
+    def press_key(key: str) -> str:
+        """Press a device key: home, back, enter, recent."""
+        mixin.press_action(key, device_id)
+        return f"Pressed {key}"
+
+    @registry.tool
+    def open_app(package: str) -> str:
+        """Open an app by its package name."""
+        d = mixin.get_device(device_id)
+        d.app_start(package)
+        return f"Opened {package}"
+
+    return registry
+
+
+class DeviceConversation:
+    """Wraps a Prompture Conversation for a specific device + profile."""
+
+    def __init__(self, device_id, profile, model_name, tools, callbacks=None):
+        from prompture import Conversation, DriverCallbacks, UsageSession
+
+        self.device_id = device_id
+        self.profile = profile
+        self.model_name = model_name
+        self.session = UsageSession()
+
+        if callbacks is None:
+            callbacks = DriverCallbacks(
+                on_response=self.session.record,
+                on_error=self.session.record_error,
+            )
+
+        self.conversation = Conversation(
+            model_name=model_name,
+            system_prompt=self._build_system_prompt(profile),
+            tools=tools,
+            max_tool_rounds=10,
+            callbacks=callbacks,
+        )
+
+    def _build_system_prompt(self, profile):
+        persona = profile.get("personality", "a helpful assistant")
+        niche = profile.get("niche", "general")
+        interests = ", ".join(profile.get("interests", []))
+        behavior = profile.get("behavior_patterns", {})
+        scroll_speed = behavior.get("scroll_speed", "medium")
+
+        return (
+            f"You are an AI agent controlling an Android phone.\n\n"
+            f"## Your Identity\n"
+            f"- Personality: {persona}\n"
+            f"- Niche: {niche}\n"
+            f"- Interests: {interests}\n"
+            f"- Browsing style: {scroll_speed} scrolling\n\n"
+            f"## Capabilities\n"
+            f"You have tools to interact with the phone: tap, swipe, type_text, "
+            f"press_key, open_app.\n"
+            f"Use these tools to accomplish tasks or browse naturally according to "
+            f"your personality.\n\n"
+            f"## Rules\n"
+            f"- Always explain what you see and why you are taking an action.\n"
+            f"- If a task is complete, say so clearly.\n"
+            f"- If you are browsing autonomously, engage with content related to "
+            f"your interests.\n"
+            f"- Be patient -- wait for screens to load before acting.\n"
+        )
+
+    @property
+    def usage(self):
+        return self.session.summary()
+
+    @property
+    def history(self):
+        return self.conversation.messages
+
+    def clear(self):
+        self.conversation.clear()
+
+    def ask(self, message):
+        return self.conversation.ask(message)
+
+    def ask_stream(self, message):
+        return self.conversation.ask_stream(message)
+
+
+class PromptureAgentMixin:
+    """AI agent backed by Prompture: conversations, tool use, memory, multi-provider."""
+
+    _agent_conversations = {}   # device_id -> DeviceConversation
+    _agent_states = {}
+    _agent_threads = {}
+    _agent_stop_events = {}
+    _command_queues = {}
+    _agent_logs = {}
+
+    # ------------------------------------------------------------------
+    # Public API (same interface as AgentMixin + new methods)
+    # ------------------------------------------------------------------
+    def get_agent_status(self, device_id):
+        state = self._agent_states.get(device_id, {
+            "status": "stopped",
+            "current_action": None,
+            "cycle_count": 0,
+        })
+        conv = self._agent_conversations.get(device_id)
+        if conv:
+            state["usage"] = conv.usage
+            state["model_name"] = conv.model_name
+        return state
+
+    def get_all_agent_status(self):
+        result = {}
+        for device_id in list(self._agent_states):
+            result[device_id] = self.get_agent_status(device_id)
+        return result
+
+    def start_agent(self, device_id, profile, model_name=None):
+        if device_id in self._agent_threads and self._agent_threads[device_id].is_alive():
+            return {"error": "Agent already running"}
+
+        from config import PROMPTURE_DEFAULT_MODEL
+        model = model_name or profile.get("model_name") or PROMPTURE_DEFAULT_MODEL
+
+        # Build tool registry for this device
+        tools = build_device_tools(self, device_id)
+
+        # Create or reuse conversation (preserves memory across restarts)
+        if device_id not in self._agent_conversations:
+            try:
+                self._agent_conversations[device_id] = DeviceConversation(
+                    device_id=device_id,
+                    profile=profile,
+                    model_name=model,
+                    tools=tools,
+                )
+            except Exception as e:
+                logger.error(f"Failed to create Prompture conversation for {device_id}: {e}")
+                return {"error": f"Prompture initialization failed: {e}"}
+
+        self._agent_states[device_id] = {
+            "status": "autonomous",
+            "current_action": "Starting...",
+            "cycle_count": 0,
+        }
+        self._command_queues.setdefault(device_id, [])
+        self._agent_logs.setdefault(device_id, [])
+
+        stop_event = threading.Event()
+        self._agent_stop_events[device_id] = stop_event
+
+        thread = threading.Thread(
+            target=self._prompture_agent_loop,
+            args=(device_id, profile, stop_event),
+            daemon=True,
+        )
+        self._agent_threads[device_id] = thread
+        thread.start()
+        logger.info(f"Prompture agent started for {device_id} (model={model})")
+        return self._agent_states[device_id]
+
+    def stop_agent(self, device_id):
+        event = self._agent_stop_events.get(device_id)
+        if event:
+            event.set()
+        self._agent_states[device_id] = {
+            "status": "stopped",
+            "current_action": None,
+            "cycle_count": self._agent_states.get(device_id, {}).get("cycle_count", 0),
+        }
+        self._agent_stop_events.pop(device_id, None)
+        self._agent_threads.pop(device_id, None)
+        # NOTE: conversation is NOT deleted -- memory persists
+        logger.info(f"Agent stopped for {device_id}")
+        return self._agent_states[device_id]
+
+    def enqueue_command(self, device_id, command_text, priority="normal"):
+        self._command_queues.setdefault(device_id, [])
+        cmd = {
+            "command": command_text,
+            "priority": priority,
+            "status": "queued",
+            "queued_at": time.time(),
+        }
+        if priority == "urgent":
+            self._command_queues[device_id].insert(0, cmd)
+        else:
+            self._command_queues[device_id].append(cmd)
+        logger.info(f"Enqueued command for {device_id}: {command_text}")
+        return cmd
+
+    def get_command_queue(self, device_id):
+        return list(self._command_queues.get(device_id, []))
+
+    def get_agent_logs(self, device_id, limit=50):
+        logs = self._agent_logs.get(device_id, [])
+        return logs[-limit:]
+
+    # ------------------------------------------------------------------
+    # New Prompture-specific methods
+    # ------------------------------------------------------------------
+    def get_conversation_history(self, device_id):
+        conv = self._agent_conversations.get(device_id)
+        if not conv:
+            return []
+        messages = conv.history
+        # Serialize messages to dicts for JSON response
+        serialized = []
+        for msg in messages:
+            if isinstance(msg, dict):
+                serialized.append(msg)
+            elif hasattr(msg, "model_dump"):
+                serialized.append(msg.model_dump())
+            else:
+                serialized.append({"role": "unknown", "content": str(msg)})
+        return serialized
+
+    def clear_conversation(self, device_id):
+        conv = self._agent_conversations.get(device_id)
+        if conv:
+            conv.clear()
+        return {"cleared": True}
+
+    def get_agent_usage(self, device_id):
+        conv = self._agent_conversations.get(device_id)
+        if not conv:
+            return {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "total_cost": 0.0,
+                "call_count": 0,
+                "errors": 0,
+            }
+        return conv.usage
+
+    def switch_agent_model(self, device_id, model_name):
+        conv = self._agent_conversations.get(device_id)
+        if conv:
+            conv.model_name = model_name
+            conv.conversation.model_name = model_name
+        return {"model_name": model_name, "applied": conv is not None}
+
+    # ------------------------------------------------------------------
+    # Agent loop (Prompture-backed)
+    # ------------------------------------------------------------------
+    def _prompture_agent_loop(self, device_id, profile, stop_event):
+        conv = self._agent_conversations.get(device_id)
+        if not conv:
+            logger.error(f"No conversation found for {device_id}")
+            return
+
+        cycle = 0
+
+        while not stop_event.is_set():
+            try:
+                # Check command queue first
+                queue = self._command_queues.get(device_id, [])
+                if queue:
+                    cmd = queue.pop(0)
+                    self._agent_states[device_id]["status"] = "executing_command"
+                    self._agent_states[device_id]["current_action"] = f"Command: {cmd['command']}"
+                    self._log_action(device_id, "command_start", cmd["command"])
+
+                    try:
+                        response = conv.ask(
+                            f"TASK: {cmd['command']}\n"
+                            f"Complete this task using your tools. "
+                            f"Explain what you do at each step."
+                        )
+                        self._log_action(device_id, "command_done", (response or "")[:200])
+                    except Exception as e:
+                        logger.error(f"Command execution error for {device_id}: {e}")
+                        self._log_action(device_id, "error", f"Command failed: {e}")
+
+                    self._agent_states[device_id]["status"] = "autonomous"
+                    continue
+
+                # Autonomous cycle
+                cycle += 1
+                self._agent_states[device_id]["cycle_count"] = cycle
+
+                screenshot_b64 = self._take_screenshot_b64(device_id)
+                if not screenshot_b64:
+                    self._agent_states[device_id]["current_action"] = "Screenshot failed, retrying..."
+                    stop_event.wait(3)
+                    continue
+
+                try:
+                    response = conv.ask(
+                        "Here is the current screen state. "
+                        "What do you see and what would you like to do next? "
+                        "Use your tools to interact with the phone."
+                    )
+                    desc = (response or "No response")[:200]
+                    self._agent_states[device_id]["current_action"] = desc
+                    self._log_action(device_id, "autonomous", desc)
+                except Exception as e:
+                    logger.error(f"Autonomous cycle error for {device_id}: {e}")
+                    self._log_action(device_id, "error", str(e))
+
+                stop_event.wait(2)
+
+            except Exception as e:
+                logger.error(f"Prompture agent loop error for {device_id}: {e}")
+                self._log_action(device_id, "error", str(e))
+                stop_event.wait(5)
+
+        self._agent_states[device_id]["status"] = "stopped"
+        self._agent_states[device_id]["current_action"] = None
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _take_screenshot_b64(self, device_id):
+        try:
+            data = self.take_screenshot(device_id)
+            if data:
+                return base64.b64encode(data).decode("utf-8")
+        except Exception as e:
+            logger.error(f"Screenshot for agent failed on {device_id}: {e}")
+        return None
+
+    def _log_action(self, device_id, action, description):
+        self._agent_logs.setdefault(device_id, [])
+        entry = {
+            "action": action,
+            "description": description,
+            "timestamp": time.time(),
+        }
+        self._agent_logs[device_id].append(entry)
+        # Keep last 200 entries per device
+        if len(self._agent_logs[device_id]) > 200:
+            self._agent_logs[device_id] = self._agent_logs[device_id][-200:]

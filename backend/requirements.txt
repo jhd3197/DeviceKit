@@ -8,5 +8,5 @@ requests==2.32.3
 python-dotenv==1.0.1
 colorlog==6.9.0
 python-slugify==8.0.4
-anthropic>=0.40.0
+prompture>=0.0.36
 flask-limiter==3.8.0
