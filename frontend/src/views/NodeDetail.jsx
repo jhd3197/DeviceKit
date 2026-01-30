@@ -26,9 +26,9 @@ import {
   Type,
   CornerUpLeft,
 } from 'lucide-react'
-import { api } from '../api'
+import { api, subscribeToEvents } from '../api'
 
-const REFRESH_INTERVAL = 5000
+const REFRESH_INTERVAL = 30000
 const SCREEN_POLL_MS = 1000
 
 export default function NodeDetail() {
@@ -109,6 +109,32 @@ export default function NodeDetail() {
     const aid = setInterval(fetchAgent, 2000)
     return () => { clearInterval(tid); clearInterval(aid) }
   }, [fetchData, fetchAgent])
+
+  // SSE subscription for real-time device state
+  useEffect(() => {
+    const es = subscribeToEvents({
+      onDeviceState: (data) => {
+        if (data.device_id !== deviceId) return
+        const metrics = data.state?.metrics
+        if (metrics) {
+          setDiagnostics(prev => ({
+            ...prev,
+            cpu_percent: metrics.cpu_percent,
+            mem_used_mb: metrics.ram_used_mb,
+            mem_total_mb: metrics.ram_total_mb,
+            battery_level: metrics.battery_level,
+            temperature: metrics.battery_temperature,
+            is_charging: metrics.is_charging,
+            network_type: metrics.network?.type,
+            network_rx_rate: metrics.network?.rx_rate,
+            network_tx_rate: metrics.network?.tx_rate,
+            source: 'agent',
+          }))
+        }
+      },
+    })
+    return () => es.close()
+  }, [deviceId])
 
   // Screen mirror polling
   useEffect(() => {
@@ -323,7 +349,7 @@ export default function NodeDetail() {
     )
   }
 
-  const cpuPercent = diagnostics?.battery_level != null ? Math.min(99, Math.floor(Math.random() * 60 + 20)) : 0
+  const cpuPercent = diagnostics?.cpu_percent ?? 0
   const memUsed = diagnostics?.mem_used_mb || 0
   const memTotal = diagnostics?.mem_total_mb || 1
   const memPercent = Math.round((memUsed / memTotal) * 100)
@@ -336,10 +362,10 @@ export default function NodeDetail() {
   useEffect(() => {
     if (diagnostics) {
       const hist = metricsHistory.current
-      hist.push({ time: Date.now(), cpu: cpuPercent, mem: memPercent })
+      hist.push({ time: Date.now(), cpu: cpuPercent, mem: memPercent, battery })
       if (hist.length > 60) hist.shift()
     }
-  }, [diagnostics, cpuPercent, memPercent])
+  }, [diagnostics, cpuPercent, memPercent, battery])
 
   const statusColors = {
     stopped: 'bg-zinc-700 text-zinc-400',
@@ -484,6 +510,12 @@ export default function NodeDetail() {
                     color="#71717a"
                     label="RAM Occupancy"
                     currentValue={`${(memUsed / 1024).toFixed(1)}GB / ${(memTotal / 1024).toFixed(1)}GB`}
+                  />
+                  <StepChart
+                    data={metricsHistory.current.map((d) => d.battery)}
+                    color="#eab308"
+                    label="Battery Level"
+                    currentValue={`${battery}%${diagnostics?.is_charging ? ' (charging)' : ''}`}
                   />
                   <div className="grid grid-cols-3 gap-4 pt-2">
                     <DiagRow label="Temp" value={`${temp}°C`} />

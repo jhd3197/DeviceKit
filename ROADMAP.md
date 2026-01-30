@@ -15,9 +15,9 @@
        ├─────────────┤               ├─────────────────┤
        │             │               │                 │
        │  Dashboard  │  Registers +  │  Direct device  │
-       │  polls      │  heartbeats   │  control via    │
-       │  backend    │  from agent   │  agent HTTP     │
-       │  every 10s  │  every 5s     │  server         │
+       │  subscribes │  heartbeats   │  control via    │
+       │  to SSE     │  from agent   │  agent HTTP     │
+       │  stream     │  every 5s     │  server         │
        │             │               │                 │
        │             │  Merges ADB   │  USB: ADB port  │
        │             │  + agent      │    forwarding   │
@@ -36,7 +36,7 @@
    - USB: `adb forward tcp:9800 tcp:9800` then `http://127.0.0.1:9800`
    - WiFi: `http://<device-ip>:9800` (auto-discovered via UDP 9801)
 6. **Backend** merges ADB-connected devices + agent-registered devices into a unified `/devices` list
-7. **Frontend** polls backend for device list, metrics, and state
+7. **Frontend** subscribes to backend SSE stream (`/events/stream`) for real-time device state, with REST fallback for initial load
 
 ### Why "Connecting..." stays forever
 
@@ -116,30 +116,33 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 - CPU metrics fix (cpufreq-based reading for sandboxed apps)
 - RAM display formatting (GB instead of raw MB)
 
+### Phase 10: End-to-End Connection & File Operations ✅
+- Test Connection button in Settings with green/red status feedback
+- Server URL save on Enter key press
+- ADB reverse guide shown when localhost connection fails, with copy command button
+- Network discovery: device WiFi IP display + subnet scan (20 concurrent, 1s timeout)
+- Agent `/files/search` endpoint (recursive walk, max depth 10, case-insensitive)
+- Agent `/files/upload` endpoint (multipart POST, NanoHTTPD temp file handling)
+- droidlink `post_file()` with `_ProgressReader` for upload progress callbacks
+- droidlink `get_bytes_streamed()` with `iter_content()` download progress
+- `FileManager.search()`, `FileManager.upload()` with progress support
+- `FileManager.pull()` updated with optional progress callback
+- droidlink CLI: `files list`, `files search`, `files upload`, `files pull` subcommands
+- Backend `device_files()` tries agent HTTP first, falls back to ADB
+- Backend proxy routes: `/files/search`, `/files/upload`, `/files/download`
+- Frontend: search bar in Device Explorer, upload via UploadCloud icon, file download on click
+
+### Phase 11: Agent ↔ Backend Real-Time Sync ✅
+- SSE broadcast infrastructure: `/events/stream` endpoint with in-memory queue-per-client, 15s keepalive
+- Broadcast hooks on all agent endpoints: `device_connected`, `device_state`, `device_heartbeat`, `device_event`, `device_disconnected`
+- Auto-alert generation from agent metrics: low battery (<20%), overheating (>45°C), storage full (<5% free) with 5-minute dedup
+- Frontend `subscribeToEvents()` SSE client in `api.js`
+- Dashboard: replaced 10s polling with SSE, live connection indicator (green/red), real CPU + battery mini-bars per device row
+- NodeDetail: SSE subscription for real-time diagnostics (2s updates), polling fallback reduced to 30s, battery level chart added alongside CPU/RAM
+
 ---
 
 ## Upcoming Phases
-
-### Phase 10: End-to-End Connection & File Operations
-**Goal**: Make the agent reliably connect to the backend, and enable file search/transfer between droidlink and agent.
-
-- [ ] Add server URL configuration in agent Settings fragment (currently hardcoded to `127.0.0.1:5050`)
-- [ ] Add QR code / manual IP entry for easy server discovery
-- [ ] Add `adb reverse` setup guide in the UI when server is unreachable
-- [ ] Implement file search endpoint in agent HTTP server (`/files/search?query=...`)
-- [ ] Implement file upload endpoint in agent HTTP server (`POST /files/upload`)
-- [ ] Add file transfer progress reporting
-- [ ] Wire frontend RemoteADB file explorer to agent file routes
-- [ ] Add droidlink CLI commands for file search (`droidlink files search <query>`)
-
-### Phase 11: Agent ↔ Backend Real-Time Sync
-**Goal**: Live device state on the frontend dashboard without polling.
-
-- [ ] Add Server-Sent Events (SSE) endpoint on backend for real-time device updates
-- [ ] Frontend subscribes to SSE for live metrics, connection status
-- [ ] Agent pushes events (app install, file change, notification) in real-time
-- [ ] Dashboard shows live CPU/RAM/battery charts per device
-- [ ] Alert auto-generation: low battery (<20%), high temp (>45°C), storage full (<5%)
 
 ### Phase 12: Multi-Device Fleet Management
 **Goal**: Manage multiple Android devices simultaneously.
@@ -177,3 +180,22 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 - [ ] Pipeline view: map to real CI builds
 - [ ] Test result reporting with screenshots on failure
 - [ ] Device allocation for parallel test execution
+
+### Phase 16: Prompture Integration — Device Personalities & Conversational Agents
+**Goal**: Replace direct Anthropic/OpenAI calls with Prompture for multi-provider conversations, tool use, memory, and structured output. Devices become persistent conversational agents with personalities.
+
+- [ ] Add `prompture` to backend dependencies
+- [ ] Create `PromptureAgentMixin` replacing raw AI calls with `Conversation` + `ToolRegistry`
+- [ ] Register droidlink device actions as Prompture tools (tap, swipe, type, press, open_app, screenshot)
+- [ ] Per-device `Conversation` instances with system prompts built from profile (personality, niche, interests)
+- [ ] Conversation memory: device remembers prior interactions across agent cycles
+- [ ] Multi-provider support via Prompture drivers (switch between Claude, GPT-4, Groq, Ollama, etc. per device)
+- [ ] Structured action output via Pydantic models instead of raw JSON parsing
+- [ ] `UsageSession` per device for token/cost tracking on the dashboard
+- [ ] `DriverCallbacks` hooks for real-time agent observability (log every AI request/response)
+- [ ] Streaming responses via `ask_stream()` for live "thinking" feedback on frontend
+- [ ] Conversation export/import for persistence across backend restarts
+- [ ] Frontend: model selector per device profile, token usage display, conversation history view
+- [ ] API endpoints: `/devices/:id/conversation/history`, `/devices/:id/conversation/clear`, `/devices/:id/agent/usage`
+
+See [prompture_integration.md](./prompture_integration.md) for full technical design.

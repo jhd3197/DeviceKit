@@ -148,3 +148,31 @@ export const api = {
   getAgentCommands: (deviceId) => request(`/agent/${deviceId}/commands`),
   getAgentLogs: (deviceId) => request(`/agent/${deviceId}/logs`),
 }
+
+export function subscribeToEvents(handlers = {}) {
+  const es = new EventSource(`${API}/events/stream`)
+
+  es.addEventListener('device_state', (e) => {
+    handlers.onDeviceState?.(JSON.parse(e.data))
+  })
+  es.addEventListener('device_connected', (e) => {
+    handlers.onDeviceConnected?.(JSON.parse(e.data))
+  })
+  es.addEventListener('device_disconnected', (e) => {
+    handlers.onDeviceDisconnected?.(JSON.parse(e.data))
+  })
+  es.addEventListener('device_heartbeat', (e) => {
+    handlers.onDeviceHeartbeat?.(JSON.parse(e.data))
+  })
+  es.addEventListener('device_event', (e) => {
+    handlers.onDeviceEvent?.(JSON.parse(e.data))
+  })
+  es.addEventListener('alert', (e) => {
+    handlers.onAlert?.(JSON.parse(e.data))
+  })
+  es.onerror = () => {
+    handlers.onError?.()
+  }
+
+  return es
+}

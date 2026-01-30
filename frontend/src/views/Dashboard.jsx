@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, AlertCircle } from 'lucide-react'
-import { api } from '../api'
-
-const REFRESH_INTERVAL = 10000
+import { api, subscribeToEvents } from '../api'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -12,6 +10,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [sseConnected, setSseConnected] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -26,10 +25,36 @@ export default function Dashboard() {
     }
   }, [])
 
+  // Initial fetch
+  useEffect(() => { fetchData() }, [fetchData])
+
+  // SSE subscription for real-time updates
   useEffect(() => {
-    fetchData()
-    const id = setInterval(fetchData, REFRESH_INTERVAL)
-    return () => clearInterval(id)
+    const es = subscribeToEvents({
+      onDeviceState: (data) => {
+        setDevices(prev => prev.map(d =>
+          d.device_id === data.device_id
+            ? { ...d, metrics: data.state?.metrics, cpu_percent: data.state?.metrics?.cpu_percent, battery_level: data.state?.metrics?.battery_level, lastUpdate: Date.now() }
+            : d
+        ))
+      },
+      onDeviceConnected: () => {
+        fetchData()
+      },
+      onDeviceDisconnected: (data) => {
+        setDevices(prev => prev.map(d =>
+          d.device_id === data.device_id ? { ...d, online: false } : d
+        ))
+      },
+      onAlert: () => {
+        setStats(prev => prev ? { ...prev, active_alerts: (prev.active_alerts || 0) + 1 } : prev)
+      },
+      onError: () => {
+        setSseConnected(false)
+      },
+    })
+    es.addEventListener('connected', () => setSseConnected(true))
+    return () => es.close()
   }, [fetchData])
 
   const filtered = devices.filter((d) =>
@@ -61,9 +86,13 @@ export default function Dashboard() {
           <span className="text-zinc-200">Fleet Overview</span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-[10px] mono text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-            ALL SYSTEMS OPERATIONAL
+          <div className={`flex items-center gap-2 text-[10px] mono px-2 py-1 rounded border ${
+            sseConnected
+              ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
+              : 'text-red-400 bg-red-500/10 border-red-500/20'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            {sseConnected ? 'LIVE' : 'RECONNECTING'}
           </div>
           <button className="bg-white text-black text-xs font-bold px-4 py-1.5 rounded hover:bg-zinc-200 transition-colors">
             Deploy Update
@@ -122,7 +151,8 @@ export default function Dashboard() {
             <tbody className="text-sm">
               {filtered.map((d) => {
                 const status = getStatus(d)
-                const load = Math.floor(Math.random() * 80 + 10) // placeholder load
+                const cpu = d.cpu_percent ?? d.metrics?.cpu_percent ?? null
+                const battery = d.battery_level ?? d.metrics?.battery_level ?? null
                 return (
                   <tr
                     key={d.device_id}
@@ -142,24 +172,41 @@ export default function Dashboard() {
                       </span>
                     </td>
                     <td className="p-4 border-b border-main text-zinc-300">
-                      {d.name || 'Unknown'}
-                      {d.sdkInt && (
+                      {d.model || d.name || 'Unknown'}
+                      {(d.sdkInt || d.sdk) && (
                         <span className="text-[10px] text-zinc-500 ml-2">
-                          SDK {d.sdkInt}
+                          SDK {d.sdkInt || d.sdk}
                         </span>
                       )}
                     </td>
                     <td className="p-4 border-b border-main text-right">
-                      <div className="inline-flex items-center gap-3">
-                        <div className="w-24 bg-zinc-800 h-1 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              load > 90 ? 'bg-red-500' : 'bg-white'
-                            }`}
-                            style={{ width: `${load}%` }}
-                          />
+                      <div className="inline-flex items-center gap-4">
+                        {/* CPU bar */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-zinc-600 uppercase">CPU</span>
+                          <div className="w-16 bg-zinc-800 h-1 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                cpu != null && cpu > 90 ? 'bg-red-500' : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${cpu ?? 0}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] mono w-8 text-right">{cpu != null ? `${Math.round(cpu)}%` : '--'}</span>
                         </div>
-                        <span className="text-[10px] mono">{load}%</span>
+                        {/* Battery bar */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-zinc-600 uppercase">BAT</span>
+                          <div className="w-16 bg-zinc-800 h-1 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                battery != null && battery < 20 ? 'bg-red-500' : 'bg-white'
+                              }`}
+                              style={{ width: `${battery ?? 0}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] mono w-8 text-right">{battery != null ? `${battery}%` : '--'}</span>
+                        </div>
                       </div>
                     </td>
                     <td className="p-4 border-b border-main text-right">

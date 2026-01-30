@@ -1,6 +1,9 @@
 import logging
 import time
 import uuid
+import threading
+import queue
+import json
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify, Response
@@ -23,6 +26,51 @@ class ApiAppMixin:
         app = Flask(__name__)
         CORS(app)
         client = self
+
+        # -----------------------------------------------------------
+        # SSE Broadcast Infrastructure
+        # -----------------------------------------------------------
+        _sse_clients = []
+        _sse_lock = threading.Lock()
+
+        def _sse_broadcast(event_type, data):
+            """Push event to all connected SSE clients."""
+            msg = f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+            with _sse_lock:
+                dead = []
+                for q in _sse_clients:
+                    try:
+                        q.put_nowait(msg)
+                    except Exception:
+                        dead.append(q)
+                for q in dead:
+                    _sse_clients.remove(q)
+
+        def _sse_stream(client_queue):
+            """Generator yielding SSE messages from a client's queue."""
+            try:
+                yield "event: connected\ndata: {}\n\n"
+                while True:
+                    try:
+                        msg = client_queue.get(timeout=15)
+                        yield msg
+                    except queue.Empty:
+                        yield ": keepalive\n\n"
+            except GeneratorExit:
+                with _sse_lock:
+                    if client_queue in _sse_clients:
+                        _sse_clients.remove(client_queue)
+
+        @app.route('/events/stream')
+        def sse_stream():
+            q = queue.Queue(maxsize=100)
+            with _sse_lock:
+                _sse_clients.append(q)
+            return Response(
+                _sse_stream(q),
+                mimetype='text/event-stream',
+                headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
+            )
 
         # -----------------------------------------------------------
         # Health
@@ -790,6 +838,7 @@ class ApiAppMixin:
                 _agent_device_serial_index[serial] = device_id
             logger.info(f"Agent device registered: {device_id} (serial={serial})")
             client.log_activity('agent_device_register', device_id, data)
+            _sse_broadcast('device_connected', {'device_id': device_id, 'info': data})
             return jsonify({'device_id': device_id, 'status': 'registered'})
 
         @app.route('/agent-device/state', methods=['POST'])
@@ -799,6 +848,58 @@ class ApiAppMixin:
             if device_id and device_id in _agent_device_states:
                 _agent_device_states[device_id]['state'] = data
                 _agent_device_states[device_id]['last_heartbeat'] = time.time()
+                _sse_broadcast('device_state', {'device_id': device_id, 'state': data})
+
+                # Auto-generate alerts from agent metrics
+                metrics = data.get('metrics', {})
+                if metrics:
+                    battery = metrics.get('battery_level', 100)
+                    temp = metrics.get('battery_temperature', 0)
+
+                    # Low battery alert (<20%)
+                    if battery < 20:
+                        recent = [a for a in client._alerts
+                                  if a['device_id'] == device_id and a['type'] == 'low_battery'
+                                  and a['status'] == 'active' and time.time() - a['created_at'] < 300]
+                        if not recent:
+                            alert = client.create_alert(
+                                device_id, 'low_battery',
+                                f'Battery at {battery}%',
+                                severity='critical' if battery < 10 else 'warning'
+                            )
+                            _sse_broadcast('alert', alert)
+
+                    # Overheating alert (>45C)
+                    if temp > 45:
+                        recent = [a for a in client._alerts
+                                  if a['device_id'] == device_id and a['type'] == 'overheating'
+                                  and a['status'] == 'active' and time.time() - a['created_at'] < 300]
+                        if not recent:
+                            alert = client.create_alert(
+                                device_id, 'overheating',
+                                f'Temperature at {temp}C',
+                                severity='critical' if temp > 50 else 'warning'
+                            )
+                            _sse_broadcast('alert', alert)
+
+                    # Storage full alert (free < 5% of total)
+                    storage = data.get('storage', metrics.get('storage', {}))
+                    if storage:
+                        total = storage.get('total', 0)
+                        free = storage.get('free', total)
+                        if total > 0 and free < total * 0.05:
+                            recent = [a for a in client._alerts
+                                      if a['device_id'] == device_id and a['type'] == 'storage_full'
+                                      and a['status'] == 'active' and time.time() - a['created_at'] < 300]
+                            if not recent:
+                                pct = round(free / total * 100, 1)
+                                alert = client.create_alert(
+                                    device_id, 'storage_full',
+                                    f'Storage {pct}% free ({free} MB remaining)',
+                                    severity='critical' if free < total * 0.02 else 'warning'
+                                )
+                                _sse_broadcast('alert', alert)
+
             return jsonify({'status': 'ok'})
 
         @app.route('/agent-device/heartbeat', methods=['POST'])
@@ -808,6 +909,7 @@ class ApiAppMixin:
             if device_id and device_id in _agent_device_states:
                 _agent_device_states[device_id]['last_heartbeat'] = time.time()
                 _agent_device_states[device_id]['online'] = True
+                _sse_broadcast('device_heartbeat', {'device_id': device_id, 'timestamp': time.time()})
             return jsonify({'status': 'ok'})
 
         @app.route('/agent-device/event', methods=['POST'])
@@ -820,6 +922,7 @@ class ApiAppMixin:
             device_id = data.get('device_id', 'unknown')
             event_type = data.get('event', 'unknown')
             logger.info(f"Agent device event: {device_id} -> {event_type}")
+            _sse_broadcast('device_event', data)
             return jsonify({'status': 'ok'})
 
         @app.route('/agent-device/<device_id>/commands')
@@ -868,7 +971,9 @@ class ApiAppMixin:
             now = time.time()
             for d in _agent_device_states.values():
                 if now - d.get('last_heartbeat', 0) > 15:
-                    d['online'] = False
+                    if d.get('online', False):
+                        d['online'] = False
+                        _sse_broadcast('device_disconnected', {'device_id': d.get('device_id')})
             return jsonify({'devices': list(_agent_device_states.values())})
 
         @app.route('/agent-device/events')
