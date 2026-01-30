@@ -10,6 +10,9 @@ import {
   SkipForward,
   AlertTriangle,
   HeartPulse,
+  Image,
+  Eye,
+  FileBarChart,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -22,6 +25,9 @@ export default function AutomationRunDetail() {
   const [loading, setLoading] = useState(true)
   const intervalRef = useRef(null)
   const [screenshotOverlay, setScreenshotOverlay] = useState(null)
+  const [regressionReport, setRegressionReport] = useState(null)
+  const [showRegressionReport, setShowRegressionReport] = useState(false)
+  const [diffOverlay, setDiffOverlay] = useState(null) // { baselineUrl, currentB64, diffRegions, ssim, verdict }
 
   const fetchRun = useCallback(async () => {
     try {
@@ -43,14 +49,19 @@ export default function AutomationRunDetail() {
           const updated = await fetchRun()
           if (updated && updated.status !== 'running') {
             clearInterval(intervalRef.current)
+            // Fetch regression report when run completes
+            api.getRegressionReport(runId).then(setRegressionReport).catch(() => {})
           }
         }, POLL_INTERVAL)
+      } else if (data) {
+        // Already finished — fetch report
+        api.getRegressionReport(runId).then(setRegressionReport).catch(() => {})
       }
     })
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [fetchRun])
+  }, [fetchRun, runId])
 
   const handleCancel = async () => {
     try {
@@ -229,6 +240,17 @@ export default function AutomationRunDetail() {
                           <HeartPulse className="w-3 h-3" /> Heal failed
                         </span>
                       )}
+                      {/* Visual assertion badge */}
+                      {sr.step_type === 'screenshot_assert' && sr.status === 'completed' && (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-violet-500/10 text-violet-400 flex items-center gap-1">
+                          <Eye className="w-3 h-3" /> Visual pass
+                        </span>
+                      )}
+                      {sr.step_type === 'screenshot_assert' && sr.status === 'failed' && (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-red-500/10 text-red-400 flex items-center gap-1">
+                          <Eye className="w-3 h-3" /> Visual fail
+                        </span>
+                      )}
                     </div>
                     <span className="mono text-zinc-600 text-[10px]">
                       {sr.duration_ms > 0 ? `${sr.duration_ms}ms` : ''}
@@ -303,6 +325,84 @@ export default function AutomationRunDetail() {
               )}
           </div>
         </div>
+
+        {/* Visual Regression Report */}
+        {regressionReport && regressionReport.total_assertions > 0 && (
+          <div className="bg-card border border-main rounded overflow-hidden">
+            <button
+              onClick={() => setShowRegressionReport(!showRegressionReport)}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-900/30 transition-colors text-left"
+            >
+              <FileBarChart className="w-4 h-4 text-violet-400 shrink-0" />
+              <span className="text-xs font-bold text-zinc-300 flex-1">
+                Visual Regression Report
+              </span>
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="text-emerald-400">{regressionReport.passed} passed</span>
+                {regressionReport.failed > 0 && (
+                  <span className="text-red-400">{regressionReport.failed} failed</span>
+                )}
+                {regressionReport.needs_review > 0 && (
+                  <span className="text-amber-400">{regressionReport.needs_review} review</span>
+                )}
+              </div>
+            </button>
+
+            {showRegressionReport && (
+              <div className="px-4 pb-4 border-t border-main space-y-2 pt-3">
+                {/* Summary bar */}
+                <div className="flex h-2 rounded-full overflow-hidden bg-zinc-800">
+                  {regressionReport.passed > 0 && (
+                    <div
+                      className="bg-emerald-500"
+                      style={{ width: `${(regressionReport.passed / regressionReport.total_assertions) * 100}%` }}
+                    />
+                  )}
+                  {regressionReport.failed > 0 && (
+                    <div
+                      className="bg-red-500"
+                      style={{ width: `${(regressionReport.failed / regressionReport.total_assertions) * 100}%` }}
+                    />
+                  )}
+                  {regressionReport.needs_review > 0 && (
+                    <div
+                      className="bg-amber-500"
+                      style={{ width: `${(regressionReport.needs_review / regressionReport.total_assertions) * 100}%` }}
+                    />
+                  )}
+                </div>
+
+                {/* Individual results */}
+                {regressionReport.results.map((vr, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between p-2 rounded text-[10px] ${
+                      vr.verdict === 'pass'
+                        ? 'bg-emerald-500/5 border border-emerald-500/20'
+                        : vr.verdict === 'fail'
+                          ? 'bg-red-500/5 border border-red-500/20'
+                          : 'bg-amber-500/5 border border-amber-500/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Image className={`w-3 h-3 ${
+                        vr.verdict === 'pass' ? 'text-emerald-400' : vr.verdict === 'fail' ? 'text-red-400' : 'text-amber-400'
+                      }`} />
+                      <span className="text-zinc-300">
+                        Step {vr.step_index + 1}: {vr.step_label || 'Screenshot Assert'}
+                      </span>
+                    </div>
+                    <span className={`font-bold uppercase ${
+                      vr.verdict === 'pass' ? 'text-emerald-400' : vr.verdict === 'fail' ? 'text-red-400' : 'text-amber-400'
+                    }`}>
+                      {vr.verdict}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Error panel */}
         {run.error && (

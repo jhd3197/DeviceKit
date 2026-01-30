@@ -17,10 +17,14 @@ import {
   XCircle,
   Loader,
   ChevronRight,
+  Camera,
+  Image,
+  Eye,
+  Crosshair,
 } from 'lucide-react'
 import { api } from '../api'
 
-const CATEGORY_ORDER = ['Interaction', 'Apps', 'Timing', 'Debug']
+const CATEGORY_ORDER = ['Interaction', 'Apps', 'Timing', 'Debug', 'Visual']
 
 export default function AutomationEditor() {
   const { id } = useParams()
@@ -51,6 +55,17 @@ export default function AutomationEditor() {
   const [refineInstruction, setRefineInstruction] = useState('')
   const [refining, setRefining] = useState(false)
 
+  // Baseline state
+  const [baselines, setBaselines] = useState([])
+  const [baselineCapturing, setBaselineCapturing] = useState(null) // step index being captured
+  const [baselineDevice, setBaselineDevice] = useState('')
+  const [baselineDevices, setBaselineDevices] = useState([])
+  const [baselinePreview, setBaselinePreview] = useState(null) // { stepIndex, imageUrl, baselineId }
+  const [capturingBaseline, setCapturingBaseline] = useState(false)
+  const [maskMode, setMaskMode] = useState(false)
+  const [maskRegions, setMaskRegions] = useState([])
+  const [maskStart, setMaskStart] = useState(null)
+
   useEffect(() => {
     api.getStepTypes().then(setStepTypes).catch(() => {})
   }, [])
@@ -78,6 +93,24 @@ export default function AutomationEditor() {
       }).catch(() => {})
     }
   }, [aiOpen])
+
+  // Fetch baselines when editing
+  useEffect(() => {
+    if (!isNew && id) {
+      api.getBaselines(id).then((res) => setBaselines(res.baselines || [])).catch(() => {})
+    }
+  }, [id, isNew])
+
+  // Fetch devices for baseline capture
+  useEffect(() => {
+    if (baselineCapturing !== null && baselineDevices.length === 0) {
+      api.getDevices().then((res) => {
+        const devs = res.devices || []
+        setBaselineDevices(devs)
+        if (devs.length > 0) setBaselineDevice(devs[0].device_id)
+      }).catch(() => {})
+    }
+  }, [baselineCapturing])
 
   const addStep = (type) => {
     const typeDef = stepTypes[type] || {}
@@ -273,6 +306,68 @@ export default function AutomationEditor() {
     } finally {
       setRefining(false)
     }
+  }
+
+  // Baseline capture
+  const handleCaptureBaseline = async (stepIndex) => {
+    if (!baselineDevice || !id) return
+    setCapturingBaseline(true)
+    try {
+      const result = await api.createBaseline(id, {
+        step_index: stepIndex,
+        device_id: baselineDevice,
+        label: steps[stepIndex]?.label || `Step ${stepIndex + 1} baseline`,
+        mask_regions: maskRegions.length > 0 ? maskRegions : undefined,
+      })
+      setBaselines((prev) => [...prev, result])
+      setBaselinePreview({
+        stepIndex,
+        imageUrl: api.getBaselineImageUrl(id, result.id),
+        baselineId: result.id,
+      })
+      setBaselineCapturing(null)
+      setMaskRegions([])
+      // Auto-fill baseline_id in the step config if it's a screenshot_assert
+      if (steps[stepIndex]?.type === 'screenshot_assert') {
+        updateStepConfig(steps[stepIndex].id, 'baseline_id', result.id)
+      }
+    } catch (e) {
+      console.error('Failed to capture baseline:', e)
+    } finally {
+      setCapturingBaseline(false)
+    }
+  }
+
+  const handleDeleteBaseline = async (baselineId) => {
+    if (!id) return
+    try {
+      await api.deleteBaseline(id, baselineId)
+      setBaselines((prev) => prev.filter((b) => b.id !== baselineId))
+      if (baselinePreview?.baselineId === baselineId) setBaselinePreview(null)
+    } catch (e) {
+      console.error('Failed to delete baseline:', e)
+    }
+  }
+
+  const handleMaskMouseDown = (e) => {
+    if (!maskMode) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMaskStart({ x: e.clientX - rect.left, y: e.clientY - rect.top, rect })
+  }
+
+  const handleMaskMouseUp = (e) => {
+    if (!maskMode || !maskStart) return
+    const rect = maskStart.rect
+    const endX = e.clientX - rect.left
+    const endY = e.clientY - rect.top
+    const x = Math.min(maskStart.x, endX)
+    const y = Math.min(maskStart.y, endY)
+    const w = Math.abs(endX - maskStart.x)
+    const h = Math.abs(endY - maskStart.y)
+    if (w > 5 && h > 5) {
+      setMaskRegions((prev) => [...prev, { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) }])
+    }
+    setMaskStart(null)
   }
 
   // Group step types by category
@@ -548,6 +643,18 @@ export default function AutomationEditor() {
                         placeholder="Step label..."
                       />
                       <div className="flex items-center gap-1 shrink-0">
+                        {step.type === 'screenshot_assert' && !isNew && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setBaselineCapturing(idx)
+                            }}
+                            className="p-1 text-emerald-500 hover:text-emerald-400 transition-colors"
+                            title="Capture Baseline"
+                          >
+                            <Camera className="w-3 h-3" />
+                          </button>
+                        )}
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -692,6 +799,153 @@ export default function AutomationEditor() {
             </div>
           )}
         </div>
+      </div>
+
+        {/* Visual Regression Baselines */}
+        {!isNew && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                <Image className="w-3 h-3" /> Visual Baselines ({baselines.length})
+              </h3>
+            </div>
+
+            {baselines.length === 0 ? (
+              <div className="bg-card border border-main rounded p-4 text-center text-zinc-600 text-xs">
+                No baselines yet. Use the <Camera className="w-3 h-3 inline" /> icon on screenshot_assert steps to capture baselines.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {baselines.map((b) => (
+                  <div key={b.id} className="bg-card border border-main rounded overflow-hidden group">
+                    <div className="aspect-[9/16] bg-black relative cursor-pointer"
+                      onClick={() => setBaselinePreview({ stepIndex: b.step_index, imageUrl: api.getBaselineImageUrl(id, b.id), baselineId: b.id })}
+                    >
+                      <img
+                        src={api.getBaselineImageUrl(id, b.id)}
+                        alt={b.label}
+                        className="w-full h-full object-contain"
+                      />
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteBaseline(b.id) }}
+                          className="bg-black/70 rounded p-1 text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="p-2">
+                      <p className="text-[10px] text-zinc-300 truncate">{b.label}</p>
+                      <p className="text-[8px] text-zinc-600 mono">
+                        Step {b.step_index + 1} &middot; v{b.version} &middot; {b.device_model}
+                        {b.mask_regions?.length > 0 && ` \u00b7 ${b.mask_regions.length} masks`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Baseline capture dialog */}
+        {baselineCapturing !== null && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-card border border-main rounded-lg w-full max-w-sm p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-emerald-400" /> Capture Baseline
+                </h3>
+                <button onClick={() => { setBaselineCapturing(null); setMaskRegions([]) }} className="text-zinc-500 hover:text-white transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">
+                Capture a screenshot from a device to use as the visual baseline for
+                <span className="text-white font-medium"> step {baselineCapturing + 1}</span>.
+              </p>
+              <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Device</label>
+              {baselineDevices.length === 0 ? (
+                <p className="text-xs text-zinc-500 mb-4">No devices connected.</p>
+              ) : (
+                <select
+                  value={baselineDevice}
+                  onChange={(e) => setBaselineDevice(e.target.value)}
+                  className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+                >
+                  {baselineDevices.map((d) => (
+                    <option key={d.device_id} value={d.device_id}>
+                      {d.name || d.device_id} ({d.device_id})
+                    </option>
+                  ))}
+                </select>
+              )}
+              {maskRegions.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[10px] text-zinc-500 mb-1">{maskRegions.length} mask region(s) set</p>
+                  <button
+                    onClick={() => setMaskRegions([])}
+                    className="text-[10px] text-red-400 hover:text-red-300"
+                  >
+                    Clear masks
+                  </button>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button onClick={() => { setBaselineCapturing(null); setMaskRegions([]) }}
+                  className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleCaptureBaseline(baselineCapturing)}
+                  disabled={!baselineDevice || capturingBaseline}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2"
+                >
+                  {capturingBaseline ? <Loader className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+                  Capture
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Baseline preview overlay */}
+        {baselinePreview && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 cursor-pointer"
+            onClick={() => setBaselinePreview(null)}>
+            <div className="max-w-[90vw] max-h-[90vh] relative" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={baselinePreview.imageUrl}
+                alt="Baseline preview"
+                className="max-w-full max-h-[85vh] rounded-lg border border-zinc-700 shadow-2xl"
+                onMouseDown={handleMaskMouseDown}
+                onMouseUp={handleMaskMouseUp}
+              />
+              <div className="absolute top-2 right-2 flex gap-2">
+                <button
+                  onClick={() => setMaskMode(!maskMode)}
+                  className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 transition-all ${
+                    maskMode ? 'bg-amber-600 text-white' : 'bg-black/70 text-zinc-300 hover:text-white'
+                  }`}
+                >
+                  <Crosshair className="w-3 h-3" /> {maskMode ? 'Masking ON' : 'Add Masks'}
+                </button>
+                <button
+                  onClick={() => setBaselinePreview(null)}
+                  className="bg-black/70 text-zinc-300 hover:text-white text-[10px] px-2 py-1 rounded"
+                >
+                  Close
+                </button>
+              </div>
+              {maskMode && (
+                <p className="absolute bottom-2 left-2 text-[9px] text-amber-300 bg-black/70 px-2 py-1 rounded">
+                  Click and drag to mark ignore regions (clocks, ads, dynamic content)
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Step type picker overlay */}

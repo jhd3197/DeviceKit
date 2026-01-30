@@ -256,21 +256,26 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 
 ---
 
-## Upcoming Phases
-
-### Phase 19: Visual Regression Testing
+### Phase 19: Visual Regression Testing ✅
 **Goal**: Add screenshot-based assertions to automations so tests can verify what they see, not just what they do. Use AI to distinguish meaningful UI changes from noise.
 
-- [ ] New automation step type: `screenshot_assert` — captures screenshot and compares against a stored baseline
-- [ ] Baseline management: `POST /automations/:id/baselines` to capture and store baseline screenshots per step, per device model
-- [ ] Pixel-diff engine: compute structural similarity (SSIM) between baseline and current screenshot, configurable threshold (default 95%)
-- [ ] AI-powered diff analysis: when pixel diff exceeds threshold, send both images to Prompture and ask "Is this a meaningful UI change or noise (timestamps, animations, dynamic content)?"
-- [ ] Diff overlay visualization: frontend renders side-by-side (baseline vs actual) with highlighted diff regions in the run detail view
-- [ ] Mask regions: allow users to mark areas to ignore (clocks, ads, dynamic banners) via drag-select on the baseline image
-- [ ] Multi-device baselines: store separate baselines per screen resolution/density so the same automation works across different devices
-- [ ] `GET /automations/:id/baselines` — list all baselines with thumbnails, allow re-capture and version history
-- [ ] Regression report: summary of all visual assertions in a run (passed/failed/needs-review) with confidence scores
-- [ ] Frontend: baseline capture mode in AutomationEditor — run step, preview screenshot, click "Set as Baseline"
+- [x] `screenshot_assert` step type in `STEP_TYPES`: captures screenshot and compares against stored baseline, configurable `baseline_id`, `threshold` (default 95%), and `use_ai` toggle
+- [x] `VisualRegressionMixin`: in-memory baseline storage with UUID IDs, version tracking, per-device-model + resolution baselines, mask region support
+- [x] Baseline CRUD API: `POST /automations/:id/baselines` (capture from device or upload b64), `GET` list with thumbnails, `GET /:id/image` serves JPEG, `PUT` re-capture/update masks, `DELETE`
+- [x] Pixel-diff engine: PIL-based grayscale SSIM computation with configurable threshold, mask region exclusion, block-based diff region detection (16px blocks)
+- [x] AI-powered diff analysis: when SSIM < threshold, sends context to Prompture with `AI_DIFF_SYSTEM_PROMPT`, returns verdict (pass/fail/needs_review), confidence score, meaningful changes vs noise classification; high-confidence AI pass overrides pixel verdict
+- [x] Diff regions: `_compute_diff_regions()` returns `{x, y, w, h, intensity}` blocks highlighting changed areas
+- [x] Mask regions: drag-select on baseline preview image to mark ignore areas (clocks, ads, dynamic content), stored per-baseline, excluded from SSIM computation
+- [x] Multi-device baselines: `find_baseline()` prefers exact device_model + resolution match, falls back to model-only, then any; `capture_baseline()` auto-detects device model and resolution
+- [x] `GET /automations/:id/baselines` — list all baselines with thumbnails (version, device model, mask count, step index), grid display in AutomationEditor
+- [x] Regression report: `GET /automations/runs/:id/regression-report` summarizes all `screenshot_assert` results (passed/failed/needs_review counts), collapsible panel in AutomationRunDetail with color-coded summary bar
+- [x] Frontend AutomationEditor: baseline capture mode — Camera icon on `screenshot_assert` steps, device selector dialog, captured baselines displayed in grid with preview overlay, mask drawing mode
+- [x] Frontend AutomationRunDetail: violet "Visual pass"/"Visual fail" badges on `screenshot_assert` step results, regression report panel with per-assertion breakdown
+- [x] `POST /automations/:id/baselines/:id/compare` endpoint for on-demand baseline comparison with device screenshot
+
+---
+
+## Upcoming Phases
 
 ### Phase 20: Fleet Query Language
 **Goal**: Enable SQL-like queries across the device fleet for filtering, reporting, and bulk action targeting.

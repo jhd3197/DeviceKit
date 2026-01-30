@@ -139,6 +139,15 @@ STEP_TYPES = {
             "remote_path": {"type": "text", "label": "Remote path (device)", "required": True},
         },
     },
+    "screenshot_assert": {
+        "label": "Screenshot Assert",
+        "category": "Visual",
+        "config": {
+            "baseline_id": {"type": "text", "label": "Baseline ID", "required": False},
+            "threshold": {"type": "number", "label": "SSIM threshold (%)", "required": False, "default": 95},
+            "use_ai": {"type": "select", "label": "AI diff analysis", "required": False, "options": ["off", "on"], "default": "on"},
+        },
+    },
 }
 
 
@@ -479,6 +488,26 @@ class AutomationMixin:
                 return output or f"Deleted {remote_path}"
             else:
                 raise ValueError(f"Unknown file operation: {operation}")
+
+        elif step_type == "screenshot_assert":
+            baseline_id = config.get("baseline_id", "")
+            threshold = float(config.get("threshold", 95))
+            use_ai = config.get("use_ai", "on") == "on"
+            screenshot_data = self.take_screenshot(device_id)
+            if not screenshot_data:
+                raise Exception("Failed to capture screenshot for visual assertion")
+            result = self.compare_screenshot(
+                screenshot_data, baseline_id=baseline_id,
+                threshold=threshold, use_ai=use_ai, device_id=device_id,
+            )
+            if result.get("passed"):
+                return f"Visual assertion passed (SSIM={result.get('ssim', 0):.1f}%, verdict={result.get('verdict', 'pass')})"
+            else:
+                msg = f"Visual assertion failed (SSIM={result.get('ssim', 0):.1f}%, threshold={threshold}%"
+                if result.get("ai_analysis"):
+                    msg += f", AI: {result['ai_analysis'][:200]}"
+                msg += ")"
+                raise AssertionError(msg)
 
         else:
             raise ValueError(f"Unknown step type: {step_type}")

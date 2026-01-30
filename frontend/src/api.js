@@ -184,6 +184,28 @@ export const api = {
   explainAutomation: (id) => request(`/automations/${id}/explain`),
   getUiHierarchy: (deviceId) => request(`/devices/${deviceId}/ui-hierarchy`),
 
+  // Visual Regression Testing
+  getBaselines: (automationId) => request(`/automations/${automationId}/baselines`),
+  createBaseline: (automationId, data) =>
+    request(`/automations/${automationId}/baselines`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  getBaseline: (automationId, baselineId) =>
+    request(`/automations/${automationId}/baselines/${baselineId}`),
+  getBaselineImageUrl: (automationId, baselineId) =>
+    `${API}/automations/${automationId}/baselines/${baselineId}/image`,
+  updateBaseline: (automationId, baselineId, data) =>
+    request(`/automations/${automationId}/baselines/${baselineId}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deleteBaseline: (automationId, baselineId) =>
+    request(`/automations/${automationId}/baselines/${baselineId}`, { method: 'DELETE' }),
+  compareBaseline: (automationId, baselineId, data) =>
+    request(`/automations/${automationId}/baselines/${baselineId}/compare`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  getRegressionReport: (runId) => request(`/automations/runs/${runId}/regression-report`),
+
   // Device interaction
   tap: (id, x, y) =>
     request(`/devices/${id}/tap`, {
