@@ -31,6 +31,24 @@ export const api = {
   screenshotUrl: (id) => `${API}/devices/${id}/screenshot`,
   getFiles: (id, path) =>
     request(`/devices/${id}/files${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  searchFiles: (id, query, path) => {
+    const params = new URLSearchParams({ query })
+    if (path) params.set('path', path)
+    return request(`/devices/${id}/files/search?${params}`)
+  },
+  uploadFile: (id, file, remotePath) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetch(`${API}/devices/${id}/files/upload?path=${encodeURIComponent(remotePath)}`, {
+      method: 'POST',
+      body: form,
+    }).then(r => {
+      if (!r.ok) throw new Error('Upload failed')
+      return r.json()
+    })
+  },
+  downloadFileUrl: (id, path) =>
+    `${API}/devices/${id}/files/download?path=${encodeURIComponent(path)}`,
 
   // Pipeline
   getBuilds: () => request('/pipeline/builds'),

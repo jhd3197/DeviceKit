@@ -348,6 +348,32 @@ class ApiAppMixin:
         @app.route('/devices/<device_id>/files')
         def device_files(device_id):
             path = request.args.get('path', '/sdcard')
+            # Try agent HTTP first
+            agent_data = _find_agent_device(device_id)
+            if agent_data and agent_data.get('online'):
+                try:
+                    agent_ip = agent_data.get('info', {}).get('ip') or request.remote_addr
+                    agent_port = agent_data.get('info', {}).get('agent_port', 9800)
+                    resp = requests.get(
+                        f"http://{agent_ip}:{agent_port}/files/list",
+                        params={"path": path}, timeout=5
+                    )
+                    if resp.ok:
+                        data = resp.json()
+                        # Normalize to match expected format
+                        entries = []
+                        for item in data.get('items', []):
+                            entries.append({
+                                'name': item.get('name'),
+                                'is_dir': item.get('is_dir', False),
+                                'size': item.get('size'),
+                                'path': item.get('path'),
+                            })
+                        return jsonify({'path': path, 'entries': entries, 'source': 'agent'})
+                except Exception as e:
+                    logger.debug(f"Agent file list failed, falling back to ADB: {e}")
+
+            # Fallback: ADB
             try:
                 output = client.run_adb_command(f"shell ls -la {path}", device=device_id)
                 entries = []
@@ -363,7 +389,76 @@ class ApiAppMixin:
                             'size': size,
                             'path': f"{path}/{name}",
                         })
-                return jsonify({'path': path, 'entries': entries})
+                return jsonify({'path': path, 'entries': entries, 'source': 'adb'})
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/files/search')
+        def device_files_search(device_id):
+            """Proxy file search to agent."""
+            agent_data = _find_agent_device(device_id)
+            if not agent_data or not agent_data.get('online'):
+                return jsonify({'error': 'Agent not available for this device'}), 503
+            try:
+                agent_ip = agent_data.get('info', {}).get('ip') or request.remote_addr
+                agent_port = agent_data.get('info', {}).get('agent_port', 9800)
+                resp = requests.get(
+                    f"http://{agent_ip}:{agent_port}/files/search",
+                    params=request.args, timeout=30
+                )
+                return Response(resp.content, status=resp.status_code,
+                                content_type=resp.headers.get('Content-Type', 'application/json'))
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/files/upload', methods=['POST'])
+        def device_files_upload(device_id):
+            """Proxy file upload to agent."""
+            agent_data = _find_agent_device(device_id)
+            if not agent_data or not agent_data.get('online'):
+                return jsonify({'error': 'Agent not available for this device'}), 503
+            try:
+                agent_ip = agent_data.get('info', {}).get('ip') or request.remote_addr
+                agent_port = agent_data.get('info', {}).get('agent_port', 9800)
+                target_path = request.args.get('path', '')
+                files = {}
+                for key, f in request.files.items():
+                    files[key] = (f.filename, f.stream, f.content_type)
+                resp = requests.post(
+                    f"http://{agent_ip}:{agent_port}/files/upload",
+                    params={"path": target_path},
+                    files=files, timeout=120
+                )
+                return Response(resp.content, status=resp.status_code,
+                                content_type=resp.headers.get('Content-Type', 'application/json'))
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+
+        @app.route('/devices/<device_id>/files/download')
+        def device_files_download(device_id):
+            """Proxy file download from agent."""
+            agent_data = _find_agent_device(device_id)
+            if not agent_data or not agent_data.get('online'):
+                return jsonify({'error': 'Agent not available for this device'}), 503
+            try:
+                agent_ip = agent_data.get('info', {}).get('ip') or request.remote_addr
+                agent_port = agent_data.get('info', {}).get('agent_port', 9800)
+                file_path = request.args.get('path', '')
+                resp = requests.get(
+                    f"http://{agent_ip}:{agent_port}/files/read",
+                    params={"path": file_path}, timeout=60, stream=True
+                )
+                if not resp.ok:
+                    return Response(resp.content, status=resp.status_code,
+                                    content_type=resp.headers.get('Content-Type', 'application/json'))
+                filename = file_path.split('/')[-1] if '/' in file_path else file_path
+                headers = {
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Content-Type': resp.headers.get('Content-Type', 'application/octet-stream'),
+                }
+                if 'Content-Length' in resp.headers:
+                    headers['Content-Length'] = resp.headers['Content-Length']
+                return Response(resp.iter_content(chunk_size=8192), headers=headers)
             except Exception as e:
                 return jsonify({'error': str(e)}), 500
 

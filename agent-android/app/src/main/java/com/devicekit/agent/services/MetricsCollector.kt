@@ -13,8 +13,6 @@ import com.devicekit.agent.DeviceState
 import com.devicekit.agent.server.routes.EventRoutes
 import kotlinx.coroutines.*
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.io.RandomAccessFile
 
 /**
@@ -117,16 +115,17 @@ class MetricsCollector(private val context: Context) {
     // ---- CPU ----
 
     private fun readCpuPercent(): Double {
-        return if (procStatAvailable) {
-            readCpuPercentFromProcStat()
-        } else {
-            readCpuPercentFromTop()
+        if (procStatAvailable) {
+            val result = readCpuPercentFromProcStat()
+            if (result > 0.0 || prevCpuTotal > 0) return result
         }
+        return readCpuPercentFromFreq()
     }
 
     private fun readCpuPercentFromProcStat(): Double {
         return try {
             val (total, idle) = readCpuSample()
+            if (total == 0L) return 0.0
             val totalDelta = total - prevCpuTotal
             val idleDelta = idle - prevCpuIdle
             prevCpuTotal = total
@@ -144,48 +143,32 @@ class MetricsCollector(private val context: Context) {
     }
 
     /**
-     * Fallback CPU reading using the `top` command.
-     * Parses idle% from the %cpu line and calculates usage.
+     * CPU utilization estimate from per-core frequency scaling.
+     * Reads scaling_cur_freq / scaling_max_freq for each core and averages.
+     * Works without special permissions on most Android devices.
      */
-    private fun readCpuPercentFromTop(): Double {
+    private fun readCpuPercentFromFreq(): Double {
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("top", "-n", "1", "-b"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            var cpuPercent = 0.0
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                val l = line ?: continue
-                // Look for line like: "%Cpu(s):  5.3 us,  2.1 sy,  0.0 ni, 91.2 id, ..."
-                // Or Samsung format: "800%cpu  12%user  0%nice  10%sys  778%idle  0%iow  0%irq  0%sirq  0%host"
-                if (l.contains("%cpu") || l.contains("%Cpu")) {
-                    // Try Samsung/busybox format: "800%cpu ... 778%idle"
-                    val idleMatch = Regex("(\\d+)%idle").find(l)
-                    val totalMatch = Regex("^\\s*(\\d+)%cpu").find(l)
-                    if (idleMatch != null && totalMatch != null) {
-                        val totalCpu = totalMatch.groupValues[1].toDoubleOrNull() ?: 0.0
-                        val idle = idleMatch.groupValues[1].toDoubleOrNull() ?: 0.0
-                        cpuPercent = if (totalCpu > 0) ((totalCpu - idle) / totalCpu * 100).coerceIn(0.0, 100.0) else 0.0
-                        break
-                    }
-                    // Try standard Linux format: "... 91.2 id ..."
-                    val parts = l.split(",", " ").map { it.trim() }
-                    for (i in parts.indices) {
-                        if (parts[i] == "id" || parts[i] == "idle") {
-                            val idleVal = parts.getOrNull(i - 1)?.replace("%", "")?.toDoubleOrNull()
-                            if (idleVal != null) {
-                                cpuPercent = (100.0 - idleVal).coerceIn(0.0, 100.0)
-                                break
-                            }
-                        }
-                    }
-                    break
+            var totalRatio = 0.0
+            var coreCount = 0
+            for (i in 0..15) {
+                val curFile = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
+                val maxFile = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq")
+                if (!curFile.exists()) break
+                val cur = curFile.readText().trim().toLongOrNull() ?: continue
+                val max = maxFile.readText().trim().toLongOrNull() ?: continue
+                if (max > 0) {
+                    totalRatio += cur.toDouble() / max.toDouble()
+                    coreCount++
                 }
             }
-            reader.close()
-            process.destroy()
-            cpuPercent
+            if (coreCount > 0) {
+                (totalRatio / coreCount * 100).coerceIn(0.0, 100.0)
+            } else {
+                0.0
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "CPU top fallback error: ${e.message}")
+            Log.w(TAG, "CPU freq read error: ${e.message}")
             0.0
         }
     }

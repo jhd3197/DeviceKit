@@ -1,7 +1,7 @@
-"""File management: list, read, write, push, pull, delete."""
+"""File management: list, read, write, push, pull, delete, search, upload."""
 
 from pathlib import Path
-from typing import List, Optional, TYPE_CHECKING
+from typing import Callable, List, Optional, TYPE_CHECKING
 from .types import FileInfo, StorageVolume
 
 if TYPE_CHECKING:
@@ -43,21 +43,42 @@ class FileManager:
         """Rename/move a file on device."""
         return self._conn.post_json("/files/rename", {"from": from_path, "to": to_path})
 
+    def search(self, query: str, path: str = "/sdcard", limit: int = 50) -> dict:
+        """Search for files by name substring."""
+        return self._conn.get_json("/files/search", params={
+            "query": query, "path": path, "limit": str(limit)
+        })
+
+    def upload(self, local_path: str, remote_path: str,
+               progress_callback: Optional[Callable[[int, int], None]] = None) -> dict:
+        """Upload a local file to the device via the agent HTTP server."""
+        resp = self._conn.post_file(
+            "/files/upload", local_path,
+            params={"path": remote_path},
+            progress_callback=progress_callback,
+            timeout=120,
+        )
+        return resp.json()
+
     def push(self, local_path: str, remote_path: str) -> bool:
         """Push a local file to device via ADB."""
         from . import adb
         serial = self._conn.serial
         if serial is None:
-            raise RuntimeError("push() requires ADB connection (not WiFi). Use write() instead.")
+            raise RuntimeError("push() requires ADB connection (not WiFi). Use upload() instead.")
         return adb.push_file(serial, local_path, remote_path)
 
-    def pull(self, remote_path: str, local_path: str) -> bool:
-        """Pull a file from device via ADB."""
+    def pull(self, remote_path: str, local_path: str,
+             progress_callback: Optional[Callable[[int, int], None]] = None) -> bool:
+        """Pull a file from device via ADB or HTTP."""
         from . import adb
         serial = self._conn.serial
-        if serial is None:
-            # Fallback: download via HTTP
-            data = self.read(remote_path)
+        if serial is None or progress_callback is not None:
+            # Download via HTTP (supports progress)
+            data = self._conn.get_bytes_streamed(
+                "/files/read", params={"path": remote_path},
+                timeout=120, progress_callback=progress_callback,
+            )
             Path(local_path).write_bytes(data)
             return True
         return adb.pull_file(serial, remote_path, local_path)

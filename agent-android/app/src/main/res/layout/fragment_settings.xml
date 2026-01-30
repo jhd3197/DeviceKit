@@ -31,7 +31,84 @@
             android:textSize="14sp"
             android:inputType="textUri"
             android:layout_marginTop="6dp"
-            android:singleLine="true" />
+            android:singleLine="true"
+            android:imeOptions="actionDone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp">
+
+            <Button
+                android:id="@+id/testConnectionButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Test Connection"
+                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_card_elevated"
+                android:minWidth="0dp"
+                android:paddingHorizontal="16dp" />
+
+            <TextView
+                android:id="@+id/connectionStatusText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:textSize="12sp"
+                android:textColor="@color/text_muted" />
+        </LinearLayout>
+
+        <!-- ADB Reverse Guide (shown when localhost connection fails) -->
+        <LinearLayout
+            android:id="@+id/adbReverseGuide"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="12dp"
+            android:layout_marginTop="8dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Using localhost? Set up ADB reverse port forwarding:"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="adb reverse tcp:5050 tcp:5050"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:layout_marginTop="6dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Run this on your computer while the device is connected via USB."
+                android:textColor="@color/text_muted"
+                android:textSize="11sp"
+                android:layout_marginTop="4dp" />
+
+            <Button
+                android:id="@+id/copyAdbCommandButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:text="Copy Command"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_card_elevated"
+                android:minWidth="0dp"
+                android:paddingHorizontal="12dp"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
 
         <!-- Auto-start toggle -->
         <LinearLayout
@@ -174,6 +251,67 @@
                 android:text="Disabled"
                 android:textColor="@color/red"
                 android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Network section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Network"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Device IP:"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/deviceIpText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:text="Unknown"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:fontFamily="monospace" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/scanNetworkButton"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="Scan Network for Server"
+                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_card_elevated"
+                android:layout_marginTop="12dp" />
+
+            <TextView
+                android:id="@+id/scanResultText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="@color/text_muted"
+                android:layout_marginTop="8dp" />
         </LinearLayout>
 
         <!-- Version -->

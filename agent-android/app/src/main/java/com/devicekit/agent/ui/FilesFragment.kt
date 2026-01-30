@@ -1,14 +1,19 @@
 package com.devicekit.agent.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.StatFs
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -21,18 +26,32 @@ import java.util.Locale
 
 class FilesFragment : Fragment() {
 
+    private lateinit var pathBar: View
     private lateinit var currentPathView: TextView
     private lateinit var btnUp: TextView
     private lateinit var btnHome: TextView
+    private lateinit var storageBarView: View
     private lateinit var storageInfo: TextView
     private lateinit var itemCount: TextView
     private lateinit var loadingBar: ProgressBar
     private lateinit var emptyState: TextView
     private lateinit var fileList: RecyclerView
+    private lateinit var storagePicker: View
+    private lateinit var cardInternalStorage: View
+    private lateinit var cardSdCard: View
+    private lateinit var internalStorageInfo: TextView
+    private lateinit var sdCardInfo: TextView
+    private lateinit var permissionPrompt: View
+    private lateinit var btnGrantPermission: View
 
-    private var currentPath: String = Environment.getExternalStorageDirectory().absolutePath
+    private var currentPath: String? = null // null = at storage picker root
+    private var internalStorageRoot: String = Environment.getExternalStorageDirectory().absolutePath
+    private var sdCardRoot: String? = null
+
     private val adapter = FileAdapter { entry -> onItemClick(entry) }
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    private lateinit var backCallback: OnBackPressedCallback
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.fragment_files, container, false)
@@ -41,26 +60,72 @@ class FilesFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        pathBar = view.findViewById(R.id.pathBar)
         currentPathView = view.findViewById(R.id.currentPath)
         btnUp = view.findViewById(R.id.btnUp)
         btnHome = view.findViewById(R.id.btnHome)
+        storageBarView = view.findViewById(R.id.storageBar)
         storageInfo = view.findViewById(R.id.storageInfo)
         itemCount = view.findViewById(R.id.itemCount)
         loadingBar = view.findViewById(R.id.loadingBar)
         emptyState = view.findViewById(R.id.emptyState)
         fileList = view.findViewById(R.id.fileList)
+        storagePicker = view.findViewById(R.id.storagePicker)
+        cardInternalStorage = view.findViewById(R.id.cardInternalStorage)
+        cardSdCard = view.findViewById(R.id.cardSdCard)
+        internalStorageInfo = view.findViewById(R.id.internalStorageInfo)
+        sdCardInfo = view.findViewById(R.id.sdCardInfo)
+        permissionPrompt = view.findViewById(R.id.permissionPrompt)
+        btnGrantPermission = view.findViewById(R.id.btnGrantPermission)
 
         fileList.layoutManager = LinearLayoutManager(requireContext())
         fileList.adapter = adapter
 
         btnUp.setOnClickListener { navigateUp() }
-        btnHome.setOnClickListener {
-            currentPath = Environment.getExternalStorageDirectory().absolutePath
+        btnHome.setOnClickListener { showStoragePicker() }
+
+        cardInternalStorage.setOnClickListener {
+            currentPath = internalStorageRoot
             loadDirectory()
         }
 
-        updateStorageInfo()
-        loadDirectory()
+        cardSdCard.setOnClickListener {
+            sdCardRoot?.let { root ->
+                currentPath = root
+                loadDirectory()
+            }
+        }
+
+        btnGrantPermission.setOnClickListener {
+            requestStoragePermission()
+        }
+
+        // Detect SD card
+        detectSdCard()
+
+        // Setup back navigation
+        backCallback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (currentPath != null) {
+                    navigateUp()
+                } else {
+                    // At storage picker root — let system handle (e.g. close app)
+                    isEnabled = false
+                    requireActivity().onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            }
+        }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backCallback)
+
+        // Check permissions and show appropriate view
+        checkAndShow()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Re-check permission on resume (user may have just granted it)
+        checkAndShow()
     }
 
     override fun onDestroyView() {
@@ -68,13 +133,112 @@ class FilesFragment : Fragment() {
         scope.cancel()
     }
 
+    private fun checkAndShow() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            showPermissionPrompt()
+        } else if (currentPath == null) {
+            showStoragePicker()
+        } else {
+            loadDirectory()
+        }
+    }
+
+    private fun showPermissionPrompt() {
+        permissionPrompt.visibility = View.VISIBLE
+        storagePicker.visibility = View.GONE
+        pathBar.visibility = View.GONE
+        storageBarView.visibility = View.GONE
+        fileList.visibility = View.GONE
+        emptyState.visibility = View.GONE
+        loadingBar.visibility = View.GONE
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:${requireContext().packageName}")
+                }
+                startActivity(intent)
+            } catch (_: Exception) {
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                startActivity(intent)
+            }
+        }
+    }
+
+    private fun showStoragePicker() {
+        currentPath = null
+        permissionPrompt.visibility = View.GONE
+        storagePicker.visibility = View.VISIBLE
+        pathBar.visibility = View.GONE
+        storageBarView.visibility = View.GONE
+        fileList.visibility = View.GONE
+        emptyState.visibility = View.GONE
+        loadingBar.visibility = View.GONE
+        adapter.submitList(emptyList())
+
+        updateStoragePickerInfo()
+    }
+
+    private fun updateStoragePickerInfo() {
+        try {
+            val stat = StatFs(internalStorageRoot)
+            val total = stat.totalBytes
+            val free = stat.freeBytes
+            val used = total - free
+            internalStorageInfo.text = "${formatSize(used)} used / ${formatSize(total)} total"
+        } catch (_: Exception) {
+            internalStorageInfo.text = ""
+        }
+
+        sdCardRoot?.let { root ->
+            try {
+                val stat = StatFs(root)
+                val total = stat.totalBytes
+                val free = stat.freeBytes
+                val used = total - free
+                sdCardInfo.text = "${formatSize(used)} used / ${formatSize(total)} total"
+            } catch (_: Exception) {
+                sdCardInfo.text = ""
+            }
+        }
+    }
+
+    private fun detectSdCard() {
+        val dirs = requireContext().getExternalFilesDirs(null)
+        if (dirs.size > 1) {
+            // Second entry is the SD card app-specific dir.
+            // Walk up to the storage volume root (typically /storage/XXXX-XXXX)
+            val sdAppDir = dirs[1] ?: return
+            var path = sdAppDir
+            while (path.parentFile != null) {
+                if (path.parentFile?.absolutePath == "/storage") {
+                    sdCardRoot = path.absolutePath
+                    cardSdCard.visibility = View.VISIBLE
+                    return
+                }
+                path = path.parentFile!!
+            }
+        }
+    }
+
     private fun loadDirectory() {
-        currentPathView.text = currentPath
+        val path = currentPath ?: return
+
+        permissionPrompt.visibility = View.GONE
+        storagePicker.visibility = View.GONE
+        pathBar.visibility = View.VISIBLE
+        storageBarView.visibility = View.VISIBLE
+
+        currentPathView.text = path
         loadingBar.visibility = View.VISIBLE
         emptyState.visibility = View.GONE
 
+        updateStorageInfo(path)
+
         scope.launch {
-            val entries = withContext(Dispatchers.IO) { listFiles(currentPath) }
+            val entries = withContext(Dispatchers.IO) { listFiles(path) }
             if (!isAdded) return@launch
 
             loadingBar.visibility = View.GONE
@@ -125,16 +289,24 @@ class FilesFragment : Fragment() {
     }
 
     private fun navigateUp() {
-        val parent = File(currentPath).parent
+        val path = currentPath ?: return
+        // If at a storage root, go back to picker
+        if (path == internalStorageRoot || path == sdCardRoot) {
+            showStoragePicker()
+            return
+        }
+        val parent = File(path).parent
         if (parent != null) {
             currentPath = parent
             loadDirectory()
+        } else {
+            showStoragePicker()
         }
     }
 
-    private fun updateStorageInfo() {
+    private fun updateStorageInfo(path: String) {
         try {
-            val stat = StatFs(Environment.getExternalStorageDirectory().absolutePath)
+            val stat = StatFs(path)
             val totalBytes = stat.totalBytes
             val freeBytes = stat.freeBytes
             val usedBytes = totalBytes - freeBytes

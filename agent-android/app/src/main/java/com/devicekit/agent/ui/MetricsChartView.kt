@@ -21,6 +21,9 @@ class MetricsChartView @JvmOverloads constructor(
     private var lineColor = context.getColor(R.color.chart_cpu)
     private var maxValue = 100f
     private var label = ""
+    private var unitMode = UnitMode.PERCENT // how to format values
+
+    enum class UnitMode { PERCENT, MEGABYTES }
 
     private val bgPaint = Paint().apply {
         color = context.getColor(R.color.chart_bg)
@@ -98,6 +101,11 @@ class MetricsChartView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun setUnitMode(mode: UnitMode) {
+        unitMode = mode
+        invalidate()
+    }
+
     fun addDataPoint(value: Float) {
         data.add(value.coerceIn(0f, maxValue))
         while (data.size > maxDataPoints) {
@@ -134,7 +142,7 @@ class MetricsChartView @JvmOverloads constructor(
         for (pct in listOf(0.25f, 0.50f, 0.75f)) {
             val y = topPadding + chartHeight * (1f - pct)
             canvas.drawLine(leftPadding, y, w - padding, y, gridPaint)
-            val labelText = "${(maxValue * pct).toInt()}%"
+            val labelText = formatGridLabel(maxValue * pct)
             canvas.drawText(labelText, 4f, y + 8f, gridLabelPaint)
         }
 
@@ -199,11 +207,31 @@ class MetricsChartView @JvmOverloads constructor(
 
         // Current value text
         val currentValue = data.last()
-        val valueStr = if (maxValue > 100) "${currentValue.toInt()}" else String.format("%.1f%%", currentValue)
+        val valueStr = formatValue(currentValue)
         canvas.drawText(valueStr, w - padding - valuePaint.measureText(valueStr), topPadding + 32f, valuePaint)
 
         if (label.isNotEmpty()) {
             canvas.drawText(label, w - padding - labelPaint.measureText(label), topPadding + 56f, labelPaint)
+        }
+    }
+
+    private fun formatGridLabel(value: Float): String {
+        return when (unitMode) {
+            UnitMode.PERCENT -> "${value.toInt()}%"
+            UnitMode.MEGABYTES -> {
+                if (value >= 1024f) String.format("%.1fG", value / 1024f)
+                else "${value.toInt()}M"
+            }
+        }
+    }
+
+    private fun formatValue(value: Float): String {
+        return when (unitMode) {
+            UnitMode.PERCENT -> String.format("%.1f%%", value)
+            UnitMode.MEGABYTES -> {
+                if (value >= 1024f) String.format("%.1f GB", value / 1024f)
+                else String.format("%.0f MB", value)
+            }
         }
     }
 }

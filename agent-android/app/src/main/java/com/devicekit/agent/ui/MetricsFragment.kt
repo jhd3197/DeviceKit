@@ -55,7 +55,8 @@ class MetricsFragment : Fragment() {
         cpuChart.setLabel("CPU %")
 
         ramChart.setColor(requireContext().getColor(R.color.chart_ram))
-        ramChart.setLabel("RAM GB")
+        ramChart.setUnitMode(MetricsChartView.UnitMode.MEGABYTES)
+        ramChart.setLabel("RAM")
 
         // Initialize RAM chart max from first available metric
         val latest = DeviceState.latestMetrics

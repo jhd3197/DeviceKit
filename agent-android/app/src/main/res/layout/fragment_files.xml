@@ -5,15 +5,17 @@
     android:background="@color/bg_primary"
     android:orientation="vertical">
 
-    <!-- Breadcrumb / path bar -->
+    <!-- Breadcrumb / path bar (hidden at storage picker root) -->
     <LinearLayout
+        android:id="@+id/pathBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@color/bg_card"
         android:paddingVertical="10dp"
-        android:paddingHorizontal="12dp">
+        android:paddingHorizontal="12dp"
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/btnUp"
@@ -54,7 +56,7 @@
             android:layout_marginStart="8dp" />
     </LinearLayout>
 
-    <!-- Storage info bar -->
+    <!-- Storage info bar (hidden at storage picker root) -->
     <LinearLayout
         android:id="@+id/storageBar"
         android:layout_width="match_parent"
@@ -62,7 +64,8 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp">
+        android:paddingVertical="8dp"
+        android:visibility="gone">
 
         <TextView
             android:id="@+id/storageInfo"
@@ -80,6 +83,174 @@
             android:textColor="@color/text_muted"
             android:textSize="11sp"
             android:text="" />
+    </LinearLayout>
+
+    <!-- Permission prompt (shown when MANAGE_EXTERNAL_STORAGE not granted) -->
+    <LinearLayout
+        android:id="@+id/permissionPrompt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Storage Permission Required"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Grant All Files Access to browse files on this device."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/btnGrantPermission"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:paddingHorizontal="24dp"
+            android:text="Grant Permission"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/button_primary"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <!-- Storage picker (root view) -->
+    <LinearLayout
+        android:id="@+id/storagePicker"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Storage"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Internal Storage Card -->
+        <LinearLayout
+            android:id="@+id/cardInternalStorage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="8dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:text="\uD83D\uDCF1"
+                android:textSize="24sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Internal Storage"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/internalStorageInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="\u203A"
+                android:textColor="@color/text_muted"
+                android:textSize="24sp" />
+        </LinearLayout>
+
+        <!-- SD Card (visible only if detected) -->
+        <LinearLayout
+            android:id="@+id/cardSdCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/card_background"
+            android:padding="16dp"
+            android:layout_marginBottom="8dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:text="\uD83D\uDCBE"
+                android:textSize="24sp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SD Card"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/sdCardInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="\u203A"
+                android:textColor="@color/text_muted"
+                android:textSize="24sp" />
+        </LinearLayout>
+
     </LinearLayout>
 
     <!-- Loading indicator -->

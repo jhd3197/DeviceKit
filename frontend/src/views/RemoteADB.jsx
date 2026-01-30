@@ -8,6 +8,8 @@ import {
   Folder,
   FileText,
   UploadCloud,
+  Search,
+  Download,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -22,6 +24,10 @@ export default function RemoteADB() {
   const [activeDevice, setActiveDevice] = useState(null)
   const [files, setFiles] = useState([])
   const [filePath, setFilePath] = useState('/sdcard')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
   const shellRef = useRef(null)
 
   const fetchDevices = useCallback(async () => {
@@ -45,6 +51,39 @@ export default function RemoteADB() {
       // silent
     }
   }, [activeDevice, filePath])
+
+  const handleSearch = useCallback(async () => {
+    if (!activeDevice || !searchQuery.trim()) {
+      setSearchResults(null)
+      return
+    }
+    try {
+      const res = await api.searchFiles(activeDevice.device_id, searchQuery.trim(), filePath)
+      setSearchResults(res.results || [])
+    } catch {
+      setSearchResults([])
+    }
+  }, [activeDevice, searchQuery, filePath])
+
+  const handleUpload = useCallback(async (file) => {
+    if (!activeDevice || !file) return
+    setUploading(true)
+    try {
+      const remotePath = `${filePath}/${file.name}`.replace(/\/+/g, '/')
+      await api.uploadFile(activeDevice.device_id, file, remotePath)
+      fetchFiles()
+    } catch {
+      // silent
+    } finally {
+      setUploading(false)
+    }
+  }, [activeDevice, filePath, fetchFiles])
+
+  const handleDownload = useCallback((path) => {
+    if (!activeDevice) return
+    const url = api.downloadFileUrl(activeDevice.device_id, path)
+    window.open(url, '_blank')
+  }, [activeDevice])
 
   useEffect(() => {
     fetchDevices()
@@ -194,54 +233,139 @@ export default function RemoteADB() {
             <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
               Device Explorer
             </h3>
-            <UploadCloud className="w-3.5 h-3.5 text-zinc-500 hover:text-emerald-500 cursor-pointer" />
+            <div className="flex items-center gap-2">
+              <UploadCloud
+                className={`w-3.5 h-3.5 cursor-pointer ${uploading ? 'text-yellow-500 animate-pulse' : 'text-zinc-500 hover:text-emerald-500'}`}
+                onClick={() => fileInputRef.current?.click()}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleUpload(file)
+                  e.target.value = ''
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Search input */}
+          <div className="px-4 pt-3 pb-2 border-b border-main bg-zinc-950">
+            <div className="flex items-center gap-2 bg-zinc-900 border border-main rounded px-2 py-1.5">
+              <Search className="w-3 h-3 text-zinc-500 shrink-0" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  if (!e.target.value.trim()) setSearchResults(null)
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Search files..."
+                className="bg-transparent border-none outline-none flex-1 text-xs text-zinc-300 placeholder-zinc-600"
+              />
+            </div>
           </div>
 
           {/* File tree */}
           <div className="flex-1 overflow-y-auto p-4">
             <div className="space-y-1">
-              {filePath !== '/' && (
-                <div
-                  onClick={() => {
-                    const parent = filePath.split('/').slice(0, -1).join('/') || '/'
-                    setFilePath(parent)
-                  }}
-                  className="flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group"
-                >
-                  <Folder className="w-4 h-4 text-zinc-500" />
-                  <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors italic">
-                    ../
-                  </span>
-                </div>
-              )}
-              {files.map((entry) => (
-                <div
-                  key={entry.name}
-                  onClick={() => entry.is_dir && setFilePath(entry.path)}
-                  className={`flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group ${
-                    !entry.is_dir ? 'pl-6' : ''
-                  }`}
-                >
-                  {entry.is_dir ? (
-                    <Folder className="w-4 h-4 text-zinc-500" />
-                  ) : (
-                    <FileText className="w-4 h-4 text-emerald-900" />
-                  )}
-                  <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors italic">
-                    {entry.name}
-                    {entry.is_dir ? '/' : ''}
-                  </span>
-                  {entry.size && (
-                    <span className="ml-auto text-[9px] mono text-zinc-700">
-                      {formatSize(entry.size)}
+              {searchResults !== null ? (
+                <>
+                  <p className="text-[10px] text-zinc-600 mb-2">
+                    {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
+                    <span
+                      className="ml-2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
+                      onClick={() => { setSearchResults(null); setSearchQuery('') }}
+                    >
+                      Clear
                     </span>
+                  </p>
+                  {searchResults.map((entry) => (
+                    <div
+                      key={entry.path}
+                      onClick={() => {
+                        if (entry.is_dir) {
+                          setFilePath(entry.path)
+                          setSearchResults(null)
+                          setSearchQuery('')
+                        } else {
+                          handleDownload(entry.path)
+                        }
+                      }}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group"
+                    >
+                      {entry.is_dir ? (
+                        <Folder className="w-4 h-4 text-zinc-500" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-emerald-900" />
+                      )}
+                      <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors truncate">
+                        {entry.path}
+                      </span>
+                      {!entry.is_dir && (
+                        <Download className="w-3 h-3 text-zinc-600 group-hover:text-emerald-500 ml-auto shrink-0" />
+                      )}
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {filePath !== '/' && (
+                    <div
+                      onClick={() => {
+                        const parent = filePath.split('/').slice(0, -1).join('/') || '/'
+                        setFilePath(parent)
+                      }}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group"
+                    >
+                      <Folder className="w-4 h-4 text-zinc-500" />
+                      <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors italic">
+                        ../
+                      </span>
+                    </div>
                   )}
-                </div>
-              ))}
-              {files.length === 0 && (
-                <p className="text-xs text-zinc-700 p-2">
-                  {activeDevice ? 'No files found' : 'Connect a device to browse files'}
-                </p>
+                  {files.map((entry) => (
+                    <div
+                      key={entry.name}
+                      onClick={() => {
+                        if (entry.is_dir) {
+                          setFilePath(entry.path)
+                        } else {
+                          handleDownload(entry.path)
+                        }
+                      }}
+                      className={`flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group ${
+                        !entry.is_dir ? 'pl-6' : ''
+                      }`}
+                    >
+                      {entry.is_dir ? (
+                        <Folder className="w-4 h-4 text-zinc-500" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-emerald-900" />
+                      )}
+                      <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors italic">
+                        {entry.name}
+                        {entry.is_dir ? '/' : ''}
+                      </span>
+                      {!entry.is_dir && entry.size && (
+                        <span className="ml-auto text-[9px] mono text-zinc-700">
+                          {formatSize(entry.size)}
+                        </span>
+                      )}
+                      {!entry.is_dir && (
+                        <Download className="w-3 h-3 text-zinc-600 group-hover:text-emerald-500 shrink-0" />
+                      )}
+                    </div>
+                  ))}
+                  {files.length === 0 && (
+                    <p className="text-xs text-zinc-700 p-2">
+                      {activeDevice ? 'No files found' : 'Connect a device to browse files'}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>

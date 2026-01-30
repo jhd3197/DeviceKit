@@ -19,10 +19,12 @@ class FileRoutes(private val context: Context) : RouteHandler {
         return when {
             method == NanoHTTPD.Method.GET && uri == "/files/list" -> handleList(session)
             method == NanoHTTPD.Method.GET && uri == "/files/read" -> handleRead(session)
+            method == NanoHTTPD.Method.GET && uri == "/files/search" -> handleSearch(session)
             method == NanoHTTPD.Method.POST && uri == "/files/write" -> handleWrite(session, bodyParams)
             method == NanoHTTPD.Method.POST && uri == "/files/mkdir" -> handleMkdir(session, bodyParams)
             method == NanoHTTPD.Method.POST && uri == "/files/delete" -> handleDelete(session, bodyParams)
             method == NanoHTTPD.Method.POST && uri == "/files/rename" -> handleRename(session, bodyParams)
+            method == NanoHTTPD.Method.POST && uri == "/files/upload" -> handleUpload(session, bodyParams)
             else -> null
         }
     }
@@ -141,6 +143,76 @@ class FileRoutes(private val context: Context) : RouteHandler {
             put("from", from)
             put("to", to)
         })
+    }
+
+    private fun handleSearch(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
+        val query = session.parms["query"]
+            ?: return errorResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "query required")
+        val rootPath = session.parms["path"] ?: "/sdcard"
+        val limit = (session.parms["limit"] ?: "50").toIntOrNull() ?: 50
+        val maxDepth = 10
+
+        val root = File(rootPath)
+        if (!root.exists() || !root.isDirectory) {
+            return errorResponse(NanoHTTPD.Response.Status.NOT_FOUND, "Directory not found: $rootPath")
+        }
+
+        val queryLower = query.lowercase()
+        val results = JSONArray()
+
+        fun walk(dir: File, depth: Int) {
+            if (depth > maxDepth || results.length() >= limit) return
+            val children = dir.listFiles() ?: return
+            for (f in children) {
+                if (results.length() >= limit) return
+                if (f.name.lowercase().contains(queryLower)) {
+                    results.put(JSONObject().apply {
+                        put("name", f.name)
+                        put("path", f.absolutePath)
+                        put("is_dir", f.isDirectory)
+                        put("size", if (f.isFile) f.length() else 0)
+                        put("modified", f.lastModified())
+                    })
+                }
+                if (f.isDirectory) {
+                    walk(f, depth + 1)
+                }
+            }
+        }
+
+        walk(root, 0)
+
+        return jsonResponse(json = JSONObject().apply {
+            put("query", query)
+            put("root", rootPath)
+            put("results", results)
+            put("count", results.length())
+            put("limit", limit)
+        })
+    }
+
+    private fun handleUpload(session: NanoHTTPD.IHTTPSession, bodyParams: Map<String, String>): NanoHTTPD.Response {
+        val targetPath = session.parms["path"]
+            ?: return errorResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "path query parameter required")
+
+        // NanoHTTPD stores uploaded file content in a temp file, path available in bodyParams
+        val tempFilePath = bodyParams["file"]
+            ?: return errorResponse(NanoHTTPD.Response.Status.BAD_REQUEST, "multipart 'file' field required")
+
+        return try {
+            val tempFile = File(tempFilePath)
+            val targetFile = File(targetPath)
+            targetFile.parentFile?.mkdirs()
+            tempFile.copyTo(targetFile, overwrite = true)
+            tempFile.delete()
+            jsonResponse(json = JSONObject().apply {
+                put("success", true)
+                put("path", targetFile.absolutePath)
+                put("size", targetFile.length())
+            })
+        } catch (e: Exception) {
+            errorResponse(message = "Upload failed: ${e.message}")
+        }
     }
 
     private fun guessMimeType(name: String): String {

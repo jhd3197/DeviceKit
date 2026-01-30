@@ -1,7 +1,8 @@
 """Connection management: ADB discovery, port forwarding, HTTP session."""
 
+import os
 import requests
-from typing import Optional
+from typing import Callable, Optional
 from . import adb
 from .exceptions import DeviceNotFoundError, ConnectionError, AgentNotRunningError
 
@@ -51,6 +52,48 @@ class Connection:
         resp.raise_for_status()
         return resp.content
 
+    def get_bytes_streamed(self, path: str, params: Optional[dict] = None,
+                           timeout: Optional[int] = None,
+                           progress_callback: Optional[Callable[[int, int], None]] = None) -> bytes:
+        """Download bytes with optional progress reporting."""
+        url = f"{self.base_url}{path}"
+        resp = self.session.get(
+            url, params=params, timeout=timeout or self._timeout, stream=True
+        )
+        resp.raise_for_status()
+        total = int(resp.headers.get("Content-Length", 0))
+        chunks = []
+        downloaded = 0
+        for chunk in resp.iter_content(chunk_size=8192):
+            chunks.append(chunk)
+            downloaded += len(chunk)
+            if progress_callback:
+                progress_callback(downloaded, total)
+        return b"".join(chunks)
+
+    def post_file(self, path: str, file_path: str,
+                  params: Optional[dict] = None,
+                  progress_callback: Optional[Callable[[int, int], None]] = None,
+                  timeout: Optional[int] = None) -> requests.Response:
+        """Upload a file via multipart POST with optional progress reporting."""
+        url = f"{self.base_url}{path}"
+        file_size = os.path.getsize(file_path)
+
+        if progress_callback:
+            reader = _ProgressReader(file_path, progress_callback, file_size)
+            # Use requests-toolbelt-style monitored upload
+            files = {"file": (os.path.basename(file_path), reader, "application/octet-stream")}
+        else:
+            files = {"file": (os.path.basename(file_path), open(file_path, "rb"), "application/octet-stream")}
+
+        # Don't send Content-Type: application/json for multipart
+        headers = {k: v for k, v in self.session.headers.items() if k.lower() != "content-type"}
+        resp = self.session.post(
+            url, files=files, params=params, timeout=timeout or 120, headers=headers
+        )
+        resp.raise_for_status()
+        return resp
+
     def ping(self) -> bool:
         try:
             data = self.get_json("/ping", timeout=3)
@@ -83,6 +126,34 @@ def connect_usb(serial: Optional[str] = None, local_port: int = AGENT_PORT) -> C
         )
 
     return conn
+
+
+class _ProgressReader:
+    """File-like wrapper that reports read progress via callback."""
+
+    def __init__(self, file_path: str, callback: Callable[[int, int], None], total: int):
+        self._file = open(file_path, "rb")
+        self._callback = callback
+        self._total = total
+        self._read = 0
+
+    def read(self, size=-1):
+        data = self._file.read(size)
+        if data:
+            self._read += len(data)
+            self._callback(self._read, self._total)
+        return data
+
+    def __len__(self):
+        return self._total
+
+    def seek(self, offset, whence=0):
+        self._file.seek(offset, whence)
+        if whence == 0:
+            self._read = offset
+
+    def tell(self):
+        return self._file.tell()
 
 
 def connect_wifi(host: str, port: int = AGENT_PORT) -> Connection:

@@ -86,6 +86,50 @@ def cmd_metrics(args):
     print(f"Network: {m.network_type} rx:{m.network_rx_rate} tx:{m.network_tx_rate} B/s")
 
 
+def cmd_files(args):
+    from . import connect, connect_wifi
+    d = connect_wifi(args.wifi) if args.wifi else connect(serial=args.serial)
+    sub = args.files_command
+
+    if sub == "list":
+        path = args.path or "/sdcard"
+        entries = d.files.list(path)
+        for f in entries:
+            kind = "D" if f.is_dir else "F"
+            size = f"{f.size:>10}" if not f.is_dir else "         -"
+            print(f"  [{kind}] {size}  {f.name}")
+
+    elif sub == "search":
+        result = d.files.search(args.query, path=args.path or "/sdcard", limit=args.limit)
+        for item in result.get("results", []):
+            kind = "D" if item["is_dir"] else "F"
+            print(f"  [{kind}] {item['path']}")
+        print(f"  ({result.get('count', 0)} results)")
+
+    elif sub == "upload":
+        import os
+        size = os.path.getsize(args.local)
+
+        def progress(sent, total):
+            pct = int(sent / total * 100) if total else 0
+            print(f"\r  Uploading... {pct}%", end="", flush=True)
+
+        result = d.files.upload(args.local, args.remote, progress_callback=progress)
+        print(f"\n  Uploaded to {result.get('path')} ({result.get('size')} bytes)")
+
+    elif sub == "pull":
+        def progress(downloaded, total):
+            if total:
+                pct = int(downloaded / total * 100)
+                print(f"\r  Downloading... {pct}%", end="", flush=True)
+
+        d.files.pull(args.remote, args.local, progress_callback=progress)
+        print(f"\n  Saved to {args.local}")
+
+    else:
+        print("Unknown files subcommand. Use: list, search, upload, pull")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="droidlink",
@@ -113,6 +157,26 @@ def main():
     sub.add_parser("notifications", help="List recent notifications")
     sub.add_parser("metrics", help="Show device metrics")
 
+    # Files command group
+    files_parser = sub.add_parser("files", help="File operations")
+    files_sub = files_parser.add_subparsers(dest="files_command")
+
+    fs_list = files_sub.add_parser("list", help="List files in directory")
+    fs_list.add_argument("-p", "--path", default="/sdcard", help="Directory path")
+
+    fs_search = files_sub.add_parser("search", help="Search files by name")
+    fs_search.add_argument("query", help="Search query (substring match)")
+    fs_search.add_argument("-p", "--path", default="/sdcard", help="Root directory")
+    fs_search.add_argument("-l", "--limit", type=int, default=50, help="Max results")
+
+    fs_upload = files_sub.add_parser("upload", help="Upload file to device")
+    fs_upload.add_argument("local", help="Local file path")
+    fs_upload.add_argument("remote", help="Remote device path")
+
+    fs_pull = files_sub.add_parser("pull", help="Pull file from device")
+    fs_pull.add_argument("remote", help="Remote device path")
+    fs_pull.add_argument("local", help="Local destination path")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -128,6 +192,7 @@ def main():
         "apps": cmd_apps,
         "notifications": cmd_notifications,
         "metrics": cmd_metrics,
+        "files": cmd_files,
     }
 
     handler = handlers.get(args.command)
