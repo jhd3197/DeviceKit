@@ -219,34 +219,44 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 
 ---
 
-## Upcoming Phases
-
-### Phase 17: Natural Language Automation Builder
+### Phase 17: Natural Language Automation Builder ✅
 **Goal**: Bridge the Prompture AI layer and the automation engine so users can describe automations in plain English and get executable step sequences. Add self-healing capabilities to automation steps.
 
-- [ ] `POST /automations/generate` endpoint: accepts `{ prompt, device_id }`, returns generated automation steps via Prompture conversation with tool definitions matching automation step types
-- [ ] Prompture system prompt with full automation step schema (tap, swipe, type, press, shell, open_app, file_op, wait, assert) so LLM generates valid steps
-- [ ] Frontend: "Generate with AI" button in AutomationEditor — text area for natural language description, preview generated steps before saving
-- [ ] Step refinement: user can select a generated step and ask AI to modify it ("make this wait longer", "use a different selector")
-- [ ] Self-healing automation steps: when a tap/UI step fails, capture accessibility tree + screenshot, ask Prompture to re-locate the target element and retry
-- [ ] `AccessibilityTreeMixin`: new backend mixin that fetches UI hierarchy XML from agent `/ui/dump` endpoint, parses into structured context for LLM
-- [ ] Accessibility context injection: autonomous agent loop sends UI hierarchy alongside screenshots for better element targeting
-- [ ] Frontend: "Self-heal" toggle per automation (enabled by default), retry count config, heal log in run detail view
-- [ ] `POST /automations/:id/explain` endpoint: AI summarizes what an automation does in plain English (reverse of generate)
+- [x] `NLAutomationMixin`: AI-powered generate, refine, explain, UI hierarchy fetch, and self-heal methods using Prompture `Conversation` with `UsageSession`
+- [x] `POST /automations/generate` endpoint: accepts `{ description, device_id }`, returns generated automation steps with explanation via Prompture
+- [x] Prompture system prompt with full automation step schema (all 14 step types with config schemas) so LLM generates valid steps
+- [x] `POST /automations/refine-step` endpoint: modify a single step with natural language instruction
+- [x] `GET /automations/<id>/explain` endpoint: AI summarizes what an automation does in plain English
+- [x] `GET /devices/<id>/ui-hierarchy` endpoint: fetch accessibility tree from device via agent HTTP or uiautomator2 fallback
+- [x] Self-healing automation steps: when a UI-targeting step fails (`tap_by_text`, `tap_by_resource_id`, `wait_for_element`, `assert_element`), captures UI hierarchy + error context, asks Prompture to re-locate the target element and retries
+- [x] `self_heal` flag on `execute_automation()` and `POST /automations/<id>/run` body, propagated through run record to thread
+- [x] Heal result tracking in step results: `healed`, `original_step`, `healed_step`, `heal_reasoning` fields
+- [x] Frontend AutomationEditor: collapsible "Generate with AI" panel with NL textarea, optional device context selector, preview steps with Accept All / Replace All / per-step accept/reject
+- [x] Frontend per-step refinement: inline "Refine with AI" wand icon on each step, text input for instruction, updates step in place
+- [x] Frontend Automations: "Enable self-healing" checkbox toggle in Run dialog with HeartPulse icon and tooltip
+- [x] Frontend Automations: Lightbulb "Explain" button per automation card, modal with AI-generated explanation
+- [x] Frontend AutomationRunDetail: amber "Self-healed" badge with HeartPulse icon, reasoning text, original vs healed config diff; red "Heal failed" badge for unsuccessful attempts
+- [x] Frontend API client: `generateSteps`, `refineStep`, `explainAutomation`, `getUiHierarchy` methods + updated `runAutomation` with `selfHeal` param
 
-### Phase 18: Real-Time Device Streaming
+### Phase 18: Real-Time Device Streaming ✅
 **Goal**: Replace screenshot polling with live video streaming for a true remote desktop experience. Enable session recording and playback.
 
-- [ ] Backend WebSocket proxy: `/devices/<id>/stream/ws` — bridges frontend WebSocket to agent MJPEG `/stream` endpoint, transcodes frames
-- [ ] Frontend: replace `<img>` screenshot polling in NodeDetail with `<canvas>` WebSocket receiver rendering at 15-30fps
-- [ ] Adaptive quality: auto-adjust resolution/fps based on network bandwidth (low/medium/high presets)
-- [ ] Touch overlay: render tap/swipe indicators on the stream canvas in real-time (ghost fingers)
-- [ ] Session recording: `POST /devices/<id>/sessions/record` starts capturing frames + input events + timestamps to storage
-- [ ] Session playback: `GET /devices/<id>/sessions/:id/play` returns recorded session as seekable video with event timeline overlay
-- [ ] Frontend Sessions panel: list recorded sessions per device, play/download/delete, timeline scrubber with action markers
-- [ ] Multi-viewer support: multiple frontend clients can watch the same device stream simultaneously
-- [ ] Latency indicator: show round-trip latency (ms) on the stream overlay
-- [ ] Fallback: graceful degradation to 1s screenshot polling when WebSocket is unavailable (existing behavior)
+- [x] `StreamingMixin`: MJPEG stream proxy (`/devices/<id>/stream`) bridges frontend to agent `/screen/stream`, viewer counting with thread-safe lock
+- [x] Frontend `StreamCanvas` component: `<canvas>` rendering via `useMjpegStream` hook, replaces `<img>` screenshot polling in NodeDetail, 15-30fps via `fetch` + `ReadableStream`
+- [x] Adaptive quality: three presets (low 5fps/30q, medium 15fps/50q, high 30fps/80q) selectable in NodeDetail, plus stream on/off toggle
+- [x] Touch overlay: SVG ripple animation on tap/click with `animate-ping`, rendered on canvas overlay layer
+- [x] Session recording: `POST /devices/<id>/sessions/record` + `POST .../stop`, background capture thread saves JPEG frames to temp directory, event recording via `POST .../events`
+- [x] Session playback: frame-by-frame `<img>` playback with timeline scrubber (`<input type="range">`), event markers as dots on timeline, speed control (0.5x/1x/2x)
+- [x] Frontend Sessions panel: collapsible panel listing recorded sessions per device with frame count, duration, fps, event count; click to play
+- [x] Multi-viewer support: `_stream_viewers` counter tracks concurrent connections, `stream_viewer` SSE event broadcasts viewer count, `<Users>` badge shown when >1 viewer
+- [x] Latency indicator: color-coded (green <100ms, yellow <300ms, red >300ms) latency + fps display in top-right overlay on active stream
+- [x] Fallback: `StreamCanvas` auto-detects stream failure, degrades to 1s `<img>` screenshot polling with amber "POLLING" badge; retries stream periodically
+- [x] Auth: MJPEG stream endpoint supports `api_key` query param fallback (streams can't send custom headers)
+- [x] Keyboard shortcuts and input gestures updated: removed manual `setScreenTs` refresh (stream is live), coordinate mapping works with canvas element
+
+---
+
+## Upcoming Phases
 
 ### Phase 19: Visual Regression Testing
 **Goal**: Add screenshot-based assertions to automations so tests can verify what they see, not just what they do. Use AI to distinguish meaningful UI changes from noise.

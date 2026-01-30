@@ -19,6 +19,7 @@ from devicekit.mixins.nl_automation import NLAutomationMixin
 from devicekit.mixins.fleet import FleetMixin
 from devicekit.mixins.device_lock import DeviceLockMixin
 from devicekit.mixins.auth import AuthMixin
+from devicekit.mixins.streaming import StreamingMixin
 
 
 class Client(
@@ -33,6 +34,7 @@ class Client(
     PromptureAgentMixin,
     FleetMixin,
     DeviceLockMixin,
+    StreamingMixin,
     ApiAppMixin,
     QueueMixin,
     AlertMixin,

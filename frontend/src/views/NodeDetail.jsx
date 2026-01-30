@@ -31,11 +31,16 @@ import {
   Trash2,
   ChevronDown,
   Cpu,
+  Video,
+  Pause,
+  SkipForward,
+  Users,
+  Settings2,
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
+import StreamCanvas from '../components/StreamCanvas'
 
 const REFRESH_INTERVAL = 30000
-const SCREEN_POLL_MS = 1000
 
 export default function NodeDetail() {
   const { id } = useParams()
@@ -51,10 +56,12 @@ export default function NodeDetail() {
   const shellRef = useRef(null)
   const inputRef = useRef(null)
 
-  // Screen mirror state
-  const [screenTs, setScreenTs] = useState(Date.now())
+  // Streaming state
+  const [streamQuality, setStreamQuality] = useState('medium')
+  const [streamEnabled, setStreamEnabled] = useState(true)
   const [screenLoaded, setScreenLoaded] = useState(false)
-  const imgRef = useRef(null)
+  const [streamViewers, setStreamViewers] = useState(0)
+  const canvasRef = useRef(null)
 
   // Drag/swipe gesture state
   const dragRef = useRef({ active: false, startX: 0, startY: 0, startTime: 0 })
@@ -79,6 +86,17 @@ export default function NodeDetail() {
   const [showConversation, setShowConversation] = useState(false)
   const [showModelSelector, setShowModelSelector] = useState(false)
   const [modelInput, setModelInput] = useState('')
+
+  // Stream recording/playback state
+  const [streamRecording, setStreamRecording] = useState(false)
+  const [streamRecordingSessionId, setStreamRecordingSessionId] = useState(null)
+  const [streamSessions, setStreamSessions] = useState([])
+  const [showStreamSessions, setShowStreamSessions] = useState(false)
+  const [playbackSession, setPlaybackSession] = useState(null)
+  const [playbackFrame, setPlaybackFrame] = useState(0)
+  const [playbackPlaying, setPlaybackPlaying] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const playbackTimerRef = useRef(null)
 
   const deviceId = id || ''
 
@@ -152,15 +170,24 @@ export default function NodeDetail() {
           }))
         }
       },
+      onStreamViewer: (data) => {
+        if (data.device_id === deviceId) {
+          setStreamViewers(data.viewers || 0)
+        }
+      },
     })
     return () => es.close()
   }, [deviceId])
 
-  // Screen mirror polling
-  useEffect(() => {
+  // Fetch stream sessions
+  const fetchStreamSessions = useCallback(async () => {
     if (!deviceId) return
-    const sid = setInterval(() => setScreenTs(Date.now()), SCREEN_POLL_MS)
-    return () => clearInterval(sid)
+    try {
+      const res = await api.getStreamSessions(deviceId)
+      setStreamSessions(res.sessions || [])
+    } catch {
+      // silent
+    }
   }, [deviceId])
 
   useEffect(() => {
@@ -178,17 +205,16 @@ export default function NodeDetail() {
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
 
-      const refresh = () => setTimeout(() => setScreenTs(Date.now()), 300)
       switch (e.key) {
-        case 'h': e.preventDefault(); api.press(deviceId, 'home').then(refresh).catch(() => {}); break
-        case 'b': e.preventDefault(); api.press(deviceId, 'back').then(refresh).catch(() => {}); break
-        case 'r': e.preventDefault(); api.press(deviceId, 'recent').then(refresh).catch(() => {}); break
-        case 'm': e.preventDefault(); api.press(deviceId, 'menu').then(refresh).catch(() => {}); break
-        case 'Enter': e.preventDefault(); api.press(deviceId, 'enter').then(refresh).catch(() => {}); break
-        case 'ArrowUp': e.preventDefault(); api.swipe(deviceId, 'up').then(refresh).catch(() => {}); break
-        case 'ArrowDown': e.preventDefault(); api.swipe(deviceId, 'down').then(refresh).catch(() => {}); break
-        case 'ArrowLeft': e.preventDefault(); api.swipe(deviceId, 'left').then(refresh).catch(() => {}); break
-        case 'ArrowRight': e.preventDefault(); api.swipe(deviceId, 'right').then(refresh).catch(() => {}); break
+        case 'h': e.preventDefault(); api.press(deviceId, 'home').catch(() => {}); break
+        case 'b': e.preventDefault(); api.press(deviceId, 'back').catch(() => {}); break
+        case 'r': e.preventDefault(); api.press(deviceId, 'recent').catch(() => {}); break
+        case 'm': e.preventDefault(); api.press(deviceId, 'menu').catch(() => {}); break
+        case 'Enter': e.preventDefault(); api.press(deviceId, 'enter').catch(() => {}); break
+        case 'ArrowUp': e.preventDefault(); api.swipe(deviceId, 'up').catch(() => {}); break
+        case 'ArrowDown': e.preventDefault(); api.swipe(deviceId, 'down').catch(() => {}); break
+        case 'ArrowLeft': e.preventDefault(); api.swipe(deviceId, 'left').catch(() => {}); break
+        case 'ArrowRight': e.preventDefault(); api.swipe(deviceId, 'right').catch(() => {}); break
         default: break
       }
     }
@@ -209,13 +235,14 @@ export default function NodeDetail() {
     }
   }
 
-  // Map a mouse event to device coordinates; returns null if outside image area
+  // Map a mouse event to device coordinates; works with canvas or fallback img
   const mapToDevice = (e) => {
-    if (!imgRef.current || !device?.display) return null
-    const img = imgRef.current
-    const rect = img.getBoundingClientRect()
-    const natW = img.naturalWidth
-    const natH = img.naturalHeight
+    const el = e.currentTarget
+    if (!el || !device?.display) return null
+    const rect = el.getBoundingClientRect()
+    // For canvas, width/height are the canvas buffer dimensions; for img, naturalWidth/naturalHeight
+    const natW = el.width || el.naturalWidth
+    const natH = el.height || el.naturalHeight
     if (!natW || !natH) return null
 
     const containerW = rect.width
@@ -262,9 +289,9 @@ export default function NodeDetail() {
 
   const handleMouseMove = (e) => {
     if (!dragRef.current.active) return
-    const img = imgRef.current
-    if (!img) return
-    const rect = img.getBoundingClientRect()
+    const el = e.currentTarget
+    if (!el) return
+    const rect = el.getBoundingClientRect()
     const curPx = e.clientX - rect.left
     const curPy = e.clientY - rect.top
     const dx = curPx - dragRef.current.px
@@ -282,8 +309,8 @@ export default function NodeDetail() {
 
     if (!pt) return
     const { startX, startY } = dragRef.current
-    const img = imgRef.current
-    const rect = img.getBoundingClientRect()
+    const el = e.currentTarget
+    const rect = el.getBoundingClientRect()
     const pxDist = Math.sqrt(
       Math.pow(e.clientX - rect.left - dragRef.current.px, 2) +
       Math.pow(e.clientY - rect.top - dragRef.current.py, 2)
@@ -310,7 +337,6 @@ export default function NodeDetail() {
         }
         recordIfActive({ type: 'swipe', direction, duration })
       }
-      setTimeout(() => setScreenTs(Date.now()), 300)
     } catch {
       // silent
     }
@@ -327,18 +353,33 @@ export default function NodeDetail() {
     try {
       await api.press(deviceId, action)
       recordIfActive({ type: 'press', key: action })
-      setTimeout(() => setScreenTs(Date.now()), 300)
     } catch {
       // silent
     }
   }
 
   const handleScreenshotDownload = () => {
-    const url = api.screenshotUrl(deviceId)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${deviceId}-screenshot.png`
-    a.click()
+    // Try to capture from stream canvas first
+    const canvas = document.querySelector('canvas')
+    if (canvas && canvas.width > 0) {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${deviceId}-screenshot.png`
+          a.click()
+          URL.revokeObjectURL(url)
+        }
+      }, 'image/png')
+    } else {
+      // Fallback to server screenshot
+      const url = api.screenshotUrl(deviceId)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${deviceId}-screenshot.png`
+      a.click()
+    }
   }
 
   const handleAgentToggle = async () => {
@@ -418,6 +459,64 @@ export default function NodeDetail() {
       }
     }
   }
+
+  // Stream recording toggle
+  const handleStreamRecordToggle = async () => {
+    if (streamRecording && streamRecordingSessionId) {
+      try {
+        await api.stopStreamRecording(deviceId, streamRecordingSessionId)
+        setStreamRecording(false)
+        setStreamRecordingSessionId(null)
+        fetchStreamSessions()
+      } catch {
+        setStreamRecording(false)
+        setStreamRecordingSessionId(null)
+      }
+    } else {
+      try {
+        const preset = { low: { fps: 5, quality: 30 }, medium: { fps: 15, quality: 50 }, high: { fps: 30, quality: 80 } }[streamQuality] || { fps: 15, quality: 50 }
+        const res = await api.startStreamRecording(deviceId, preset)
+        setStreamRecordingSessionId(res.session_id)
+        setStreamRecording(true)
+      } catch {
+        // silent
+      }
+    }
+  }
+
+  // Playback controls
+  const startPlayback = async (session) => {
+    try {
+      const meta = await api.getStreamSession(deviceId, session.session_id)
+      setPlaybackSession(meta)
+      setPlaybackFrame(0)
+      setPlaybackPlaying(false)
+    } catch {
+      // silent
+    }
+  }
+
+  const togglePlayback = () => {
+    if (!playbackSession) return
+    setPlaybackPlaying(!playbackPlaying)
+  }
+
+  useEffect(() => {
+    if (!playbackPlaying || !playbackSession) return
+    const fps = playbackSession.fps || 10
+    const interval = 1000 / (fps * playbackSpeed)
+    const tid = setInterval(() => {
+      setPlaybackFrame((prev) => {
+        if (prev >= playbackSession.frame_count - 1) {
+          setPlaybackPlaying(false)
+          return prev
+        }
+        return prev + 1
+      })
+    }, interval)
+    playbackTimerRef.current = tid
+    return () => clearInterval(tid)
+  }, [playbackPlaying, playbackSession, playbackSpeed])
 
   if (!deviceId) {
     return (
@@ -516,22 +615,21 @@ export default function NodeDetail() {
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10">
                       <Smartphone className="w-16 h-16 text-zinc-800 opacity-20" />
                       <span className="text-[10px] mono text-zinc-600 mt-2">
-                        CONNECTING TO SCREEN...
+                        CONNECTING TO STREAM...
                       </span>
                     </div>
                   )}
-                  <img
-                    ref={imgRef}
-                    src={`${api.screenshotUrl(deviceId)}?t=${screenTs}`}
-                    alt="Device screen"
-                    className={`w-full h-full object-cover cursor-crosshair ${screenLoaded ? '' : 'invisible'}`}
+                  <StreamCanvas
+                    deviceId={deviceId}
+                    quality={streamQuality}
+                    enabled={streamEnabled}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseLeave}
-                    onError={() => setScreenLoaded(false)}
                     onLoad={() => setScreenLoaded(true)}
-                    draggable={false}
+                    showLatency={true}
+                    showTouchOverlay={true}
                   />
                   {swipeTrail && (
                     <svg className="absolute inset-0 w-full h-full pointer-events-none z-30">
@@ -544,12 +642,19 @@ export default function NodeDetail() {
                       <circle cx={swipeTrail.x2} cy={swipeTrail.y2} r="4" fill="white" />
                     </svg>
                   )}
+                  {/* Viewer count badge */}
+                  {streamViewers > 1 && (
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded px-2 py-1 z-20">
+                      <Users className="w-3 h-3 text-zinc-400" />
+                      <span className="text-[9px] mono text-zinc-300">{streamViewers}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right side buttons (swipe + screenshot) */}
                 <div className="flex flex-col gap-3 ml-1.5">
-                  <SideButton icon={ArrowUp} label="↑" shortcut="" onClick={() => { api.swipe(deviceId, 'up').catch(() => {}); setTimeout(() => setScreenTs(Date.now()), 400) }} />
-                  <SideButton icon={ArrowDown} label="↓" shortcut="" onClick={() => { api.swipe(deviceId, 'down').catch(() => {}); setTimeout(() => setScreenTs(Date.now()), 400) }} />
+                  <SideButton icon={ArrowUp} label="↑" shortcut="" onClick={() => api.swipe(deviceId, 'up').catch(() => {})} />
+                  <SideButton icon={ArrowDown} label="↓" shortcut="" onClick={() => api.swipe(deviceId, 'down').catch(() => {})} />
                   <div className="h-4" />
                   <SideButton icon={Camera} label="Save" shortcut="" onClick={handleScreenshotDownload} />
                 </div>
@@ -573,6 +678,169 @@ export default function NodeDetail() {
                   </button>
                 ))}
               </div>
+
+              {/* Stream quality selector */}
+              <div className="flex items-center gap-2 justify-center">
+                <Settings2 className="w-3 h-3 text-zinc-600" />
+                {['low', 'medium', 'high'].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setStreamQuality(q)}
+                    className={`text-[9px] px-2 py-0.5 rounded-full border transition-all ${
+                      streamQuality === q
+                        ? 'bg-emerald-950 border-emerald-800 text-emerald-400'
+                        : 'border-zinc-800 text-zinc-600 hover:text-zinc-400'
+                    }`}
+                  >
+                    {q.charAt(0).toUpperCase() + q.slice(1)}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setStreamEnabled(!streamEnabled)}
+                  className={`text-[9px] px-2 py-0.5 rounded-full border transition-all ${
+                    streamEnabled
+                      ? 'border-zinc-800 text-zinc-600 hover:text-zinc-400'
+                      : 'bg-amber-950 border-amber-800 text-amber-400'
+                  }`}
+                >
+                  {streamEnabled ? 'Stream ON' : 'Stream OFF'}
+                </button>
+              </div>
+
+              {/* Stream record button */}
+              <div className="flex items-center gap-2 justify-center">
+                <button
+                  onClick={handleStreamRecordToggle}
+                  className={`flex items-center gap-1.5 text-[9px] px-3 py-1 rounded-full border transition-all ${
+                    streamRecording
+                      ? 'bg-red-950 border-red-800 text-red-400 animate-pulse'
+                      : 'border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  <Video className="w-3 h-3" />
+                  {streamRecording ? 'Stop Stream Record' : 'Stream Record'}
+                </button>
+                <button
+                  onClick={() => { fetchStreamSessions(); setShowStreamSessions(!showStreamSessions) }}
+                  className="text-[9px] px-2 py-1 rounded-full border border-zinc-800 text-zinc-500 hover:text-zinc-300 transition-all"
+                >
+                  Sessions ({streamSessions.length})
+                </button>
+              </div>
+
+              {/* Stream sessions panel */}
+              {showStreamSessions && (
+                <div className="w-full bg-zinc-900/80 border border-zinc-800 rounded-lg p-3 space-y-2 max-h-60 overflow-y-auto">
+                  <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Recorded Sessions</p>
+                  {streamSessions.length === 0 ? (
+                    <p className="text-[9px] text-zinc-600 text-center py-2">No recordings yet</p>
+                  ) : streamSessions.map((s) => (
+                    <div
+                      key={s.session_id}
+                      className="flex items-center justify-between bg-zinc-800/50 rounded p-2 cursor-pointer hover:bg-zinc-800 transition-all"
+                      onClick={() => startPlayback(s)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Video className="w-3 h-3 text-zinc-500" />
+                        <div>
+                          <p className="text-[9px] text-zinc-300 mono">{s.frame_count} frames</p>
+                          <p className="text-[8px] text-zinc-600">
+                            {(s.duration_ms / 1000).toFixed(1)}s &middot; {s.fps}fps
+                            {s.event_count > 0 && ` \u00b7 ${s.event_count} events`}
+                          </p>
+                        </div>
+                      </div>
+                      <Play className="w-3 h-3 text-zinc-500" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Playback modal */}
+              {playbackSession && (
+                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[9px] font-bold text-zinc-400">Playback</p>
+                    <button
+                      onClick={() => { setPlaybackSession(null); setPlaybackPlaying(false); setPlaybackFrame(0) }}
+                      className="text-[9px] text-zinc-600 hover:text-zinc-300"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  {/* Playback canvas */}
+                  <div className="w-full aspect-[9/16] bg-black rounded overflow-hidden relative">
+                    <img
+                      src={api.getStreamFrameUrl(deviceId, playbackSession.session_id, playbackFrame)}
+                      alt={`Frame ${playbackFrame}`}
+                      className="w-full h-full object-contain"
+                    />
+                    {/* Event markers on timeline */}
+                    {playbackSession.events?.filter(
+                      (ev) => ev.frame_index === playbackFrame
+                    ).map((ev, i) => (
+                      <div
+                        key={i}
+                        className="absolute top-1 left-1 text-[8px] bg-emerald-900/80 text-emerald-300 rounded px-1"
+                      >
+                        {ev.type}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Timeline scrubber */}
+                  <div className="relative">
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(0, playbackSession.frame_count - 1)}
+                      value={playbackFrame}
+                      onChange={(e) => setPlaybackFrame(Number(e.target.value))}
+                      className="w-full h-1 appearance-none bg-zinc-800 rounded cursor-pointer"
+                    />
+                    {/* Event dots on timeline */}
+                    <div className="absolute top-0 left-0 right-0 h-1 pointer-events-none">
+                      {playbackSession.events?.map((ev, i) => {
+                        const pct = playbackSession.frame_count > 1
+                          ? (ev.frame_index / (playbackSession.frame_count - 1)) * 100
+                          : 0
+                        return (
+                          <div
+                            key={i}
+                            className="absolute w-1 h-1 rounded-full bg-emerald-400"
+                            style={{ left: `${pct}%`, top: 0 }}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {/* Controls */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <button onClick={togglePlayback} className="text-zinc-400 hover:text-white">
+                        {playbackPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                      </button>
+                      <span className="text-[9px] mono text-zinc-500">
+                        {playbackFrame + 1} / {playbackSession.frame_count}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[0.5, 1, 2].map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setPlaybackSpeed(s)}
+                          className={`text-[8px] px-1.5 py-0.5 rounded ${
+                            playbackSpeed === s
+                              ? 'bg-zinc-700 text-white'
+                              : 'text-zinc-600 hover:text-zinc-400'
+                          }`}
+                        >
+                          {s}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Keyboard hint */}
               <p className="text-[9px] text-zinc-600 text-center">

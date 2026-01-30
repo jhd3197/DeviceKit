@@ -265,6 +265,28 @@ export const api = {
   getAgentCommands: (deviceId) => request(`/agent/${deviceId}/commands`),
   getAgentLogs: (deviceId) => request(`/agent/${deviceId}/logs`),
 
+  // Streaming
+  streamUrl: (id, fps, quality) => {
+    const params = new URLSearchParams({ fps: String(fps), quality: String(quality) })
+    if (API_KEY) params.set('api_key', API_KEY)
+    return `${API}/devices/${id}/stream?${params}`
+  },
+  getStreamStatus: (id) => request(`/devices/${id}/stream/status`),
+
+  // Session recording (stream)
+  startStreamRecording: (id, data) =>
+    request(`/devices/${id}/sessions/record`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  stopStreamRecording: (id, sessionId) =>
+    request(`/devices/${id}/sessions/${sessionId}/stop`, { method: 'POST' }),
+  getStreamSessions: (id) => request(`/devices/${id}/sessions`),
+  getStreamSession: (id, sessionId) => request(`/devices/${id}/sessions/${sessionId}`),
+  getStreamFrameUrl: (id, sessionId, frameIndex) =>
+    `${API}/devices/${id}/sessions/${sessionId}/frames/${frameIndex}`,
+  recordStreamEvent: (id, sessionId, event) =>
+    request(`/devices/${id}/sessions/${sessionId}/events`, {
+      method: 'POST', body: JSON.stringify(event),
+    }),
+
   // AI Agent (Prompture)
   getConversationHistory: (deviceId) => request(`/devices/${deviceId}/conversation/history`),
   clearConversation: (deviceId) => request(`/devices/${deviceId}/conversation`, { method: 'DELETE' }),
@@ -311,6 +333,9 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('pipeline_build', (e) => {
     handlers.onPipelineBuild?.(JSON.parse(e.data))
+  })
+  es.addEventListener('stream_viewer', (e) => {
+    handlers.onStreamViewer?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()
