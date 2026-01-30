@@ -206,6 +206,29 @@ export const api = {
     }),
   getRegressionReport: (runId) => request(`/automations/runs/${runId}/regression-report`),
 
+  // Debug Bundles
+  generateDebugBundle: (deviceId, trigger = 'manual', context = {}) =>
+    request(`/devices/${deviceId}/debug-bundle`, {
+      method: 'POST',
+      body: JSON.stringify({ trigger, context }),
+    }),
+  listDebugBundles: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/debug-bundles${q ? `?${q}` : ''}`)
+  },
+  getDebugBundle: (id) => request(`/debug-bundles/${id}`),
+  downloadDebugBundleUrl: (id) => `${API}/debug-bundles/${id}/download`,
+  analyzeDebugBundle: (id) =>
+    request(`/debug-bundles/${id}/analyze`, { method: 'POST' }),
+  shareDebugBundle: (id, expiresHours = 24) =>
+    request(`/debug-bundles/${id}/share`, {
+      method: 'POST',
+      body: JSON.stringify({ expires_hours: expiresHours }),
+    }),
+  sharedBundleUrl: (token) => `${API}/debug-bundles/share/${token}`,
+  deleteDebugBundle: (id) =>
+    request(`/debug-bundles/${id}`, { method: 'DELETE' }),
+
   // Device interaction
   tap: (id, x, y) =>
     request(`/devices/${id}/tap`, {

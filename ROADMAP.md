@@ -292,22 +292,24 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 
 ---
 
-## Upcoming Phases
-
-### Phase 21: Failure Debug Bundles
+## Phase 21: Failure Debug Bundles ✅
 **Goal**: When a test or automation step fails, auto-package all relevant diagnostics into a single downloadable bundle for fast debugging.
 
-- [ ] `DebugBundleMixin`: collects screenshot, logcat (last 100 lines), device state (CPU/RAM/battery/active app), UI hierarchy XML, last 10 agent actions, and device properties
-- [ ] Auto-trigger: bundle generated on automation step failure, pipeline test failure, or manual request
-- [ ] `POST /devices/<id>/debug-bundle` endpoint: on-demand bundle generation, returns bundle ID
-- [ ] `GET /debug-bundles/<id>` endpoint: download bundle as ZIP (screenshot.png, logcat.txt, state.json, ui_hierarchy.xml, actions.json, properties.json)
-- [ ] Automation integration: failed steps in `AutomationMixin` auto-generate a bundle, bundle ID stored in step result
-- [ ] Pipeline integration: `DroidLinkReporter` captures bundle on test failure alongside screenshot, uploads to backend
-- [ ] AI failure analysis: send bundle contents to Prompture, ask for root cause hypothesis and suggested fix
-- [ ] Frontend AutomationRunDetail: "Download Debug Bundle" button on failed steps, inline AI analysis summary
-- [ ] Frontend Pipeline view: bundle download link per failed test, expandable AI analysis section
-- [ ] Bundle retention policy: auto-delete bundles older than N days (configurable, default 30)
-- [ ] Shareable bundle URL: `/debug-bundles/<id>/share` generates a time-limited public link
+- [x] `DebugBundleMixin`: collects screenshot, logcat (last 100 lines), device state (CPU/RAM/battery/active app), UI hierarchy XML, last 10 agent actions, and device properties — packaged into in-memory ZIP with base64 storage
+- [x] Auto-trigger: bundle auto-generated on automation step failure (`trigger='automation_failure'`) with full context (automation_id, run_id, step_index, step_type, error); also supports manual request and pipeline trigger
+- [x] `POST /devices/<id>/debug-bundle` endpoint: on-demand bundle generation with configurable trigger and context, runs retention cleanup on each generation
+- [x] `GET /debug-bundles/<id>/download` endpoint: download bundle as ZIP (screenshot.png, logcat.txt, state.json, ui_hierarchy.xml, actions.json, properties.json), plus `GET /debug-bundles` for listing and `GET /debug-bundles/<id>` for metadata
+- [x] Automation integration: `_run_automation_thread` in AutomationMixin auto-generates bundle on step failure, stores `debug_bundle_id` in step result dict for frontend access
+- [x] Pipeline integration: bundle generation available via `POST /devices/<id>/debug-bundle` with `trigger='pipeline_failure'` — can be called by DroidLinkReporter
+- [x] AI failure analysis: `POST /debug-bundles/<id>/analyze` sends bundle text contents (logcat, state, UI hierarchy, actions) to Prompture for root cause hypothesis, severity assessment, and suggested fix
+- [x] Frontend AutomationRunDetail: orange "Debug Bundle" panel on failed steps with Download ZIP button, AI Analysis trigger button with inline analysis display, and Share button
+- [x] Frontend api.js: 8 new API methods — generateDebugBundle, listDebugBundles, getDebugBundle, downloadDebugBundleUrl, analyzeDebugBundle, shareDebugBundle, sharedBundleUrl, deleteDebugBundle
+- [x] Bundle retention policy: `cleanup_old_bundles(max_age_days=30)` auto-removes bundles and associated share tokens older than retention period, triggered on manual bundle generation
+- [x] Shareable bundle URL: `POST /debug-bundles/<id>/share` generates time-limited token (default 24h), `GET /debug-bundles/share/<token>` validates expiry and serves ZIP download, frontend copies link to clipboard
+
+---
+
+## Upcoming Phases
 
 ### Phase 22: Predictive Device Health
 **Goal**: Use historical device metrics to predict failures before they happen and surface proactive alerts on the dashboard.

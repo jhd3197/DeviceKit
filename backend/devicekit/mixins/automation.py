@@ -324,6 +324,25 @@ class AutomationMixin:
                             result["failure_screenshot"] = base64.b64encode(screenshot_data).decode('ascii')
                     except Exception:
                         pass
+                    # Auto-generate debug bundle on failure
+                    try:
+                        bundle = self.generate_debug_bundle(
+                            device_id,
+                            trigger='automation_failure',
+                            context={
+                                'automation_id': run_record.get('automation_id'),
+                                'automation_name': run_record.get('automation_name'),
+                                'run_id': run_record.get('id'),
+                                'step_index': idx,
+                                'step_type': step.get('type', ''),
+                                'step_label': step.get('label', ''),
+                                'error': error_str,
+                            },
+                        )
+                        result["debug_bundle_id"] = bundle.get('id')
+                        logger.info(f"Auto-generated debug bundle {bundle.get('id')} for failed step {idx}")
+                    except Exception as bundle_err:
+                        logger.warning(f"Failed to generate debug bundle: {bundle_err}")
                     step_results.append(result)
                     # Mark remaining steps as skipped
                     for remaining in steps[idx + 1:]:

@@ -13,6 +13,10 @@ import {
   Image,
   Eye,
   FileBarChart,
+  Package,
+  BrainCircuit,
+  Share2,
+  Download,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -28,6 +32,8 @@ export default function AutomationRunDetail() {
   const [regressionReport, setRegressionReport] = useState(null)
   const [showRegressionReport, setShowRegressionReport] = useState(false)
   const [diffOverlay, setDiffOverlay] = useState(null) // { baselineUrl, currentB64, diffRegions, ssim, verdict }
+  const [bundleAnalyses, setBundleAnalyses] = useState({}) // bundle_id -> {loading, data, error}
+  const [shareLinks, setShareLinks] = useState({}) // bundle_id -> {token, url}
 
   const fetchRun = useCallback(async () => {
     try {
@@ -70,6 +76,25 @@ export default function AutomationRunDetail() {
     } catch (e) {
       console.error('Failed to cancel:', e)
     }
+  }
+
+  const handleAnalyzeBundle = async (bundleId) => {
+    setBundleAnalyses(prev => ({ ...prev, [bundleId]: { loading: true } }))
+    try {
+      const result = await api.analyzeDebugBundle(bundleId)
+      setBundleAnalyses(prev => ({ ...prev, [bundleId]: { loading: false, data: result } }))
+    } catch (e) {
+      setBundleAnalyses(prev => ({ ...prev, [bundleId]: { loading: false, error: e.message } }))
+    }
+  }
+
+  const handleShareBundle = async (bundleId) => {
+    try {
+      const result = await api.shareDebugBundle(bundleId)
+      const url = api.sharedBundleUrl(result.token)
+      setShareLinks(prev => ({ ...prev, [bundleId]: { token: result.token, url } }))
+      navigator.clipboard?.writeText(url)
+    } catch {}
   }
 
   if (loading) {
@@ -307,6 +332,69 @@ export default function AutomationRunDetail() {
                         className="w-6 h-auto rounded border border-red-500/30 cursor-pointer hover:border-red-400 transition-colors"
                         onClick={() => setScreenshotOverlay(api.getFailureScreenshotUrl(runId, idx))}
                       />
+                    </div>
+                  )}
+
+                  {/* Debug Bundle controls */}
+                  {sr.debug_bundle_id && (
+                    <div className="mt-2 ml-8 bg-orange-500/5 border border-orange-500/20 rounded p-3 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Package className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                        <span className="text-[10px] font-bold text-orange-400 uppercase">Debug Bundle</span>
+
+                        <a
+                          href={api.downloadDebugBundleUrl(sr.debug_bundle_id)}
+                          className="ml-auto flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white border border-main px-2 py-0.5 rounded transition-colors"
+                          download
+                        >
+                          <Download className="w-3 h-3" /> Download ZIP
+                        </a>
+
+                        <button
+                          onClick={() => handleAnalyzeBundle(sr.debug_bundle_id)}
+                          disabled={bundleAnalyses[sr.debug_bundle_id]?.loading}
+                          className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                        >
+                          <BrainCircuit className="w-3 h-3" />
+                          {bundleAnalyses[sr.debug_bundle_id]?.loading ? 'Analyzing...' : 'AI Analysis'}
+                        </button>
+
+                        <button
+                          onClick={() => handleShareBundle(sr.debug_bundle_id)}
+                          className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white border border-main px-2 py-0.5 rounded transition-colors"
+                        >
+                          <Share2 className="w-3 h-3" /> Share
+                        </button>
+                      </div>
+
+                      {/* Share link result */}
+                      {shareLinks[sr.debug_bundle_id] && (
+                        <div className="text-[10px] mono text-zinc-500 bg-black/30 rounded p-1.5 break-all">
+                          Link copied: {shareLinks[sr.debug_bundle_id].url}
+                        </div>
+                      )}
+
+                      {/* AI Analysis result */}
+                      {bundleAnalyses[sr.debug_bundle_id]?.loading && (
+                        <div className="flex items-center gap-2 text-[10px] text-blue-400">
+                          <Loader className="w-3 h-3 animate-spin" /> Running AI analysis on bundle contents...
+                        </div>
+                      )}
+                      {bundleAnalyses[sr.debug_bundle_id]?.data && (
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded p-2.5">
+                          <p className="text-[10px] font-bold text-blue-400 uppercase mb-1 flex items-center gap-1">
+                            <BrainCircuit className="w-3 h-3" /> AI Root Cause Analysis
+                          </p>
+                          <pre className="text-[10px] text-zinc-300 whitespace-pre-wrap font-mono leading-relaxed">
+                            {bundleAnalyses[sr.debug_bundle_id].data.analysis || JSON.stringify(bundleAnalyses[sr.debug_bundle_id].data, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                      {bundleAnalyses[sr.debug_bundle_id]?.error && (
+                        <div className="text-[10px] text-red-400">
+                          Analysis failed: {bundleAnalyses[sr.debug_bundle_id].error}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
