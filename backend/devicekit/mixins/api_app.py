@@ -53,7 +53,38 @@ class ApiAppMixin:
                             logger.warning(f"Could not connect to {device_id}: {e}")
             except Exception as e:
                 logger.warning(f"Device refresh failed: {e}")
+
             connected = client.get_devices()
+            adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
+
+            # Merge agent-registered devices that aren't already in the ADB list
+            now = time.time()
+            for agent_id, agent_data in _agent_device_states.items():
+                if agent_id in adb_ids:
+                    continue
+                info = agent_data.get('info', {})
+                state = agent_data.get('state', {})
+                metrics = state.get('metrics', {})
+                last_hb = agent_data.get('last_heartbeat', 0)
+                online = (now - last_hb) < 15 if last_hb else False
+                connected.append({
+                    'serial': agent_id,
+                    'device_id': agent_id,
+                    'model': info.get('model', 'Unknown'),
+                    'manufacturer': info.get('manufacturer', 'Unknown'),
+                    'brand': info.get('brand', ''),
+                    'android_version': info.get('android_version', ''),
+                    'sdk': info.get('sdk', 0),
+                    'online': online,
+                    'source': 'agent',
+                    'agent_version': info.get('agent_version', ''),
+                    'battery_level': metrics.get('battery_level'),
+                    'cpu_percent': metrics.get('cpu_percent'),
+                    'ram_used_mb': metrics.get('ram_used_mb'),
+                    'ram_total_mb': metrics.get('ram_total_mb'),
+                    'currentPackageName': state.get('window', {}).get('package'),
+                })
+
             return jsonify({'devices': connected, 'count': len(connected)})
 
         @app.route('/devices/<device_id>')
@@ -101,8 +132,23 @@ class ApiAppMixin:
         @app.route('/dashboard/stats')
         def dashboard_stats():
             connected = client.get_devices()
-            total = len(connected)
-            busy = sum(1 for d in connected if d and d.get('currentPackageName'))
+            # Include agent-registered devices in fleet count
+            now = time.time()
+            adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
+            agent_count = 0
+            agent_busy = 0
+            for agent_id, agent_data in _agent_device_states.items():
+                if agent_id in adb_ids:
+                    continue
+                last_hb = agent_data.get('last_heartbeat', 0)
+                if (now - last_hb) < 15:
+                    agent_count += 1
+                    state = agent_data.get('state', {})
+                    if state.get('window', {}).get('package'):
+                        agent_busy += 1
+
+            total = len(connected) + agent_count
+            busy = sum(1 for d in connected if d and d.get('currentPackageName')) + agent_busy
             utilization = round((busy / total * 100) if total > 0 else 0, 1)
             alerts = client.get_alerts(limit=100)
             critical = sum(1 for a in alerts if a['severity'] == 'critical')

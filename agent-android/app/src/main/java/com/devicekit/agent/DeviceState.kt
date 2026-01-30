@@ -151,7 +151,7 @@ object DeviceState {
         latestMetrics?.let { m ->
             appendLine("== Metrics ==")
             appendLine("  cpu: ${String.format("%.1f", m.cpuPercent)}%")
-            appendLine("  ram: ${m.ramUsedMb}/${m.ramTotalMb} MB")
+            appendLine("  ram: ${String.format("%.1f", m.ramUsedMb / 1024.0)}/${String.format("%.1f", m.ramTotalMb / 1024.0)} GB")
             appendLine("  battery: ${m.batteryLevel}% ${if (m.isCharging) "(charging)" else ""}")
             appendLine("  temp: ${m.batteryTemperature}\u00B0C")
             appendLine("  network: ${m.networkType} rx:${m.networkRxRate} tx:${m.networkTxRate} B/s")

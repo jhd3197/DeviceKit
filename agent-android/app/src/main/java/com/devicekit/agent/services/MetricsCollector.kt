@@ -13,6 +13,8 @@ import com.devicekit.agent.DeviceState
 import com.devicekit.agent.server.routes.EventRoutes
 import kotlinx.coroutines.*
 import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.io.RandomAccessFile
 
 /**
@@ -32,6 +34,7 @@ class MetricsCollector(private val context: Context) {
     // Previous CPU sample for delta calculation
     private var prevCpuTotal: Long = 0
     private var prevCpuIdle: Long = 0
+    private var procStatAvailable: Boolean = true
 
     // Previous network bytes for rate calculation
     private var prevRxBytes: Long = 0
@@ -43,7 +46,16 @@ class MetricsCollector(private val context: Context) {
         scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         job = scope?.launch {
             // Take initial CPU and network samples
-            readCpuSample()
+            try {
+                val (total, _) = readCpuSample()
+                if (total == 0L) {
+                    procStatAvailable = false
+                    Log.i(TAG, "/proc/stat not available, using top command fallback for CPU")
+                }
+            } catch (e: Exception) {
+                procStatAvailable = false
+                Log.w(TAG, "Initial CPU sample failed, using top fallback: ${e.message}")
+            }
             readNetworkBytes()
             prevNetworkTimestamp = System.currentTimeMillis()
 
@@ -105,6 +117,14 @@ class MetricsCollector(private val context: Context) {
     // ---- CPU ----
 
     private fun readCpuPercent(): Double {
+        return if (procStatAvailable) {
+            readCpuPercentFromProcStat()
+        } else {
+            readCpuPercentFromTop()
+        }
+    }
+
+    private fun readCpuPercentFromProcStat(): Double {
         return try {
             val (total, idle) = readCpuSample()
             val totalDelta = total - prevCpuTotal
@@ -123,27 +143,79 @@ class MetricsCollector(private val context: Context) {
         }
     }
 
+    /**
+     * Fallback CPU reading using the `top` command.
+     * Parses idle% from the %cpu line and calculates usage.
+     */
+    private fun readCpuPercentFromTop(): Double {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("top", "-n", "1", "-b"))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            var cpuPercent = 0.0
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val l = line ?: continue
+                // Look for line like: "%Cpu(s):  5.3 us,  2.1 sy,  0.0 ni, 91.2 id, ..."
+                // Or Samsung format: "800%cpu  12%user  0%nice  10%sys  778%idle  0%iow  0%irq  0%sirq  0%host"
+                if (l.contains("%cpu") || l.contains("%Cpu")) {
+                    // Try Samsung/busybox format: "800%cpu ... 778%idle"
+                    val idleMatch = Regex("(\\d+)%idle").find(l)
+                    val totalMatch = Regex("^\\s*(\\d+)%cpu").find(l)
+                    if (idleMatch != null && totalMatch != null) {
+                        val totalCpu = totalMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+                        val idle = idleMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+                        cpuPercent = if (totalCpu > 0) ((totalCpu - idle) / totalCpu * 100).coerceIn(0.0, 100.0) else 0.0
+                        break
+                    }
+                    // Try standard Linux format: "... 91.2 id ..."
+                    val parts = l.split(",", " ").map { it.trim() }
+                    for (i in parts.indices) {
+                        if (parts[i] == "id" || parts[i] == "idle") {
+                            val idleVal = parts.getOrNull(i - 1)?.replace("%", "")?.toDoubleOrNull()
+                            if (idleVal != null) {
+                                cpuPercent = (100.0 - idleVal).coerceIn(0.0, 100.0)
+                                break
+                            }
+                        }
+                    }
+                    break
+                }
+            }
+            reader.close()
+            process.destroy()
+            cpuPercent
+        } catch (e: Exception) {
+            Log.w(TAG, "CPU top fallback error: ${e.message}")
+            0.0
+        }
+    }
+
     /** Reads /proc/stat and returns (totalJiffies, idleJiffies). */
     private fun readCpuSample(): Pair<Long, Long> {
-        val reader = RandomAccessFile("/proc/stat", "r")
-        val line = reader.readLine()
-        reader.close()
+        return try {
+            val reader = RandomAccessFile("/proc/stat", "r")
+            val line = reader.readLine()
+            reader.close()
 
-        // cpu  user nice system idle iowait irq softirq steal
-        val parts = line.split("\\s+".toRegex())
-        if (parts.size < 5) return Pair(0L, 0L)
+            // cpu  user nice system idle iowait irq softirq steal
+            val parts = line.split("\\s+".toRegex())
+            if (parts.size < 5) return Pair(0L, 0L)
 
-        val user = parts[1].toLongOrNull() ?: 0
-        val nice = parts[2].toLongOrNull() ?: 0
-        val system = parts[3].toLongOrNull() ?: 0
-        val idle = parts[4].toLongOrNull() ?: 0
-        val iowait = parts.getOrNull(5)?.toLongOrNull() ?: 0
-        val irq = parts.getOrNull(6)?.toLongOrNull() ?: 0
-        val softirq = parts.getOrNull(7)?.toLongOrNull() ?: 0
-        val steal = parts.getOrNull(8)?.toLongOrNull() ?: 0
+            val user = parts[1].toLongOrNull() ?: 0
+            val nice = parts[2].toLongOrNull() ?: 0
+            val system = parts[3].toLongOrNull() ?: 0
+            val idle = parts[4].toLongOrNull() ?: 0
+            val iowait = parts.getOrNull(5)?.toLongOrNull() ?: 0
+            val irq = parts.getOrNull(6)?.toLongOrNull() ?: 0
+            val softirq = parts.getOrNull(7)?.toLongOrNull() ?: 0
+            val steal = parts.getOrNull(8)?.toLongOrNull() ?: 0
 
-        val total = user + nice + system + idle + iowait + irq + softirq + steal
-        return Pair(total, idle)
+            val total = user + nice + system + idle + iowait + irq + softirq + steal
+            Pair(total, idle)
+        } catch (e: Exception) {
+            // /proc/stat is restricted on Android 8+ for non-system apps
+            Pair(0L, 0L)
+        }
     }
 
     // ---- RAM ----

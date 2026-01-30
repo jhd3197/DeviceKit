@@ -62,9 +62,10 @@ class BackgroundAgent : Service() {
             DeviceState.serverUrl = serverUrl
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("Connecting..."))
+        startForeground(NOTIFICATION_ID, buildNotification("Starting..."))
         startHttpServer()
         startDiscoveryService()
+        startMetricsCollection()
         startAgent()
 
         return START_STICKY
@@ -72,8 +73,14 @@ class BackgroundAgent : Service() {
 
     private fun startAgent() {
         scope.launch {
+            // Try to register with the backend server, but don't block local functionality.
+            // The embedded HTTP server and metrics run independently.
             var registered = false
-            while (!registered) {
+            var attempts = 0
+            val maxAttempts = 3
+
+            while (!registered && attempts < maxAttempts) {
+                attempts++
                 registered = registerWithServer()
                 if (registered) {
                     DeviceState.isConnected = true
@@ -81,13 +88,20 @@ class BackgroundAgent : Service() {
                     LogBuffer.log("BackgroundAgent", "Connected to ${DeviceState.serverUrl}")
                     startHeartbeat()
                     startStateReporting()
-                    startMetricsCollection()
                 } else {
-                    DeviceState.isConnected = false
-                    updateNotification("Failed to connect - retrying...")
-                    LogBuffer.log("BackgroundAgent", "Connection failed, retrying...", LogBuffer.Level.ERROR)
-                    delay(5_000)
+                    LogBuffer.log("BackgroundAgent", "Server connection attempt $attempts/$maxAttempts failed", LogBuffer.Level.ERROR)
+                    if (attempts < maxAttempts) {
+                        delay(5_000)
+                    }
                 }
+            }
+
+            if (!registered) {
+                // Server unreachable — continue in standalone mode with local HTTP server + metrics
+                DeviceState.isConnected = false
+                DeviceState.deviceId = "${Build.MANUFACTURER}_${Build.MODEL}".replace(" ", "_")
+                updateNotification("Running locally (port ${AgentHttpServer.DEFAULT_PORT})")
+                LogBuffer.log("BackgroundAgent", "Server unreachable after $maxAttempts attempts. Running in standalone mode.", LogBuffer.Level.ERROR)
             }
         }
     }

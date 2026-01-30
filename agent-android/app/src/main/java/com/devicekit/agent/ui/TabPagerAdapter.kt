@@ -9,11 +9,12 @@ class TabPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activit
     companion object {
         const val TAB_DASHBOARD = 0
         const val TAB_METRICS = 1
-        const val TAB_LOGS = 2
-        const val TAB_SETTINGS = 3
-        const val TAB_COUNT = 4
+        const val TAB_FILES = 2
+        const val TAB_LOGS = 3
+        const val TAB_SETTINGS = 4
+        const val TAB_COUNT = 5
 
-        val TAB_TITLES = arrayOf("Dashboard", "Metrics", "Logs", "Settings")
+        val TAB_TITLES = arrayOf("Dashboard", "Metrics", "Files", "Logs", "Settings")
     }
 
     override fun getItemCount(): Int = TAB_COUNT
@@ -21,6 +22,7 @@ class TabPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activit
     override fun createFragment(position: Int): Fragment = when (position) {
         TAB_DASHBOARD -> DashboardFragment()
         TAB_METRICS -> MetricsFragment()
+        TAB_FILES -> FilesFragment()
         TAB_LOGS -> LogsFragment()
         TAB_SETTINGS -> SettingsFragment()
         else -> DashboardFragment()

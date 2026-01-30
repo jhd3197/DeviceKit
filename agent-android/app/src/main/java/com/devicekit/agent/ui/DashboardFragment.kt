@@ -111,7 +111,7 @@ class DashboardFragment : Fragment() {
         val metrics = DeviceState.latestMetrics
         if (metrics != null) {
             statCpu.text = String.format("%.1f%%", metrics.cpuPercent)
-            statRam.text = "${metrics.ramUsedMb}MB"
+            statRam.text = formatRam(metrics.ramUsedMb, metrics.ramTotalMb)
             statBattery.text = "${metrics.batteryLevel}%"
             statTemp.text = String.format("%.1f\u00B0", metrics.batteryTemperature)
         }
@@ -123,6 +123,16 @@ class DashboardFragment : Fragment() {
 
         // Live state
         liveStateText.text = DeviceState.toDisplayString()
+    }
+
+    private fun formatRam(usedMb: Long, totalMb: Long): String {
+        val usedGb = usedMb / 1024.0
+        val totalGb = totalMb / 1024.0
+        return if (totalMb >= 1024) {
+            String.format("%.1f/%.0fG", usedGb, totalGb)
+        } else {
+            "${usedMb}/${totalMb}M"
+        }
     }
 
     private fun updateServiceRow(rowId: Int, name: String, active: Boolean) {
