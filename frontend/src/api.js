@@ -261,6 +261,27 @@ export const api = {
     request(`/fleet/compare?devices=${deviceIds.join(',')}`),
   onboardDevice: (id) => request(`/devices/${id}/onboard`, { method: 'POST' }),
 
+  // Fleet Query Language
+  fleetQuery: (expression, format = 'json') =>
+    request(`/fleet/query?q=${encodeURIComponent(expression)}&format=${format}`),
+  fleetQueryValidate: (expression) =>
+    request('/fleet/query/validate', { method: 'POST', body: JSON.stringify({ expression }) }),
+  getQueryFields: () => request('/fleet/query/fields'),
+  getQueryPresets: () => request('/fleet/query/presets'),
+  getSavedQueries: () => request('/fleet/queries'),
+  getSavedQuery: (id) => request(`/fleet/queries/${id}`),
+  createSavedQuery: (data) =>
+    request('/fleet/queries', { method: 'POST', body: JSON.stringify(data) }),
+  updateSavedQuery: (id, data) =>
+    request(`/fleet/queries/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSavedQuery: (id) =>
+    request(`/fleet/queries/${id}`, { method: 'DELETE' }),
+  fleetQueryBulkAction: (expression, action, params = {}) =>
+    request('/fleet/query/bulk-action', {
+      method: 'POST',
+      body: JSON.stringify({ expression, action, params }),
+    }),
+
   // Profiles
   getProfiles: () => request('/profiles'),
   getProfile: (id) => request(`/profiles/${id}`),

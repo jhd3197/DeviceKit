@@ -21,6 +21,7 @@ from devicekit.mixins.device_lock import DeviceLockMixin
 from devicekit.mixins.auth import AuthMixin
 from devicekit.mixins.streaming import StreamingMixin
 from devicekit.mixins.visual_regression import VisualRegressionMixin
+from devicekit.mixins.fleet_query import FleetQueryMixin
 
 
 class Client(
@@ -34,6 +35,7 @@ class Client(
     NLAutomationMixin,
     PromptureAgentMixin,
     FleetMixin,
+    FleetQueryMixin,
     DeviceLockMixin,
     StreamingMixin,
     VisualRegressionMixin,

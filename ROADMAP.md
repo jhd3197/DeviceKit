@@ -275,21 +275,24 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 
 ---
 
-## Upcoming Phases
-
-### Phase 20: Fleet Query Language
+## Phase 20: Fleet Query Language ✅
 **Goal**: Enable SQL-like queries across the device fleet for filtering, reporting, and bulk action targeting.
 
-- [ ] Query DSL parser: simple expression language — `android_version < 13 AND battery > 20 AND status = 'idle'`
-- [ ] Supported fields: `device_id`, `model`, `manufacturer`, `android_version`, `sdk`, `battery`, `cpu`, `ram_used`, `ram_total`, `temperature`, `online`, `status`, `agent_status`, `group`, `tags`, `model_name`
-- [ ] Operators: `=`, `!=`, `<`, `>`, `<=`, `>=`, `LIKE`, `IN`, `NOT IN`, `AND`, `OR`, parentheses for grouping
-- [ ] `GET /fleet/query?q=<expression>` endpoint: evaluates query against live device state, returns matching devices
-- [ ] Frontend: query bar on Dashboard with autocomplete for field names and operators, live result count as you type
-- [ ] Query → bulk action: pipe query results into bulk operations (reboot, install agent, run automation, send command)
-- [ ] Saved queries: `POST /fleet/queries` to save named queries (e.g., "Low battery devices", "Outdated Android")
-- [ ] Frontend: saved query dropdown, quick-select presets ("All offline", "Critical health", "Idle devices")
-- [ ] Query in automation triggers: run automation on devices matching a query instead of a static device list
-- [ ] Fleet reports: `GET /fleet/query?q=...&format=csv` for exporting query results
+- [x] Query DSL parser: tokenizer + recursive descent parser — supports `android_version < 13 AND battery > 20 AND status = 'idle'` with proper operator precedence (OR < AND < NOT < comparison)
+- [x] Supported fields: `device_id`, `model`, `manufacturer`, `android_version`, `sdk`, `battery`, `cpu`, `ram_used`, `ram_total`, `temperature`, `online`, `status`, `agent_status`, `group`, `tags`, `model_name` — with smart fallbacks for ADB vs agent device data
+- [x] Operators: `=`, `!=`, `<`, `>`, `<=`, `>=`, `LIKE` (SQL pattern with `%` and `_`), `IN`, `NOT IN`, `AND`, `OR`, parentheses for grouping — case-insensitive string comparison, automatic type coercion
+- [x] `GET /fleet/query?q=<expression>` endpoint: evaluates query against merged ADB + agent device state, returns matching devices with count and total
+- [x] Frontend: query bar on Dashboard with field autocomplete (shows field descriptions), run/clear buttons, real-time result count, error display
+- [x] Query → bulk action: `POST /fleet/query/bulk-action` pipes query results into bulk operations — supports reboot, lock, unlock, install_apk, run_automation, add_tag, remove_tag, add_to_group — with per-device success/failure tracking
+- [x] Saved queries: full CRUD via `POST/GET/PUT/DELETE /fleet/queries` to save, list, update, and delete named queries with validation
+- [x] Frontend: saved query dropdown with delete, preset query dropdown (All offline, Low battery, Critical health, Idle devices, Running devices, Outdated Android), save current query button
+- [x] Query validation: `POST /fleet/query/validate` validates expressions without executing, `GET /fleet/query/fields` returns field metadata, `GET /fleet/query/presets` returns built-in presets
+- [x] Fleet reports: `GET /fleet/query?q=...&format=csv` exports query results as downloadable CSV with Content-Disposition header, frontend Export CSV button
+- [x] Bulk action UI: dropdown on query results with reboot, lock, unlock, add_tag, add_to_group actions with parameter prompts and success/failure summary
+
+---
+
+## Upcoming Phases
 
 ### Phase 21: Failure Debug Bundles
 **Goal**: When a test or automation step fails, auto-package all relevant diagnostics into a single downloadable bundle for fast debugging.
