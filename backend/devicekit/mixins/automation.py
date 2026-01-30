@@ -2,6 +2,8 @@ import uuid
 import time
 import logging
 import threading
+import base64
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +130,15 @@ STEP_TYPES = {
             "command": {"type": "text", "label": "Shell command", "required": True},
         },
     },
+    "file_operation": {
+        "label": "File Operation",
+        "category": "Debug",
+        "config": {
+            "operation": {"type": "select", "label": "Operation", "required": True, "options": ["push", "pull", "delete"]},
+            "local_path": {"type": "text", "label": "Local path (host)", "required": False},
+            "remote_path": {"type": "text", "label": "Remote path (device)", "required": True},
+        },
+    },
 }
 
 
@@ -135,6 +146,10 @@ class AutomationMixin:
     _automations = []
     _automation_runs = []
     _active_runs = {}  # run_id -> cancel_event
+    _recording_sessions = {}  # session_id -> {device_id, actions, started_at}
+    _schedules = []
+    _scheduler_thread = None
+    _scheduler_stop_event = None
 
     def get_step_types(self):
         return STEP_TYPES
@@ -256,6 +271,13 @@ class AutomationMixin:
                 result["status"] = "failed"
                 result["error"] = str(e)
                 result["duration_ms"] = elapsed
+                # Best-effort screenshot capture on failure
+                try:
+                    screenshot_data = self.take_screenshot(device_id)
+                    if screenshot_data:
+                        result["failure_screenshot"] = base64.b64encode(screenshot_data).decode('ascii')
+                except Exception:
+                    pass
                 step_results.append(result)
                 # Mark remaining steps as skipped
                 for remaining in steps[idx + 1:]:
@@ -401,6 +423,26 @@ class AutomationMixin:
             output = self.run_adb_command(f"shell {command}", device=device_id)
             return output or "(no output)"
 
+        elif step_type == "file_operation":
+            operation = config.get("operation", "push")
+            local_path = config.get("local_path", "")
+            remote_path = config["remote_path"]
+            if operation == "push":
+                if not local_path:
+                    raise ValueError("local_path is required for push operation")
+                output = self.run_adb_command(f"push {local_path} {remote_path}", device=device_id)
+                return output or f"Pushed {local_path} to {remote_path}"
+            elif operation == "pull":
+                if not local_path:
+                    raise ValueError("local_path is required for pull operation")
+                output = self.run_adb_command(f"pull {remote_path} {local_path}", device=device_id)
+                return output or f"Pulled {remote_path} to {local_path}"
+            elif operation == "delete":
+                output = self.run_adb_command(f"shell rm -f {remote_path}", device=device_id)
+                return output or f"Deleted {remote_path}"
+            else:
+                raise ValueError(f"Unknown file operation: {operation}")
+
         else:
             raise ValueError(f"Unknown step type: {step_type}")
 
@@ -425,3 +467,191 @@ class AutomationMixin:
             runs = [r for r in runs if r.get("device_id") == device_id]
         runs.sort(key=lambda r: r.get("started_at", 0), reverse=True)
         return runs[:limit]
+
+    # ---------------------------------------------------------------
+    # Recording
+    # ---------------------------------------------------------------
+    def start_recording(self, device_id):
+        session_id = str(uuid.uuid4())
+        session = {
+            "id": session_id,
+            "device_id": device_id,
+            "actions": [],
+            "started_at": time.time(),
+        }
+        self._recording_sessions[session_id] = session
+        logger.info(f"Started recording session {session_id} for device {device_id}")
+        return session
+
+    def stop_recording(self, session_id):
+        session = self._recording_sessions.pop(session_id, None)
+        if not session:
+            raise ValueError(f"Recording session {session_id} not found")
+        steps = []
+        for idx, action in enumerate(session["actions"]):
+            step = self._action_to_step(action, idx)
+            if step:
+                steps.append(step)
+        logger.info(f"Stopped recording session {session_id}: {len(steps)} steps")
+        return steps
+
+    def record_action(self, session_id, action):
+        session = self._recording_sessions.get(session_id)
+        if not session:
+            raise ValueError(f"Recording session {session_id} not found")
+        action["recorded_at"] = time.time()
+        session["actions"].append(action)
+        return len(session["actions"])
+
+    def _action_to_step(self, action, index):
+        action_type = action.get("type")
+        step = {
+            "id": str(uuid.uuid4()),
+            "order": index,
+        }
+        if action_type == "tap":
+            step["type"] = "tap"
+            step["label"] = f"Tap ({action.get('x')}, {action.get('y')})"
+            step["config"] = {"x": action.get("x", 0), "y": action.get("y", 0)}
+        elif action_type == "swipe":
+            step["type"] = "swipe"
+            direction = action.get("direction", "up")
+            step["label"] = f"Swipe {direction}"
+            step["config"] = {
+                "direction": direction,
+                "duration": action.get("duration", 500),
+            }
+        elif action_type == "press":
+            step["type"] = "press_key"
+            key = action.get("key", "home")
+            step["label"] = f"Press {key}"
+            step["config"] = {"key": key}
+        elif action_type == "type_text":
+            step["type"] = "type_text"
+            step["label"] = f"Type '{action.get('text', '')}'"
+            step["config"] = {"text": action.get("text", "")}
+        else:
+            return None
+        return step
+
+    # ---------------------------------------------------------------
+    # Scheduling
+    # ---------------------------------------------------------------
+    def create_schedule(self, automation_id, device_id, interval_minutes, enabled=True):
+        automation = self.get_automation(automation_id)
+        if not automation:
+            raise ValueError(f"Automation {automation_id} not found")
+        now = time.time()
+        schedule = {
+            "id": str(uuid.uuid4()),
+            "automation_id": automation_id,
+            "automation_name": automation.get("name", ""),
+            "device_id": device_id,
+            "interval_minutes": interval_minutes,
+            "enabled": enabled,
+            "last_run_at": None,
+            "next_run_at": now + interval_minutes * 60,
+            "created_at": now,
+        }
+        self._schedules.append(schedule)
+        self._ensure_scheduler_running()
+        logger.info(f"Created schedule {schedule['id']} for automation '{automation.get('name')}'")
+        return schedule
+
+    def get_schedule(self, schedule_id):
+        return next((s for s in self._schedules if s["id"] == schedule_id), None)
+
+    def list_schedules(self, automation_id=None):
+        schedules = list(self._schedules)
+        if automation_id:
+            schedules = [s for s in schedules if s.get("automation_id") == automation_id]
+        return schedules
+
+    def update_schedule(self, schedule_id, updates):
+        schedule = self.get_schedule(schedule_id)
+        if not schedule:
+            return None
+        for key in ("interval_minutes", "enabled", "device_id"):
+            if key in updates:
+                schedule[key] = updates[key]
+        if "interval_minutes" in updates:
+            schedule["next_run_at"] = time.time() + updates["interval_minutes"] * 60
+        return schedule
+
+    def delete_schedule(self, schedule_id):
+        before = len(self._schedules)
+        self._schedules = [s for s in self._schedules if s["id"] != schedule_id]
+        deleted = len(self._schedules) < before
+        if deleted:
+            logger.info(f"Deleted schedule {schedule_id}")
+        return deleted
+
+    def _ensure_scheduler_running(self):
+        if self._scheduler_thread and self._scheduler_thread.is_alive():
+            return
+        self._scheduler_stop_event = threading.Event()
+        self._scheduler_thread = threading.Thread(
+            target=self._scheduler_loop,
+            args=(self._scheduler_stop_event,),
+            daemon=True,
+        )
+        self._scheduler_thread.start()
+        logger.info("Scheduler thread started")
+
+    def _scheduler_loop(self, stop_event):
+        while not stop_event.is_set():
+            now = time.time()
+            for schedule in list(self._schedules):
+                if not schedule.get("enabled"):
+                    continue
+                next_run = schedule.get("next_run_at", 0)
+                if now >= next_run:
+                    try:
+                        self.execute_automation(
+                            schedule["automation_id"],
+                            schedule["device_id"],
+                        )
+                        schedule["last_run_at"] = now
+                        schedule["next_run_at"] = now + schedule["interval_minutes"] * 60
+                        logger.info(f"Scheduler ran automation {schedule['automation_id']}")
+                    except Exception as e:
+                        logger.error(f"Scheduler error for {schedule['id']}: {e}")
+            stop_event.wait(30)
+
+    # ---------------------------------------------------------------
+    # Clone / Export / Import
+    # ---------------------------------------------------------------
+    def clone_automation(self, automation_id, new_name=None):
+        automation = self.get_automation(automation_id)
+        if not automation:
+            raise ValueError(f"Automation {automation_id} not found")
+        cloned = copy.deepcopy(automation)
+        cloned["id"] = str(uuid.uuid4())
+        cloned["name"] = new_name or f"{automation['name']} (Copy)"
+        cloned["created_at"] = time.time()
+        cloned["updated_at"] = time.time()
+        for step in cloned.get("steps", []):
+            step["id"] = str(uuid.uuid4())
+        self._automations.append(cloned)
+        logger.info(f"Cloned automation '{automation['name']}' -> '{cloned['name']}'")
+        return cloned
+
+    def export_automation(self, automation_id):
+        automation = self.get_automation(automation_id)
+        if not automation:
+            raise ValueError(f"Automation {automation_id} not found")
+        exported = copy.deepcopy(automation)
+        for key in ("id", "created_at", "updated_at"):
+            exported.pop(key, None)
+        for step in exported.get("steps", []):
+            step.pop("id", None)
+        return exported
+
+    def import_automation(self, data):
+        name = data.get("name", "Imported Automation")
+        return self.create_automation(
+            name=name,
+            description=data.get("description", ""),
+            steps=data.get("steps", []),
+            tags=data.get("tags", []),
+        )

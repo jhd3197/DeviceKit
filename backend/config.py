@@ -20,6 +20,13 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 # Devices
 DEVICE_IDS = [d.strip() for d in os.getenv("DEVICE_IDS", "").split(",") if d.strip()]
 
+# Auth
+API_KEY = os.getenv("API_KEY", "")  # Empty = auth disabled (dev mode)
+AGENT_TOKENS = [t.strip() for t in os.getenv("AGENT_TOKENS", "").split(",") if t.strip()]
+
+# Debug
+DEBUG_MODE = os.getenv("DEBUG_MODE", "true").lower() in ("true", "1", "yes")
+
 # Logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 

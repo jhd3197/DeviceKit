@@ -16,6 +16,7 @@ from devicekit.mixins.automation import AutomationMixin
 from devicekit.mixins.profile import ProfileMixin
 from devicekit.mixins.agent import AgentMixin
 from devicekit.mixins.fleet import FleetMixin
+from devicekit.mixins.auth import AuthMixin
 
 
 class Client(
@@ -32,6 +33,7 @@ class Client(
     QueueMixin,
     AlertMixin,
     ActivityMixin,
+    AuthMixin,
     ToolsMixin,
 ):
     def __init__(self, device=None, local_port=9222, output_dir="output", logger_instance=None):
@@ -40,6 +42,10 @@ class Client(
         self.local_port = local_port
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
+
+        # Configure authentication
+        from config import API_KEY, AGENT_TOKENS
+        self.configure_auth(API_KEY, AGENT_TOKENS)
 
         # Configure colored logging
         log = logging.getLogger('devicekit')

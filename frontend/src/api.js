@@ -1,8 +1,11 @@
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5050'
+const API_KEY = import.meta.env.VITE_API_KEY || localStorage.getItem('devicekit_api_key') || ''
 
 async function request(url, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers }
+  if (API_KEY) headers['X-API-Key'] = API_KEY
   const res = await fetch(`${API}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
     ...options,
   })
   if (!res.ok) {
@@ -39,8 +42,11 @@ export const api = {
   uploadFile: (id, file, remotePath) => {
     const form = new FormData()
     form.append('file', file)
+    const headers = {}
+    if (API_KEY) headers['X-API-Key'] = API_KEY
     return fetch(`${API}/devices/${id}/files/upload?path=${encodeURIComponent(remotePath)}`, {
       method: 'POST',
+      headers,
       body: form,
     }).then(r => {
       if (!r.ok) throw new Error('Upload failed')
@@ -99,6 +105,49 @@ export const api = {
   getAutomationRun: (id) => request(`/automations/runs/${id}`),
   cancelAutomationRun: (id) =>
     request(`/automations/runs/${id}/cancel`, { method: 'POST' }),
+
+  // Recording
+  startRecording: (deviceId) =>
+    request('/automations/record/start', {
+      method: 'POST',
+      body: JSON.stringify({ device_id: deviceId }),
+    }),
+  stopRecording: (sessionId) =>
+    request('/automations/record/stop', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId }),
+    }),
+  recordAction: (sessionId, action) =>
+    request('/automations/record/action', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId, action }),
+    }),
+
+  // Schedules
+  getSchedules: (automationId) => {
+    const q = automationId ? `?automation_id=${automationId}` : ''
+    return request(`/automations/schedules${q}`)
+  },
+  createSchedule: (data) =>
+    request('/automations/schedules', { method: 'POST', body: JSON.stringify(data) }),
+  updateSchedule: (id, data) =>
+    request(`/automations/schedules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSchedule: (id) =>
+    request(`/automations/schedules/${id}`, { method: 'DELETE' }),
+
+  // Failure screenshots
+  getFailureScreenshotUrl: (runId, stepIndex) =>
+    `${API}/automations/runs/${runId}/screenshots/${stepIndex}`,
+
+  // Clone / Export / Import
+  cloneAutomation: (id, name) =>
+    request(`/automations/${id}/clone`, {
+      method: 'POST',
+      body: JSON.stringify(name ? { name } : {}),
+    }),
+  exportAutomation: (id) => request(`/automations/${id}/export`),
+  importAutomation: (data) =>
+    request('/automations/import', { method: 'POST', body: JSON.stringify(data) }),
 
   // Device interaction
   tap: (id, x, y) =>
@@ -183,7 +232,10 @@ export const api = {
 }
 
 export function subscribeToEvents(handlers = {}) {
-  const es = new EventSource(`${API}/events/stream`)
+  const url = API_KEY
+    ? `${API}/events/stream?api_key=${encodeURIComponent(API_KEY)}`
+    : `${API}/events/stream`
+  const es = new EventSource(url)
 
   es.addEventListener('device_state', (e) => {
     handlers.onDeviceState?.(JSON.parse(e.data))

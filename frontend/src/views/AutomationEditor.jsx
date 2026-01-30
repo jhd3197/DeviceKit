@@ -9,6 +9,8 @@ import {
   GripVertical,
   X,
   ArrowLeft,
+  Copy,
+  Download,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -127,6 +129,30 @@ export default function AutomationEditor() {
     }
   }
 
+  const handleClone = async () => {
+    try {
+      const cloned = await api.cloneAutomation(id)
+      navigate(`/automations/${cloned.id}/edit`)
+    } catch (e) {
+      console.error('Failed to clone:', e)
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      const data = await api.exportAutomation(id)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${name || 'automation'}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('Failed to export:', e)
+    }
+  }
+
   // Group step types by category
   const grouped = {}
   Object.entries(stepTypes).forEach(([key, val]) => {
@@ -158,13 +184,31 @@ export default function AutomationEditor() {
             {isNew ? 'New Automation' : 'Edit Automation'}
           </h2>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={!name.trim() || saving}
-          className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2"
-        >
-          <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
-        </button>
+        <div className="flex items-center gap-2">
+          {!isNew && (
+            <>
+              <button
+                onClick={handleClone}
+                className="border border-main text-zinc-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
+              >
+                <Copy className="w-3 h-3" /> Clone
+              </button>
+              <button
+                onClick={handleExport}
+                className="border border-main text-zinc-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
+              >
+                <Download className="w-3 h-3" /> Export JSON
+              </button>
+            </>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={!name.trim() || saving}
+            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2"
+          >
+            <Save className="w-3 h-3" /> {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">

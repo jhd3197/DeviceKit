@@ -13,11 +13,13 @@ DEFAULT_TIMEOUT = 10
 class Connection:
     """Manages the connection to a device's agent HTTP server."""
 
-    def __init__(self, base_url: str, serial: Optional[str] = None):
+    def __init__(self, base_url: str, serial: Optional[str] = None, api_key: Optional[str] = None):
         self.base_url = base_url.rstrip("/")
         self.serial = serial
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
+        if api_key:
+            self.session.headers["X-Agent-Token"] = api_key
         self._timeout = DEFAULT_TIMEOUT
 
     def get(self, path: str, params: Optional[dict] = None,
@@ -105,7 +107,7 @@ class Connection:
         self.session.close()
 
 
-def connect_usb(serial: Optional[str] = None, local_port: int = AGENT_PORT) -> Connection:
+def connect_usb(serial: Optional[str] = None, local_port: int = AGENT_PORT, api_key: Optional[str] = None) -> Connection:
     """Connect to a USB-attached device via ADB port forwarding."""
     if serial is None:
         devices = adb.list_devices()
@@ -117,7 +119,7 @@ def connect_usb(serial: Optional[str] = None, local_port: int = AGENT_PORT) -> C
     if not adb.forward_port(serial, local_port, AGENT_PORT):
         raise ConnectionError(f"Failed to set up port forwarding for {serial}")
 
-    conn = Connection(f"http://127.0.0.1:{local_port}", serial=serial)
+    conn = Connection(f"http://127.0.0.1:{local_port}", serial=serial, api_key=api_key)
 
     if not conn.ping():
         raise AgentNotRunningError(
@@ -156,9 +158,9 @@ class _ProgressReader:
         return self._file.tell()
 
 
-def connect_wifi(host: str, port: int = AGENT_PORT) -> Connection:
+def connect_wifi(host: str, port: int = AGENT_PORT, api_key: Optional[str] = None) -> Connection:
     """Connect directly to a device over WiFi (no ADB needed)."""
-    conn = Connection(f"http://{host}:{port}")
+    conn = Connection(f"http://{host}:{port}", api_key=api_key)
 
     if not conn.ping():
         raise AgentNotRunningError(

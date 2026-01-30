@@ -20,6 +20,7 @@ export default function AutomationRunDetail() {
   const [run, setRun] = useState(null)
   const [loading, setLoading] = useState(true)
   const intervalRef = useRef(null)
+  const [screenshotOverlay, setScreenshotOverlay] = useState(null)
 
   const fetchRun = useCallback(async () => {
     try {
@@ -226,6 +227,16 @@ export default function AutomationRunDetail() {
                       {sr.error}
                     </p>
                   )}
+                  {sr.failure_screenshot && (
+                    <div className="mt-2 pl-8">
+                      <img
+                        src={api.getFailureScreenshotUrl(runId, idx)}
+                        alt="Failure screenshot"
+                        className="w-6 h-auto rounded border border-red-500/30 cursor-pointer hover:border-red-400 transition-colors"
+                        onClick={() => setScreenshotOverlay(api.getFailureScreenshotUrl(runId, idx))}
+                      />
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -258,6 +269,20 @@ export default function AutomationRunDetail() {
           </div>
         )}
       </div>
+
+      {/* Failure screenshot overlay */}
+      {screenshotOverlay && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 cursor-pointer"
+          onClick={() => setScreenshotOverlay(null)}
+        >
+          <img
+            src={screenshotOverlay}
+            alt="Failure screenshot (full)"
+            className="max-w-[90vw] max-h-[90vh] rounded-lg border border-zinc-700 shadow-2xl"
+          />
+        </div>
+      )}
     </>
   )
 }

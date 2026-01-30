@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 colorlog==6.9.0
 python-slugify==8.0.4
 anthropic>=0.40.0
+flask-limiter==3.8.0

@@ -25,6 +25,7 @@ import {
   ArrowDown,
   Type,
   CornerUpLeft,
+  Disc,
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 
@@ -61,6 +62,11 @@ export default function NodeDetail() {
   const [urgentCommand, setUrgentCommand] = useState(false)
   const [hasProfile, setHasProfile] = useState(null)
   const agentLogRef = useRef(null)
+
+  // Recording state
+  const [recording, setRecording] = useState(false)
+  const [recordingSessionId, setRecordingSessionId] = useState(null)
+  const [recordedCount, setRecordedCount] = useState(0)
 
   const deviceId = id || ''
 
@@ -273,11 +279,22 @@ export default function NodeDetail() {
       if (pxDist < SWIPE_THRESHOLD) {
         // Short drag = tap
         await api.tap(deviceId, startX, startY)
+        recordIfActive({ type: 'tap', x: startX, y: startY })
       } else {
         // Long drag = swipe
         const elapsed = Date.now() - dragRef.current.startTime
         const duration = Math.max(200, Math.min(elapsed, 1500))
         await api.swipeCoords(deviceId, startX, startY, pt.devX, pt.devY, duration)
+        // Determine direction from dominant axis
+        const dx = pt.devX - startX
+        const dy = pt.devY - startY
+        let direction
+        if (Math.abs(dx) > Math.abs(dy)) {
+          direction = dx > 0 ? 'right' : 'left'
+        } else {
+          direction = dy > 0 ? 'down' : 'up'
+        }
+        recordIfActive({ type: 'swipe', direction, duration })
       }
       setTimeout(() => setScreenTs(Date.now()), 300)
     } catch {
@@ -295,6 +312,7 @@ export default function NodeDetail() {
   const handlePress = async (action) => {
     try {
       await api.press(deviceId, action)
+      recordIfActive({ type: 'press', key: action })
       setTimeout(() => setScreenTs(Date.now()), 300)
     } catch {
       // silent
@@ -340,6 +358,52 @@ export default function NodeDetail() {
     { label: 'Fetch Logs', cmd: 'logcat -d -t 50' },
     { label: 'Kill All Apps', cmd: 'am kill-all' },
   ]
+
+  const recordIfActive = async (actionData) => {
+    if (!recording || !recordingSessionId) return
+    try {
+      const res = await api.recordAction(recordingSessionId, actionData)
+      setRecordedCount(res.count || 0)
+    } catch {
+      // silent
+    }
+  }
+
+  const handleRecordToggle = async () => {
+    if (recording && recordingSessionId) {
+      // Stop recording
+      try {
+        const res = await api.stopRecording(recordingSessionId)
+        const steps = res.steps || []
+        setRecording(false)
+        setRecordingSessionId(null)
+        setRecordedCount(0)
+        if (steps.length > 0) {
+          const automation = await api.createAutomation({
+            name: `Recorded ${new Date().toLocaleString()}`,
+            description: `Recorded from device ${deviceId}`,
+            steps,
+            tags: ['recorded'],
+          })
+          navigate(`/automations/${automation.id}/edit`)
+        }
+      } catch {
+        setRecording(false)
+        setRecordingSessionId(null)
+        setRecordedCount(0)
+      }
+    } else {
+      // Start recording
+      try {
+        const session = await api.startRecording(deviceId)
+        setRecordingSessionId(session.id)
+        setRecordedCount(0)
+        setRecording(true)
+      } catch {
+        // silent
+      }
+    }
+  }
 
   if (!deviceId) {
     return (
@@ -390,6 +454,17 @@ export default function NodeDetail() {
           <span className="text-white font-semibold mono">{deviceId}</span>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleRecordToggle}
+            className={`flex items-center gap-2 border px-3 py-1.5 rounded text-xs font-bold transition-all ${
+              recording
+                ? 'bg-red-950 border-red-900/50 text-red-400 hover:bg-red-900'
+                : 'border-main text-zinc-400 hover:bg-zinc-900'
+            }`}
+          >
+            <Disc className={`w-3 h-3 ${recording ? 'animate-pulse text-red-500' : ''}`} />
+            {recording ? `Recording (${recordedCount})` : 'Record'}
+          </button>
           <button
             onClick={() => api.reboot(deviceId)}
             className="flex items-center gap-2 border border-main px-3 py-1.5 rounded text-xs text-zinc-400 hover:bg-zinc-900 transition-all"

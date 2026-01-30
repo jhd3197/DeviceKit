@@ -10,6 +10,9 @@ import {
   CheckCircle,
   XCircle,
   Loader,
+  Upload,
+  Timer,
+  Pause,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -17,6 +20,7 @@ export default function Automations() {
   const navigate = useNavigate()
   const [automations, setAutomations] = useState([])
   const [runs, setRuns] = useState([])
+  const [schedules, setSchedules] = useState([])
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -26,14 +30,26 @@ export default function Automations() {
   const [selectedDevice, setSelectedDevice] = useState('')
   const [launching, setLaunching] = useState(false)
 
+  // Schedule dialog state
+  const [scheduleDialog, setScheduleDialog] = useState(null) // automation object or null
+  const [schedDevices, setSchedDevices] = useState([])
+  const [schedDevice, setSchedDevice] = useState('')
+  const [schedInterval, setSchedInterval] = useState(60)
+  const [creatingSched, setCreatingSched] = useState(false)
+
+  // Import
+  const importRef = React.useRef(null)
+
   const fetchData = useCallback(async () => {
     try {
-      const [autoRes, runsRes] = await Promise.all([
+      const [autoRes, runsRes, schedRes] = await Promise.all([
         api.getAutomations(),
         api.getAutomationRuns({ limit: 20 }),
+        api.getSchedules(),
       ])
       setAutomations(autoRes.automations || [])
       setRuns(runsRes.runs || [])
+      setSchedules(schedRes.schedules || [])
     } catch (e) {
       console.error('Failed to fetch automations:', e)
     } finally {
@@ -82,6 +98,69 @@ export default function Automations() {
     }
   }
 
+  const openScheduleDialog = async (automation) => {
+    setScheduleDialog(automation)
+    setSchedDevice('')
+    setSchedInterval(60)
+    try {
+      const res = await api.getDevices()
+      setSchedDevices(res.devices || [])
+      if (res.devices?.length > 0) setSchedDevice(res.devices[0].device_id)
+    } catch {
+      setSchedDevices([])
+    }
+  }
+
+  const handleCreateSchedule = async () => {
+    if (!schedDevice || !scheduleDialog) return
+    setCreatingSched(true)
+    try {
+      await api.createSchedule({
+        automation_id: scheduleDialog.id,
+        device_id: schedDevice,
+        interval_minutes: Number(schedInterval),
+      })
+      setScheduleDialog(null)
+      fetchData()
+    } catch (e) {
+      console.error('Failed to create schedule:', e)
+    } finally {
+      setCreatingSched(false)
+    }
+  }
+
+  const handleToggleSchedule = async (sched) => {
+    try {
+      await api.updateSchedule(sched.id, { enabled: !sched.enabled })
+      fetchData()
+    } catch (e) {
+      console.error('Failed to toggle schedule:', e)
+    }
+  }
+
+  const handleDeleteSchedule = async (id) => {
+    try {
+      await api.deleteSchedule(id)
+      setSchedules((prev) => prev.filter((s) => s.id !== id))
+    } catch (e) {
+      console.error('Failed to delete schedule:', e)
+    }
+  }
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const automation = await api.importAutomation(data)
+      navigate(`/automations/${automation.id}/edit`)
+    } catch (err) {
+      console.error('Failed to import:', err)
+    }
+    e.target.value = ''
+  }
+
   const filtered = automations.filter(
     (a) =>
       a.name?.toLowerCase().includes(filter.toLowerCase()) ||
@@ -111,12 +190,27 @@ export default function Automations() {
         <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">
           Automations
         </h2>
-        <button
-          onClick={() => navigate('/automations/new')}
-          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2"
-        >
-          <Plus className="w-3 h-3" /> New Automation
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={importRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImport}
+          />
+          <button
+            onClick={() => importRef.current?.click()}
+            className="border border-main text-zinc-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
+          >
+            <Upload className="w-3 h-3" /> Import
+          </button>
+          <button
+            onClick={() => navigate('/automations/new')}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-3 h-3" /> New Automation
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -198,6 +292,13 @@ export default function Automations() {
                           <Play className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          onClick={() => openScheduleDialog(a)}
+                          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-blue-400 transition-colors"
+                          title="Schedule"
+                        >
+                          <Timer className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => handleDelete(a.id)}
                           className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-red-400 transition-colors"
                           title="Delete"
@@ -269,6 +370,67 @@ export default function Automations() {
             </table>
           </div>
         </div>
+        {/* Schedules */}
+        {schedules.length > 0 && (
+          <div>
+            <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">
+              Schedules
+            </h3>
+            <div className="bg-card border border-main rounded overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-main text-[10px] text-zinc-500 uppercase">
+                    <th className="text-left px-4 py-3 font-bold">Automation</th>
+                    <th className="text-left px-4 py-3 font-bold">Device</th>
+                    <th className="text-left px-4 py-3 font-bold">Interval</th>
+                    <th className="text-left px-4 py-3 font-bold">Next Run</th>
+                    <th className="text-left px-4 py-3 font-bold">Status</th>
+                    <th className="text-right px-4 py-3 font-bold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedules.map((s) => (
+                    <tr key={s.id} className="border-b border-main hover:bg-zinc-900/20 transition-colors">
+                      <td className="px-4 py-3 font-medium">{s.automation_name}</td>
+                      <td className="px-4 py-3 mono text-zinc-400 text-[10px]">{s.device_id}</td>
+                      <td className="px-4 py-3 mono text-zinc-400">{s.interval_minutes}m</td>
+                      <td className="px-4 py-3 mono text-zinc-500 text-[10px]">
+                        {s.next_run_at ? new Date(s.next_run_at * 1000).toLocaleTimeString() : '--'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
+                          s.enabled
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-zinc-500/10 text-zinc-400'
+                        }`}>
+                          {s.enabled ? 'Active' : 'Paused'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => handleToggleSchedule(s)}
+                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                            title={s.enabled ? 'Pause' : 'Resume'}
+                          >
+                            {s.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSchedule(s.id)}
+                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-red-400 transition-colors"
+                            title="Delete schedule"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Run dialog overlay */}
@@ -324,6 +486,74 @@ export default function Automations() {
                   <Play className="w-3 h-3 fill-current" />
                 )}
                 Execute
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule dialog overlay */}
+      {scheduleDialog && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-card border border-main rounded-lg w-full max-w-sm p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold">Schedule Automation</h3>
+              <button
+                onClick={() => setScheduleDialog(null)}
+                className="text-zinc-500 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-zinc-400 mb-4">
+              <span className="text-white font-medium">{scheduleDialog.name}</span>
+            </p>
+            <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
+              Target Device
+            </label>
+            {schedDevices.length === 0 ? (
+              <p className="text-xs text-zinc-500 mb-4">No devices connected.</p>
+            ) : (
+              <select
+                value={schedDevice}
+                onChange={(e) => setSchedDevice(e.target.value)}
+                className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+              >
+                {schedDevices.map((d) => (
+                  <option key={d.device_id} value={d.device_id}>
+                    {d.name || d.device_id} ({d.device_id})
+                  </option>
+                ))}
+              </select>
+            )}
+            <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
+              Interval (minutes)
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={schedInterval}
+              onChange={(e) => setSchedInterval(e.target.value)}
+              className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setScheduleDialog(null)}
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSchedule}
+                disabled={!schedDevice || creatingSched}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold px-4 py-1.5 rounded transition-colors flex items-center gap-2"
+              >
+                {creatingSched ? (
+                  <Loader className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Timer className="w-3 h-3" />
+                )}
+                Create Schedule
               </button>
             </div>
           </div>

@@ -144,33 +144,42 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 
 ## Upcoming Phases
 
-### Phase 12: Multi-Device Fleet Management
+### Phase 12: Multi-Device Fleet Management ✅
 **Goal**: Manage multiple Android devices simultaneously.
 
-- [ ] Backend device grouping (tags, labels)
-- [ ] Bulk actions: install APK on all devices, run command on group
-- [ ] Device comparison view (metrics side-by-side)
-- [ ] Fleet health dashboard with aggregate metrics
-- [ ] Auto-onboarding: detect new ADB device → offer to install agent APK
+- [x] Backend `FleetMixin`: device group CRUD, per-device tags, group membership
+- [x] Fleet API: 15 new endpoints — group CRUD, bulk actions, device tags, fleet health, device compare
+- [x] Bulk actions: run shell command, install agent APK, reboot — all on device groups with per-device results
+- [x] Fleet health endpoint: aggregate CPU/battery/RAM/temp averages, health distribution (healthy/warning/critical)
+- [x] Device comparison view: select up to 4 devices, real-time SSE-updated step charts (CPU, RAM, Battery)
+- [x] Fleet Groups view: create/edit groups with color picker, tag input, device checklist; bulk action dialog with results table
+- [x] Dashboard: fleet health metric cards, health distribution bar (emerald/amber/red), auto-onboarding toast notifications
+- [x] Auto-onboarding: `device_new` SSE event on agent registration → blue toast with "Install Agent" button (15s auto-dismiss)
+- [x] Navigation: "Device Groups" and "Compare" links in sidebar under Management
 
-### Phase 13: Automation Engine
+### Phase 13: Automation Engine ✅
 **Goal**: Visual workflow builder for device automation.
 
-- [ ] Step types: tap, swipe, wait, screenshot, shell command, file operation, assertion
-- [ ] Automation recorder: record actions on device → generate steps
-- [ ] Schedule automations (cron-like)
-- [ ] Automation results with pass/fail per step + screenshots
-- [ ] Share automations between devices
+- [x] `file_operation` step type: push/pull/delete files via ADB in automation steps
+- [x] Automation recorder: Record button in NodeDetail captures tap/swipe/press actions → generates automation steps → opens editor
+- [x] Schedule automations: interval-based scheduling with background checker thread, schedule CRUD, pause/resume/delete from Automations view
+- [x] Screenshot on failure: auto-captures device screenshot when a step fails, clickable thumbnail in run detail with full-size overlay
+- [x] Share automations: clone (deep copy with new UUIDs), export as JSON file download, import from JSON file upload
 
-### Phase 14: Security & Production Hardening
+### Phase 14: Security & Production Hardening ✅
 **Goal**: Secure all communication channels.
 
-- [ ] Agent HTTP server authentication (API key / token)
-- [ ] HTTPS support for agent ↔ backend communication
-- [ ] Backend authentication (JWT or API key)
-- [ ] Rate limiting on all endpoints
-- [ ] Audit logging for all device actions
-- [ ] Agent app signing for release builds
+- [x] `AuthMixin`: API key + agent token validation, disabled by default for dev (set `API_KEY` / `AGENT_TOKENS` env vars to enable)
+- [x] `before_request` auth middleware: API key for general endpoints, agent token for `/agent-device/*`, query-param fallback for SSE
+- [x] Rate limiting via `flask-limiter`: 200/min default, stricter limits on `/adb` (30), `/reboot` (5), `/files/upload` (20), `/bulk/*` (10)
+- [x] Security headers on all responses: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`
+- [x] CORS lockdown: `CORS_ORIGINS` env var respected (defaults to `*` for dev)
+- [x] Audit logging: `after_request` hook auto-logs all POST/PUT/DELETE with `source_ip` and `authenticated` status
+- [x] Debug mode toggle: `DEBUG_MODE` env var controls Flask debug/reloader
+- [x] Frontend auth propagation: `X-API-Key` header on all requests, SSE auth via query param, `uploadFile` auth
+- [x] droidlink auth: optional `api_key` param on `Connection`, `connect_usb`, `connect_wifi` (sets `X-Agent-Token` header)
+- [ ] Agent-side HTTPS/token support (deferred — requires Kotlin changes + APK rebuild)
+- [ ] Agent app signing for release builds (deferred)
 
 ### Phase 15: CI/CD Integration
 **Goal**: Use DeviceKit in CI/CD pipelines.

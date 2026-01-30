@@ -10,7 +10,7 @@ class ActivityMixin:
 
     _activities = []
 
-    def log_activity(self, action, device_id=None, details=None):
+    def log_activity(self, action, device_id=None, details=None, source_ip=None, authenticated=None):
         """Log an activity event."""
         activity = {
             'id': str(uuid.uuid4()),
@@ -18,6 +18,8 @@ class ActivityMixin:
             'device_id': device_id,
             'details': details or {},
             'timestamp': time.time(),
+            'source_ip': source_ip,
+            'authenticated': authenticated,
         }
         self._activities.append(activity)
         logger.info(f"Activity logged: {action}" + (f" on {device_id}" if device_id else ""))
