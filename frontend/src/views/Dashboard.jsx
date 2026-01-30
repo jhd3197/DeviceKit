@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, AlertCircle } from 'lucide-react'
+import { ChevronRight, AlertCircle, Smartphone, X } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 
 export default function Dashboard() {
@@ -11,12 +11,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [sseConnected, setSseConnected] = useState(false)
+  const [fleetHealth, setFleetHealth] = useState(null)
+  const [toasts, setToasts] = useState([])
 
   const fetchData = useCallback(async () => {
     try {
-      const [s, d] = await Promise.all([api.getStats(), api.getDevices()])
+      const [s, d, fh] = await Promise.all([api.getStats(), api.getDevices(), api.getFleetHealth().catch(() => null)])
       setStats(s)
       setDevices(d.devices || [])
+      setFleetHealth(fh)
       setError(null)
     } catch (e) {
       setError(e.message)
@@ -48,6 +51,13 @@ export default function Dashboard() {
       },
       onAlert: () => {
         setStats(prev => prev ? { ...prev, active_alerts: (prev.active_alerts || 0) + 1 } : prev)
+      },
+      onDeviceNew: (data) => {
+        const id = `toast-${Date.now()}`
+        setToasts(prev => [...prev, { id, device_id: data.device_id, info: data.info }])
+        setTimeout(() => {
+          setToasts(prev => prev.filter(t => t.id !== id))
+        }, 15000)
       },
       onError: () => {
         setSseConnected(false)
@@ -125,6 +135,79 @@ export default function Dashboard() {
             }
           />
         </div>
+
+        {/* Fleet Health Cards */}
+        {fleetHealth && (
+          <>
+            <div className="grid grid-cols-4 gap-4">
+              <MetricCard
+                label="Avg CPU"
+                value={`${fleetHealth.avg_cpu}%`}
+                valueClass={fleetHealth.avg_cpu > 80 ? 'text-red-400' : 'text-emerald-400'}
+              />
+              <MetricCard
+                label="Avg Battery"
+                value={`${fleetHealth.avg_battery}%`}
+                valueClass={fleetHealth.avg_battery < 20 ? 'text-red-400' : 'text-white'}
+              />
+              <MetricCard
+                label="Total RAM"
+                value={`${(fleetHealth.total_ram_used_mb / 1024).toFixed(1)}`}
+                unit={`/ ${(fleetHealth.total_ram_total_mb / 1024).toFixed(1)} GB`}
+              />
+              <MetricCard
+                label="Avg Temp"
+                value={`${fleetHealth.avg_temperature}°C`}
+                valueClass={fleetHealth.avg_temperature > 45 ? 'text-red-400' : 'text-zinc-200'}
+              />
+            </div>
+
+            {/* Health Distribution */}
+            {(() => {
+              const dist = fleetHealth.health_distribution || {}
+              const total = (dist.healthy || 0) + (dist.warning || 0) + (dist.critical || 0)
+              if (total === 0) return null
+              return (
+                <div className="bg-card border border-main p-4 rounded-lg">
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">
+                    Fleet Health Distribution
+                  </p>
+                  <div className="flex h-3 rounded-full overflow-hidden bg-zinc-900">
+                    {dist.healthy > 0 && (
+                      <div
+                        className="bg-emerald-500 transition-all"
+                        style={{ width: `${(dist.healthy / total) * 100}%` }}
+                      />
+                    )}
+                    {dist.warning > 0 && (
+                      <div
+                        className="bg-amber-500 transition-all"
+                        style={{ width: `${(dist.warning / total) * 100}%` }}
+                      />
+                    )}
+                    {dist.critical > 0 && (
+                      <div
+                        className="bg-red-500 transition-all"
+                        style={{ width: `${(dist.critical / total) * 100}%` }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex gap-4 mt-2 text-[10px]">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" /> Healthy: {dist.healthy}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" /> Warning: {dist.warning}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-red-500" /> Critical: {dist.critical}
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+          </>
+        )}
 
         {/* Node Registry Table */}
         <div className="bg-card border border-main rounded-lg overflow-hidden">
@@ -233,6 +316,39 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+
+      {/* Auto-onboarding toasts */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 space-y-2">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className="bg-blue-950 border border-blue-800/50 rounded-lg p-4 flex items-center gap-3 shadow-lg min-w-[300px] animate-[fadeIn_0.3s_ease-out]"
+            >
+              <Smartphone className="w-5 h-5 text-blue-400 shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-blue-200">New device detected</p>
+                <p className="text-[10px] mono text-blue-400 mt-0.5">{t.device_id}</p>
+              </div>
+              <button
+                onClick={async () => {
+                  try { await api.onboardDevice(t.device_id) } catch {}
+                  setToasts(prev => prev.filter(x => x.id !== t.id))
+                }}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded transition-colors shrink-0"
+              >
+                Install Agent
+              </button>
+              <button
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                className="text-blue-600 hover:text-blue-400 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   )
 }

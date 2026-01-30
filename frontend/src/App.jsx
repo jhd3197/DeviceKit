@@ -10,6 +10,8 @@ import {
   PlayCircle,
   Workflow,
   Bot,
+  Users,
+  BarChart3,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -21,6 +23,8 @@ import AutomationEditor from './views/AutomationEditor'
 import AutomationRunDetail from './views/AutomationRunDetail'
 import Profiles from './views/Profiles'
 import ProfileEditor from './views/ProfileEditor'
+import FleetGroups from './views/FleetGroups'
+import DeviceCompare from './views/DeviceCompare'
 
 const navSections = [
   {
@@ -29,6 +33,8 @@ const navSections = [
       { to: '/', icon: LayoutGrid, label: 'Fleet Overview' },
       { to: '/node', icon: Cpu, label: 'Node Control' },
       { to: '/remote-adb', icon: Terminal, label: 'Remote ADB' },
+      { to: '/fleet/groups', icon: Users, label: 'Device Groups' },
+      { to: '/fleet/compare', icon: BarChart3, label: 'Compare' },
     ],
   },
   {
@@ -119,6 +125,8 @@ export default function App() {
           <Route path="/automations/:id/edit" element={<AutomationEditor />} />
           <Route path="/automations/runs/:runId" element={<AutomationRunDetail />} />
           <Route path="/remote-adb" element={<RemoteADB />} />
+          <Route path="/fleet/groups" element={<FleetGroups />} />
+          <Route path="/fleet/compare" element={<DeviceCompare />} />
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />

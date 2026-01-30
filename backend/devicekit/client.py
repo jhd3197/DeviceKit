@@ -15,6 +15,7 @@ from devicekit.mixins.activity import ActivityMixin
 from devicekit.mixins.automation import AutomationMixin
 from devicekit.mixins.profile import ProfileMixin
 from devicekit.mixins.agent import AgentMixin
+from devicekit.mixins.fleet import FleetMixin
 
 
 class Client(
@@ -26,6 +27,7 @@ class Client(
     AutomationMixin,
     ProfileMixin,
     AgentMixin,
+    FleetMixin,
     ApiAppMixin,
     QueueMixin,
     AlertMixin,

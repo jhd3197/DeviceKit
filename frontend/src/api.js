@@ -122,6 +122,39 @@ export const api = {
       body: JSON.stringify({ startX, startY, endX, endY, duration }),
     }),
 
+  // Fleet Management
+  getFleetGroups: () => request('/fleet/groups'),
+  getFleetGroup: (id) => request(`/fleet/groups/${id}`),
+  createFleetGroup: (data) =>
+    request('/fleet/groups', { method: 'POST', body: JSON.stringify(data) }),
+  updateFleetGroup: (id, data) =>
+    request(`/fleet/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFleetGroup: (id) =>
+    request(`/fleet/groups/${id}`, { method: 'DELETE' }),
+  addDeviceToGroup: (groupId, deviceId) =>
+    request(`/fleet/groups/${groupId}/devices`, {
+      method: 'POST',
+      body: JSON.stringify({ device_id: deviceId }),
+    }),
+  removeDeviceFromGroup: (groupId, deviceId) =>
+    request(`/fleet/groups/${groupId}/devices/${deviceId}`, { method: 'DELETE' }),
+  bulkCommand: (groupId, command) =>
+    request(`/fleet/groups/${groupId}/bulk/command`, {
+      method: 'POST',
+      body: JSON.stringify({ command }),
+    }),
+  bulkInstall: (groupId) =>
+    request(`/fleet/groups/${groupId}/bulk/install`, { method: 'POST' }),
+  bulkReboot: (groupId) =>
+    request(`/fleet/groups/${groupId}/bulk/reboot`, { method: 'POST' }),
+  getDeviceTags: (id) => request(`/devices/${id}/tags`),
+  updateDeviceTags: (id, tags) =>
+    request(`/devices/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tags }) }),
+  getFleetHealth: () => request('/fleet/health'),
+  getFleetComparison: (deviceIds) =>
+    request(`/fleet/compare?devices=${deviceIds.join(',')}`),
+  onboardDevice: (id) => request(`/devices/${id}/onboard`, { method: 'POST' }),
+
   // Profiles
   getProfiles: () => request('/profiles'),
   getProfile: (id) => request(`/profiles/${id}`),
@@ -169,6 +202,12 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('alert', (e) => {
     handlers.onAlert?.(JSON.parse(e.data))
+  })
+  es.addEventListener('device_new', (e) => {
+    handlers.onDeviceNew?.(JSON.parse(e.data))
+  })
+  es.addEventListener('bulk_action_complete', (e) => {
+    handlers.onBulkActionComplete?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()
