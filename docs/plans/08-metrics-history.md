@@ -88,8 +88,13 @@ history queryable is where this plan compounds with DeviceKit's differentiators.
 - End-to-end via Flask test client: register → 4 heartbeat states → raw query → rollup job →
   7d hourly-tier query → seeded rule fires `device.battery.low` → FQL `battery.trend_24h < 0`
   matches. Frontend `npm run build` clean.
-- Not verified on physical hardware: no live agent posts real heartbeats in this session; the
-  ingest path is exercised through the same `/agent-device/state` route the APK calls.
+- Verified on physical hardware (Samsung A03s, `R9TT311P25N`): the on-device agent streams real
+  heartbeats → `record_metrics_sample` → tiered tables → period API (raw rows accumulating,
+  rolled up to hourly; live CPU/battery/temp series). Unblocking the live run surfaced a
+  separate agent-APK bug — the agent (targetSdk 34) had no cleartext-HTTP allowance, so it
+  could never reach an `http://` backend (stuck "standalone mode"); fixed by adding
+  `android:usesCleartextTraffic="true"` to the agent manifest and rebuilding. Not plan-08 code,
+  but recorded here since it gated the hardware verification.
 
 ## Definition of done
 
