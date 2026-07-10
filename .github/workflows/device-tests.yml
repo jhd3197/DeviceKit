@@ -1,9 +1,10 @@
 name: Device Tests
 
+# Runs on a self-hosted runner with real devices attached. Deliberately NOT
+# triggered on pull_request: fork PRs must never execute on the self-hosted
+# runner. Use workflow_dispatch to test a branch manually.
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
