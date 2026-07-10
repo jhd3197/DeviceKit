@@ -72,6 +72,7 @@ instance/
 backend/devicekit.db
 backend/recordings/
 backend/output/debug_bundles/
+backend/.apk_cache/
 
 # Installed extensions are extracted here at runtime (tracked: only the package marker)
 backend/devicekit/extensions/*
