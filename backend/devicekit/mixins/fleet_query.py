@@ -5,6 +5,9 @@ import re
 import csv
 import io
 
+from devicekit.db import session_scope
+from devicekit.models import SavedQuery
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -393,8 +396,6 @@ PRESET_QUERIES = [
 class FleetQueryMixin:
     """Fleet Query Language: SQL-like queries across the device fleet."""
 
-    _saved_queries = []
-
     # -----------------------------------------------------------
     # Query execution
     # -----------------------------------------------------------
@@ -457,45 +458,55 @@ class FleetQueryMixin:
         if not validation['valid']:
             raise ValueError(f"Invalid query: {validation['error']}")
 
-        query = {
-            'id': str(uuid.uuid4()),
-            'name': name,
-            'expression': expression,
-            'description': description,
-            'created_at': time.time(),
-            'updated_at': time.time(),
-        }
-        self._saved_queries.append(query)
-        logger.info(f"Saved query created: '{name}' ({query['id']})")
-        return query
+        now = time.time()
+        with session_scope() as s:
+            query = SavedQuery(
+                id=str(uuid.uuid4()),
+                name=name,
+                expression=expression,
+                description=description,
+                created_at=now,
+                updated_at=now,
+            )
+            s.add(query)
+            s.flush()
+            result = query.to_dict()
+        logger.info(f"Saved query created: '{name}' ({result['id']})")
+        return result
 
     def get_saved_query(self, query_id):
-        return next((q for q in self._saved_queries if q['id'] == query_id), None)
+        with session_scope() as s:
+            query = s.get(SavedQuery, query_id)
+            return query.to_dict() if query else None
 
     def list_saved_queries(self):
-        return list(self._saved_queries)
+        with session_scope() as s:
+            return [q.to_dict() for q in s.query(SavedQuery).all()]
 
     def update_saved_query(self, query_id, updates):
-        query = self.get_saved_query(query_id)
-        if not query:
-            return None
         if 'expression' in updates:
             validation = self.validate_query(updates['expression'])
             if not validation['valid']:
                 raise ValueError(f"Invalid query: {validation['error']}")
-        for key in ('name', 'expression', 'description'):
-            if key in updates:
-                query[key] = updates[key]
-        query['updated_at'] = time.time()
-        return query
+        with session_scope() as s:
+            query = s.get(SavedQuery, query_id)
+            if not query:
+                return None
+            for key in ('name', 'expression', 'description'):
+                if key in updates:
+                    setattr(query, key, updates[key])
+            query.updated_at = time.time()
+            s.flush()
+            return query.to_dict()
 
     def delete_saved_query(self, query_id):
-        before = len(self._saved_queries)
-        self._saved_queries = [q for q in self._saved_queries if q['id'] != query_id]
-        deleted = len(self._saved_queries) < before
-        if deleted:
-            logger.info(f"Deleted saved query {query_id}")
-        return deleted
+        with session_scope() as s:
+            query = s.get(SavedQuery, query_id)
+            if not query:
+                return False
+            s.delete(query)
+        logger.info(f"Deleted saved query {query_id}")
+        return True
 
     # -----------------------------------------------------------
     # CSV export
