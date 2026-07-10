@@ -4,9 +4,11 @@ import logging
 import json
 import io
 import zipfile
-import base64
 import hashlib
 import os
+
+from devicekit.db import session_scope
+from devicekit.models import DebugBundle
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +16,22 @@ BUNDLE_RETENTION_DAYS = 30
 
 
 class DebugBundleMixin:
-    """Failure Debug Bundles — auto-package diagnostics on failure."""
+    """Failure Debug Bundles — auto-package diagnostics on failure.
 
-    _debug_bundles = []
-    _share_tokens = {}  # token -> {bundle_id, expires_at}
+    Bundle metadata is persisted (DebugBundle rows); the ZIP payload is written to disk
+    under ``<output_dir>/debug_bundles/<id>.zip``. Share tokens are short-lived and stay
+    in memory on purpose.
+    """
+
+    _share_tokens = {}  # token -> {bundle_id, expires_at}  (ephemeral)
+
+    def _bundle_dir(self):
+        base = os.path.join(getattr(self, 'output_dir', 'output'), 'debug_bundles')
+        os.makedirs(base, exist_ok=True)
+        return base
+
+    def _bundle_zip_path(self, bundle_id):
+        return os.path.join(self._bundle_dir(), f'{bundle_id}.zip')
 
     # -----------------------------------------------------------
     # Bundle generation
@@ -118,36 +132,39 @@ class DebugBundleMixin:
         except Exception:
             pass
 
-        # Build ZIP in memory
+        # Build ZIP in memory, then persist to disk
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
             for filename, data in collected.items():
                 zf.writestr(filename, data)
         zip_bytes = zip_buffer.getvalue()
 
-        # Store bundle
-        bundle = {
-            'id': bundle_id,
-            'device_id': device_id,
-            'trigger': trigger,
-            'context': context,
-            'files': list(collected.keys()),
-            'size_bytes': len(zip_bytes),
-            'created_at': started_at,
-            'generation_ms': int((time.time() - started_at) * 1000),
-            'ai_analysis': None,
-            '_zip_data': base64.b64encode(zip_bytes).decode('ascii'),
-        }
-        self._debug_bundles.append(bundle)
+        zip_path = self._bundle_zip_path(bundle_id)
+        with open(zip_path, 'wb') as f:
+            f.write(zip_bytes)
+
+        generation_ms = int((time.time() - started_at) * 1000)
+        with session_scope() as s:
+            bundle = DebugBundle(
+                id=bundle_id,
+                device_id=device_id,
+                trigger=trigger,
+                context=context,
+                files=list(collected.keys()),
+                size_bytes=len(zip_bytes),
+                created_at=started_at,
+                generation_ms=generation_ms,
+                ai_analysis=None,
+                zip_path=zip_path,
+            )
+            s.add(bundle)
+            s.flush()
+            result = bundle.to_dict()
         logger.info(
             f"Debug bundle {bundle_id} generated: {len(collected)} files, "
-            f"{len(zip_bytes)} bytes, {bundle['generation_ms']}ms"
+            f"{len(zip_bytes)} bytes, {generation_ms}ms"
         )
-        return self._bundle_metadata(bundle)
-
-    def _bundle_metadata(self, bundle):
-        """Return bundle dict without the raw zip data."""
-        return {k: v for k, v in bundle.items() if k != '_zip_data'}
+        return result
 
     # -----------------------------------------------------------
     # Bundle retrieval
@@ -155,44 +172,51 @@ class DebugBundleMixin:
 
     def get_debug_bundle(self, bundle_id):
         """Get bundle metadata by ID."""
-        bundle = self._find_bundle(bundle_id)
-        if bundle:
-            return self._bundle_metadata(bundle)
-        return None
+        with session_scope() as s:
+            bundle = s.get(DebugBundle, bundle_id)
+            return bundle.to_dict() if bundle else None
 
     def get_bundle_zip(self, bundle_id):
         """Get raw ZIP bytes for download."""
-        bundle = self._find_bundle(bundle_id)
-        if bundle and bundle.get('_zip_data'):
-            return base64.b64decode(bundle['_zip_data'])
+        with session_scope() as s:
+            bundle = s.get(DebugBundle, bundle_id)
+            zip_path = bundle.zip_path if bundle else None
+        if zip_path and os.path.exists(zip_path):
+            with open(zip_path, 'rb') as f:
+                return f.read()
         return None
 
     def list_debug_bundles(self, device_id=None, trigger=None, limit=50):
         """List bundles with optional filters."""
-        results = list(self._debug_bundles)
-        if device_id:
-            results = [b for b in results if b['device_id'] == device_id]
-        if trigger:
-            results = [b for b in results if b['trigger'] == trigger]
-        results.sort(key=lambda b: b['created_at'], reverse=True)
-        return [self._bundle_metadata(b) for b in results[:limit]]
+        with session_scope() as s:
+            q = s.query(DebugBundle)
+            if device_id:
+                q = q.filter(DebugBundle.device_id == device_id)
+            if trigger:
+                q = q.filter(DebugBundle.trigger == trigger)
+            q = q.order_by(DebugBundle.created_at.desc()).limit(limit)
+            return [b.to_dict() for b in q.all()]
 
     def delete_debug_bundle(self, bundle_id):
         """Delete a bundle by ID."""
-        before = len(self._debug_bundles)
-        self._debug_bundles = [b for b in self._debug_bundles if b['id'] != bundle_id]
-        deleted = len(self._debug_bundles) < before
-        if deleted:
-            # Clean share tokens for this bundle
-            self._share_tokens = {
-                t: v for t, v in self._share_tokens.items()
-                if v['bundle_id'] != bundle_id
-            }
-            logger.info(f"Deleted debug bundle {bundle_id}")
-        return deleted
-
-    def _find_bundle(self, bundle_id):
-        return next((b for b in self._debug_bundles if b['id'] == bundle_id), None)
+        with session_scope() as s:
+            bundle = s.get(DebugBundle, bundle_id)
+            if not bundle:
+                return False
+            zip_path = bundle.zip_path
+            s.delete(bundle)
+        # Remove the ZIP from disk and any share tokens for this bundle
+        if zip_path and os.path.exists(zip_path):
+            try:
+                os.remove(zip_path)
+            except OSError:
+                pass
+        self._share_tokens = {
+            t: v for t, v in self._share_tokens.items()
+            if v['bundle_id'] != bundle_id
+        }
+        logger.info(f"Deleted debug bundle {bundle_id}")
+        return True
 
     # -----------------------------------------------------------
     # AI failure analysis
@@ -200,7 +224,7 @@ class DebugBundleMixin:
 
     def analyze_debug_bundle(self, bundle_id):
         """Send bundle contents to AI for root cause analysis."""
-        bundle = self._find_bundle(bundle_id)
+        bundle = self.get_debug_bundle(bundle_id)
         if not bundle:
             return None
 
@@ -246,13 +270,17 @@ class DebugBundleMixin:
             ai = Prompture()
             response = ai.chat(prompt)
             analysis = response if isinstance(response, str) else str(response)
-            bundle['ai_analysis'] = {
+            ai_analysis = {
                 'analysis': analysis,
                 'analyzed_at': time.time(),
                 'files_analyzed': list(text_contents.keys()),
             }
+            with session_scope() as s:
+                row = s.get(DebugBundle, bundle_id)
+                if row:
+                    row.ai_analysis = ai_analysis
             logger.info(f"AI analysis complete for bundle {bundle_id}")
-            return bundle['ai_analysis']
+            return ai_analysis
         except ImportError:
             logger.warning("Prompture not available for AI analysis")
             return {'error': 'AI analysis requires the prompture package'}
@@ -266,7 +294,7 @@ class DebugBundleMixin:
 
     def generate_share_link(self, bundle_id, expires_hours=24):
         """Generate a time-limited share token for a bundle."""
-        bundle = self._find_bundle(bundle_id)
+        bundle = self.get_debug_bundle(bundle_id)
         if not bundle:
             return None
 
@@ -302,17 +330,25 @@ class DebugBundleMixin:
         """Remove bundles older than max_age_days (default: BUNDLE_RETENTION_DAYS)."""
         max_age = (max_age_days or BUNDLE_RETENTION_DAYS) * 86400
         cutoff = time.time() - max_age
-        before = len(self._debug_bundles)
-        expired_ids = [b['id'] for b in self._debug_bundles if b['created_at'] < cutoff]
-        self._debug_bundles = [b for b in self._debug_bundles if b['created_at'] >= cutoff]
-        removed = before - len(self._debug_bundles)
+        with session_scope() as s:
+            expired = s.query(DebugBundle).filter(DebugBundle.created_at < cutoff).all()
+            expired_specs = [(b.id, b.zip_path) for b in expired]
+            for b in expired:
+                s.delete(b)
+        removed = len(expired_specs)
 
-        # Clean share tokens for removed bundles
-        if expired_ids:
-            expired_set = set(expired_ids)
+        # Remove ZIPs from disk and clean share tokens for removed bundles
+        if expired_specs:
+            expired_ids = {bid for bid, _ in expired_specs}
+            for _, zip_path in expired_specs:
+                if zip_path and os.path.exists(zip_path):
+                    try:
+                        os.remove(zip_path)
+                    except OSError:
+                        pass
             self._share_tokens = {
                 t: v for t, v in self._share_tokens.items()
-                if v['bundle_id'] not in expired_set
+                if v['bundle_id'] not in expired_ids
             }
 
         if removed:
