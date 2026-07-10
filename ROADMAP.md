@@ -377,14 +377,15 @@ See [docs/plans/03-extension-platform-backend.md](docs/plans/03-extension-platfo
 - [x] `devicekit-extensions` registry repo (index.json + schema + validators + CI), fetch with offline fallback chain
 - [x] First builtin (`devicekit-webhook-notify`, self-contained) + scaffolding CLI + author docs — full core visual-regression extraction deferred as a follow-up
 
-### Phase 27: Extension Platform — Frontend & Marketplace
+### Phase 27: Extension Platform — Frontend & Marketplace ✅
 **Goal**: Extensions contribute nav, routes, and widgets declaratively; users browse/install from a marketplace view.
 See [docs/plans/04-extension-platform-frontend.md](docs/plans/04-extension-platform-frontend.md).
 
-- [ ] Contributions envelope endpoint consumption: nav + routes + page titles, per-extension error boundaries
-- [ ] `ExtensionSlot` mount points (dashboard, run detail, settings) with SVG sanitization
-- [ ] Marketplace view: browse (builtin + registry), consent chips, installed management, schema-driven config forms, keep-vs-purge uninstall
-- [ ] `devicekit-sdk` Vite alias with versioned surface; builtin frontend sync script + CI drift gate
+- [x] `GET /extensions/contributions` envelope (slug-tagged merge of active extensions) + `SDK_VERSION` — the plan-03 dependency that didn't exist; built as phase 0
+- [x] Contributions envelope consumption: `contributions.js` singleton (fetch/cache/pubsub, build-time glob fallback), nav + routes + page titles, per-extension error boundaries
+- [x] `ExtensionSlot` mount points (`dashboard.top`, `run-detail.panels`; `node-detail.tabs`/`settings.panels` seeded) with SVG sanitization (`sanitizeSvgInner` + `ExtensionIcon`)
+- [x] Marketplace view (`Extensions.jsx`): browse (builtin + registry, cover-art fallback, category/permission filters), consent chips, install from registry/URL/upload, installed management, schema-driven config forms (secret masking), keep-vs-purge uninstall
+- [x] `devicekit-sdk` Vite alias with versioned surface (api, subscribeToEvents, StreamCanvas, useMjpegStream, router helpers); `scripts/sync-builtin-frontends.mjs` + `--check` CI drift gate (`.github/workflows/frontend-ci.yml`); first builtin frontend (webhook-notify) + EXTENSIONS.md author section
 
 ### Phase 28: Notification Bus
 **Goal**: Fleet events reach operators — in-app, webhook, and email — with preferences and history.
