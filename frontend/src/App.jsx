@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
   Layers,
@@ -26,6 +26,13 @@ import ProfileEditor from './views/ProfileEditor'
 import FleetGroups from './views/FleetGroups'
 import DeviceCompare from './views/DeviceCompare'
 
+import { useContributions } from './extensions/contributions'
+import { buildExtensionRoutes } from './extensions/ExtensionRoutes'
+import ExtensionIcon from './extensions/ExtensionIcon'
+
+// Core navigation. Extension-contributed nav items merge into these sections by `section`
+// label (default "Extensions"); a contributed item whose route collides with a core route
+// is dropped so core always wins (plan 04).
 const navSections = [
   {
     label: 'Management',
@@ -53,7 +60,57 @@ const navSections = [
   },
 ]
 
+// Section order when merging: core sections first (in declared order), contributed-only
+// sections (e.g. "Extensions") appended after.
+const SECTION_ORDER = navSections.map((s) => s.label)
+
+/** Merge core nav with the contributed nav entries from the envelope. Core wins on a route
+ *  collision; contributed items are grouped into their `section` (default "Extensions"). */
+function mergeNav(contribNav) {
+  const coreRoutes = new Set()
+  const sections = navSections.map((s) => {
+    s.items.forEach((i) => coreRoutes.add(i.to))
+    return { label: s.label, items: [...s.items] }
+  })
+  const byLabel = new Map(sections.map((s) => [s.label, s]))
+
+  for (const item of contribNav || []) {
+    const route = item.route
+    if (!route || coreRoutes.has(route)) continue // core wins on collision
+    const sectionLabel = item.section || 'Extensions'
+    let section = byLabel.get(sectionLabel)
+    if (!section) {
+      section = { label: sectionLabel, items: [] }
+      byLabel.set(sectionLabel, section)
+      sections.push(section)
+    }
+    // De-dupe within a section by route.
+    if (section.items.some((i) => i.to === route)) continue
+    section.items.push({
+      to: route,
+      label: item.label || route,
+      extIcon: item.icon,
+      slug: item.slug,
+    })
+  }
+
+  // Stable ordering: known sections in declared order, then any contributed-only sections.
+  return sections
+    .filter((s) => s.items.length)
+    .sort((a, b) => {
+      const ai = SECTION_ORDER.indexOf(a.label)
+      const bi = SECTION_ORDER.indexOf(b.label)
+      if (ai === -1 && bi === -1) return 0
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
+}
+
 function Sidebar() {
+  const { envelope } = useContributions()
+  const sections = mergeNav(envelope.nav)
+
   return (
     <aside className="w-64 border-r border-main flex flex-col bg-black shrink-0">
       {/* Logo */}
@@ -66,7 +123,7 @@ function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navSections.map((section) => (
+        {sections.map((section) => (
           <div key={section.label}>
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-3 mb-2 mt-6 first:mt-0">
               {section.label}
@@ -84,7 +141,11 @@ function Sidebar() {
                   }`
                 }
               >
-                <item.icon className="w-4 h-4" />
+                {item.icon ? (
+                  <item.icon className="w-4 h-4" />
+                ) : (
+                  <ExtensionIcon svg={item.extIcon} className="w-4 h-4" />
+                )}
                 {item.label}
               </NavLink>
             ))}
@@ -110,10 +171,25 @@ function Sidebar() {
   )
 }
 
+/** Update document.title from the contributed page_titles map (plan 04). Core pages keep
+ *  the default title; extension routes can name their tab. */
+function PageTitle({ titles }) {
+  const location = useLocation()
+  useEffect(() => {
+    const title = titles?.[location.pathname]
+    document.title = title ? `${title} · DeviceKit` : 'DeviceKit'
+  }, [location.pathname, titles])
+  return null
+}
+
 export default function App() {
+  const { envelope } = useContributions()
+  const extensionRoutes = buildExtensionRoutes(envelope.routes)
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
+      <PageTitle titles={envelope.page_titles} />
       <main className="flex-1 flex flex-col overflow-hidden">
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -130,6 +206,7 @@ export default function App() {
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
+          {extensionRoutes}
         </Routes>
       </main>
     </div>
