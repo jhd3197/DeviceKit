@@ -10,6 +10,11 @@ from devicekit.models.session import StreamSession
 from devicekit.models.agent_device import AgentDevice
 from devicekit.models.extension import InstalledExtension
 
+# Queue Bus + Jobs live in their own packages (plan 05) but must register on the shared
+# ``Base`` here so ``create_all`` and Alembic's autogenerate see every table.
+from devicekit.queue_bus.models import QueueGroup, Queue, QueueMessage
+from devicekit.jobs.models import Job, ScheduledJob
+
 __all__ = [
     "Automation",
     "AutomationRun",
@@ -22,4 +27,9 @@ __all__ = [
     "StreamSession",
     "AgentDevice",
     "InstalledExtension",
+    "QueueGroup",
+    "Queue",
+    "QueueMessage",
+    "Job",
+    "ScheduledJob",
 ]
