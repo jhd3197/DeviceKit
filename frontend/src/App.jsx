@@ -39,6 +39,7 @@ import Enrollment from './views/Enrollment'
 import CommandHistory from './views/CommandHistory'
 
 import NotificationBell from './components/NotificationBell'
+import CommandPalette from './components/CommandPalette'
 import { useContributions } from './extensions/contributions'
 import { buildExtensionRoutes } from './extensions/ExtensionRoutes'
 import ExtensionIcon from './extensions/ExtensionIcon'
@@ -212,6 +213,7 @@ export default function App() {
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <PageTitle titles={envelope.page_titles} />
+      <CommandPalette />
       <main className="flex-1 flex flex-col overflow-hidden">
         <Routes>
           <Route path="/" element={<Dashboard />} />
