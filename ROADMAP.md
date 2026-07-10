@@ -335,16 +335,16 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 
 Phases 23–34 come from the plan set in [docs/plans/](docs/plans/00-overview.md) — concepts harvested from ServerKit and adapted to DeviceKit. Each phase links its detailed plan doc; a local executor prompt (`docs/plans/prompt.md`, git-ignored) can drive any of them end-to-end. The dependency graph lives in the overview; numbering is the suggested order, but the frontend phases (30–32) and packaging (34) can run in parallel with the backend track.
 
-### Phase 23: Persistence Layer
+### Phase 23: Persistence Layer ✅
 **Goal**: Durable state — nothing user-created is lost on a backend restart.
 See [docs/plans/01-persistence-layer.md](docs/plans/01-persistence-layer.md).
 
-- [ ] SQLAlchemy + SQLite foundation: `db.py` engine/session, `models/` package, `DEVICEKIT_DATABASE_URL` (Postgres-ready), Alembic migrations at boot
-- [ ] `PersistenceMixin` owning session lifecycle, registered before data-owning mixins
-- [ ] Migrate saved FQL queries + fleet groups/tags, then automations + schedules
-- [ ] Migrate runs + step results, visual baselines, debug-bundle metadata, stream-session metadata
-- [ ] Migrate agent-device registry rows (coordinates with Phase 29)
-- [ ] Response envelopes unchanged so the frontend needs zero edits
+- [x] SQLAlchemy + SQLite foundation: `db.py` engine/session, `models/` package, `DEVICEKIT_DATABASE_URL` (Postgres-ready), Alembic migrations at boot
+- [x] `PersistenceMixin` owning session lifecycle, registered before data-owning mixins
+- [x] Migrate saved FQL queries + fleet groups/tags, then automations + schedules
+- [x] Migrate runs + step results, visual baselines, debug-bundle metadata, stream-session metadata
+- [x] Migrate agent-device registry rows (coordinates with Phase 29)
+- [x] Response envelopes unchanged so the frontend needs zero edits
 
 ### Phase 24: API Blueprint Refactor
 **Goal**: Split the ~2,100-line `api_app.py` into per-feature Flask Blueprints — the mounting surface the extension platform requires.
