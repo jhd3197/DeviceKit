@@ -332,6 +332,65 @@ with devicekit_sdk.db.session() as s:
 
 ---
 
+## Frontend contributions (nav, routes, widgets)
+
+Extensions declare UI **declaratively** in the manifest's `contributions` block. The backend
+merges every active extension's block into one envelope at `GET /extensions/contributions`;
+the React app fetches it (and re-fetches after install/enable/disable) and renders the
+contributed nav items, routes, widgets, and page titles dynamically — no edits to `App.jsx`.
+
+```jsonc
+"contributions": {
+  "nav":     [{ "id": "webhook-notify", "label": "Webhook Notify",
+                "route": "/x/webhook-notify", "section": "Extensions",
+                "icon": "<svg …>…</svg>" }],
+  "routes":  [{ "path": "/x/webhook-notify", "component": "WebhookNotifyPage" }],
+  "widgets": [{ "slot": "dashboard.top", "component": "WebhookNotifyWidget" }],
+  "page_titles": { "/x/webhook-notify": "Webhook Notify" }
+}
+```
+
+| Kind | Shape | Renders |
+|------|-------|---------|
+| `nav` | `{id, label, route, section, icon}` | sidebar (core wins on route collision; `section` defaults to "Extensions") |
+| `routes` | `{path, component}` | a route wrapped in a per-extension error boundary |
+| `widgets` | `{slot, component}` | every `<ExtensionSlot name="…">` matching the slot |
+| `page_titles` | `{ "/path": "Title" }` | `document.title` for that path |
+
+Seed widget slots: `dashboard.top`, `node-detail.tabs`, `run-detail.panels`, `settings.panels`.
+
+**Delivery model (ServerKit ADR 0001, option c).** Only **builtin** extensions ship frontend
+code — it compiles into the app bundle. Third-party extensions contribute backend + step
+types only (a step type needs zero frontend code: the editor auto-renders its config form).
+`icon` is an inline SVG string, sanitized (`sanitizeSvgInner`) before injection.
+
+**Builtin frontend layout.** `builtin-extensions/<slug>/frontend/index.jsx` is the **source of
+truth**. It exports the components named by the manifest's `component` strings, plus a
+`contributions` object mirroring the manifest (used as an offline fallback). Import shared host
+code only from the stable `devicekit-sdk` alias:
+
+```jsx
+import { api, subscribeToEvents, StreamCanvas, useMjpegStream, useNavigate } from 'devicekit-sdk'
+
+export const contributions = { nav: [...], routes: [...], widgets: [...], page_titles: {...} }
+export function WebhookNotifyPage() { /* … */ }
+export function WebhookNotifyWidget() { /* … */ }
+```
+
+The source is synced into the tracked artifact `frontend/src/extensions/<slug>/` (which Vite's
+build-time glob imports) by a script; CI enforces no drift:
+
+```bash
+node scripts/sync-builtin-frontends.mjs          # write the synced copies
+node scripts/sync-builtin-frontends.mjs --check  # CI drift gate (also: npm run sync:builtins:check)
+```
+
+The `devicekit-sdk` surface is **versioned** (`SDK_VERSION`), mirrored by the backend constant
+`devicekit.mixins.extensions.SDK_VERSION` and asserted equal by a test. Internal `src/`
+restructures never break extensions — only the SDK surface is contract.
+
+---
+
 ## The backend SDK (`devicekit_sdk`)
 
 Depend on the SDK, not on host internals. The host wires itself into the SDK at
