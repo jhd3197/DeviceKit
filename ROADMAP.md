@@ -403,7 +403,7 @@ See [docs/plans/07-agent-security-and-fleet-registry.md](docs/plans/07-agent-sec
 
 - [x] Registry extraction from `api_app.py` closures + `AgentDevice`/`DeviceCommand` persistence
 - [x] Heartbeat reaper with reconnect-race fixes (identity re-check under lock; fail in-flight commands on reconnect)
-- [ ] HMAC request signing + nonce replay guard + timestamp window (closes the deferred Phase 14 items; requires APK update)
+- [x] HMAC request signing + nonce replay guard + timestamp window (closes the deferred Phase 14 items; requires APK update)
 - [ ] Pairing-code enrollment flow (agent shows code, dashboard claims) + key rotation
 - [ ] Capability map → FQL fields, `require_capability` step type, capability-filtered device pickers
 

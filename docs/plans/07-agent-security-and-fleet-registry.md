@@ -1,6 +1,6 @@
 # Plan 07 — Agent Security & Fleet Registry Hardening
 
-**Status:** 🚧 in progress (phase 1 ✅)
+**Status:** 🚧 in progress (phases 1–2 ✅)
 **Inspired by:** ServerKit's `backend/app/services/agent_registry.py` (1,035 lines — the
 richest single code reference), `agent_gateway.py`, `pairing_service.py`,
 `docs/FLEET_CONTRACT.md`
@@ -100,8 +100,17 @@ leaves room to add a push channel later without reworking callers.
      New endpoints: `/agent-device/command-result`, `/agent-device/<id>/dispatch`,
      `/agent-device/<id>/command-history`, `/device-commands`. Migration
      `a71c07a10001` (device_commands). Tests: `tests/test_agent_registry.py` (6).
-2. HMAC auth + nonce/timestamp guard + per-device secrets (agent APK update — token
+2. ✅ HMAC auth + nonce/timestamp guard + per-device secrets (agent APK update — token
    storage + signing in the Kotlin `AgentHttpServer` client path).
+   - Backend `verify_agent_request` enforces order rate-limit → timestamp window →
+     signature → nonce-consume, so a forged request can't burn a legitimate nonce
+     (ServerKit's subtle fix). `verify_agent_signature` accepts active or pending secret.
+     Applied by `_require_agent_auth` on every agent endpoint (enforced when enrolled, or
+     globally with `AGENT_ENROLLMENT_REQUIRED`). Tests: `tests/test_agent_auth.py` (8).
+   - APK: `api/AgentCredentials.kt` (SharedPreferences secret store + `HmacSHA256` signing),
+     `DeviceKitClient` signs every request via `.signed(deviceId)` and gained
+     `postCommandResult` + `enroll`/`pollEnrollment`. **Source written; APK not rebuilt/
+     deployed** (needs Android toolchain + a device — deferred, backend contract is ready).
 3. Pairing flow (backend + APK pairing screen + dashboard claim UI).
 4. Capability map formalization + FQL fields + `require_capability` step type +
    key rotation.
