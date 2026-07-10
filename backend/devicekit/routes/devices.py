@@ -61,6 +61,7 @@ def make_blueprint(client, limiter):
                 'ram_used_mb': metrics.get('ram_used_mb'),
                 'ram_total_mb': metrics.get('ram_total_mb'),
                 'currentPackageName': state.get('window', {}).get('package'),
+                'capabilities': agent_data.get('capabilities', {}),
             })
 
         return jsonify({'devices': connected, 'count': len(connected)})

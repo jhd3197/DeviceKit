@@ -152,6 +152,15 @@ STEP_TYPES = {
             "use_ai": {"type": "select", "label": "AI diff analysis", "required": False, "options": ["off", "on"], "default": "on"},
         },
     },
+    "require_capability": {
+        "label": "Require Capability",
+        "category": "Control",
+        "config": {
+            "capability": {"type": "text", "label": "Capability key (e.g. screen_record)", "required": True},
+            "mode": {"type": "select", "label": "If missing", "required": False,
+                     "options": ["fail", "warn"], "default": "fail"},
+        },
+    },
 }
 
 
@@ -325,6 +334,23 @@ def _exec_screenshot_assert(client, config, device_id):
         raise AssertionError(msg)
 
 
+def _exec_require_capability(client, config, device_id):
+    """Gate a run on a device capability (plan 07). ``fail`` (default) aborts the run when
+    the capability is missing; ``warn`` continues with a note. Fleet-level "skip the device"
+    is achieved upstream by targeting with an FQL ``can.*`` filter."""
+    cap = config["capability"]
+    mode = (config.get("mode") or "fail").lower()
+    caps = {}
+    if hasattr(client, "get_agent_capabilities"):
+        caps = client.get_agent_capabilities(device_id) or {}
+    if bool(caps.get(cap)):
+        return f"Capability '{cap}' present"
+    msg = f"Device '{device_id}' lacks required capability '{cap}'"
+    if mode == "warn":
+        return f"WARN: {msg} (continuing)"
+    raise ValueError(msg)
+
+
 _CORE_EXECUTORS = {
     "tap": _exec_tap,
     "tap_by_text": _exec_tap_by_text,
@@ -342,6 +368,7 @@ _CORE_EXECUTORS = {
     "adb_shell": _exec_adb_shell,
     "file_operation": _exec_file_operation,
     "screenshot_assert": _exec_screenshot_assert,
+    "require_capability": _exec_require_capability,
 }
 
 # Attach each executor to its metadata entry, making STEP_TYPES the dispatch registry.

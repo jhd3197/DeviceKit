@@ -33,6 +33,12 @@ SUPPORTED_FIELDS = {
     'device_id', 'model', 'manufacturer', 'android_version', 'sdk',
     'battery', 'cpu', 'ram_used', 'ram_total', 'temperature',
     'online', 'status', 'agent_status', 'group', 'tags', 'model_name',
+    # Capability-driven targeting (plan 07): `can.<feature> = true`, plus the numeric
+    # `android_api` from the advertised capability map. Any `can.*` field resolves against
+    # the device's capability map, so agents can advertise new capabilities without a
+    # code change here.
+    'android_api', 'can.screen_record', 'can.accessibility', 'can.root',
+    'can.input', 'can.notification_listener',
 }
 
 # Extension-contributed FQL fields (plan 03). Each entry is
@@ -49,7 +55,7 @@ TOKEN_PATTERNS = [
     ('NUMBER',   r'-?\d+(?:\.\d+)?'),
     ('STRING',   r"'[^']*'|\"[^\"]*\""),
     ('KEYWORD',  r'\b(?:AND|OR|NOT|IN|LIKE|TRUE|FALSE)\b'),
-    ('IDENT',    r'[a-zA-Z_][a-zA-Z0-9_]*'),
+    ('IDENT',    r'[a-zA-Z_][a-zA-Z0-9_.]*'),
     ('WS',       r'\s+'),
 ]
 
@@ -200,6 +206,11 @@ class Parser:
             return tok.value
         if tok.type == 'IDENT':
             self.consume()
+            # Bareword booleans are case-insensitive (`true`/`TRUE`), so `online = false`
+            # and `can.screen_record = true` evaluate as booleans, not string compares.
+            low = tok.value.lower()
+            if low in ('true', 'false'):
+                return low == 'true'
             return tok.value
         if tok.type in ('TRUE', 'FALSE'):
             self.consume()
@@ -281,6 +292,21 @@ def _get_field_value(device, field, fleet_mixin=None):
     if field == 'model_name':
         # AI model name from profile, if exists
         return device.get('model_name') or ''
+    # Capability-driven targeting (plan 07). `can.<feature>` resolves against the device's
+    # advertised capability map; `android_api` prefers the capability map, falling back to
+    # the reported SDK level.
+    caps = device.get('capabilities')
+    if caps is None and fleet_mixin is not None and hasattr(fleet_mixin, 'get_agent_capabilities'):
+        try:
+            caps = fleet_mixin.get_agent_capabilities(
+                device.get('device_id') or device.get('serial') or '')
+        except Exception:
+            caps = {}
+    caps = caps or {}
+    if field.startswith('can.'):
+        return bool(caps.get(field[4:], False))
+    if field == 'android_api':
+        return caps.get('android_api') or device.get('sdk') or device.get('sdkInt') or 0
     # Extension-contributed fields (plan 03).
     ext = _EXT_FQL_FIELDS.get(field)
     if ext is not None:
@@ -470,6 +496,12 @@ class FleetQueryMixin:
             'group': 'Device group membership',
             'tags': 'Device tags',
             'model_name': 'AI model name from profile',
+            'android_api': 'Advertised Android API level (capability map)',
+            'can.screen_record': 'Device can screen-record (true/false)',
+            'can.accessibility': 'Accessibility service available (true/false)',
+            'can.root': 'Device is rooted (true/false)',
+            'can.input': 'Input injection available (true/false)',
+            'can.notification_listener': 'Notification listener available (true/false)',
             **{name: spec.get('description', f'Extension field {name}')
                for name, spec in _EXT_FQL_FIELDS.items()},
         }

@@ -1,6 +1,6 @@
 # Plan 07 — Agent Security & Fleet Registry Hardening
 
-**Status:** 🚧 in progress (phases 1–2 ✅)
+**Status:** 🚧 in progress (backend of all phases ✅; frontend + APK UI remain)
 **Inspired by:** ServerKit's `backend/app/services/agent_registry.py` (1,035 lines — the
 richest single code reference), `agent_gateway.py`, `pairing_service.py`,
 `docs/FLEET_CONTRACT.md`
@@ -111,9 +111,28 @@ leaves room to add a push channel later without reworking callers.
      `DeviceKitClient` signs every request via `.signed(deviceId)` and gained
      `postCommandResult` + `enroll`/`pollEnrollment`. **Source written; APK not rebuilt/
      deployed** (needs Android toolchain + a device — deferred, backend contract is ready).
-3. Pairing flow (backend + APK pairing screen + dashboard claim UI).
-4. Capability map formalization + FQL fields + `require_capability` step type +
+3. 🚧 Pairing flow (backend ✅ + dashboard claim UI ✅ + APK pairing screen deferred).
+   - `PairingMixin` (`mixins/pairing.py`): `enroll_agent` mints a rotating 6-char code
+     (unambiguous alphabet) + `PendingAgent` row; `claim_pending_agent` (optional
+     passphrase gate = `API_KEY`) mints the secret, promotes the device, notifies
+     `agent.enrolled`; `poll_enrollment` hands the secret over exactly once then deletes
+     the row; expired codes pruned. Routes: `/agent-device/enroll[/<id>]`,
+     `/agent-devices/pending`, `/agent-devices/claim`. Migration `a71c07a30003`.
+     Tests: `tests/test_agent_pairing.py` (6). APK enroll/poll client methods shipped in
+     ph2; the on-screen pairing UI in `MainActivity` is deferred (needs APK rebuild+device).
+4. ✅ Capability map formalization + FQL fields + `require_capability` step type +
    key rotation.
+   - FQL: dotted identifiers now tokenize, so `can.screen_record = true` /
+     `android_api >= 33` filter the fleet; `can.*` resolves against the device capability
+     map (inline or via the registry). Fixed a lurking bug: bareword `true`/`false` are now
+     case-insensitive booleans (so `online = false` presets evaluate correctly).
+   - `require_capability` automation step (`fail`/`warn`) gates a run on a capability;
+     fleet-level skip is done by targeting with an FQL `can.*` filter.
+   - Key rotation endpoints `/agent-device/<id>/rotate-key[/complete]` over the
+     `start_key_rotation`/`complete_key_rotation` mixin helpers (both secrets valid mid-
+     rotation). Capabilities surfaced on `/devices` + `/fleet/query` device dicts + a
+     `/agent-device/<id>/capabilities` endpoint. Migration `a71c07a40004`.
+     Tests: `tests/test_agent_capabilities.py` (8).
 
 > **Assumption (logged):** auth stays *opt-in* for dev/back-compat. The full HMAC guard
 > (`verify_agent_request`) + per-device secrets ship in phase 1's mixin but are only

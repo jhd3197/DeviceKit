@@ -311,6 +311,68 @@ def make_blueprint(client, limiter):
             'source': 'agent',
         })
 
+    # -------------------------------------------------------------------
+    # Enrollment / pairing (plan 07 phase 3)
+    # -------------------------------------------------------------------
+    @bp.route('/agent-device/enroll', methods=['POST'])
+    def agent_device_enroll():
+        """Agent starts enrollment; receives a pairing code to display for an operator."""
+        data = request.get_json(silent=True) or {}
+        result = client.enroll_agent(data, serial=data.get('serial'), ip=_client_ip())
+        return jsonify(result)
+
+    @bp.route('/agent-device/enroll/<pairing_id>')
+    def agent_device_enroll_poll(pairing_id):
+        """Agent polls until an operator claims the code, then gets its secret once."""
+        return jsonify(client.poll_enrollment(pairing_id))
+
+    @bp.route('/agent-devices/pending')
+    def agent_devices_pending():
+        """Dashboard: list agents awaiting a claim."""
+        pending = client.list_pending_agents()
+        return jsonify({'pending': pending, 'count': len(pending)})
+
+    @bp.route('/agent-devices/claim', methods=['POST'])
+    def agent_devices_claim():
+        """Dashboard: operator claims a pairing code, enrolling the device."""
+        data = request.get_json(silent=True) or {}
+        code = data.get('code')
+        if not code:
+            return jsonify({'error': 'code required'}), 400
+        try:
+            result = client.claim_pending_agent(code, passphrase=data.get('passphrase'))
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        client.log_activity('agent_device_claim', result.get('device_id'), result)
+        return jsonify(result)
+
+    # -------------------------------------------------------------------
+    # Capabilities + key rotation (plan 07 phase 4)
+    # -------------------------------------------------------------------
+    @bp.route('/agent-device/<device_id>/capabilities')
+    def agent_device_capabilities(device_id):
+        return jsonify({'device_id': device_id,
+                        'capabilities': client.get_agent_capabilities(device_id)})
+
+    @bp.route('/agent-device/<device_id>/rotate-key', methods=['POST'])
+    def agent_device_rotate_key(device_id):
+        """Start zero-downtime key rotation: stage a new secret (both remain valid until the
+        agent confirms and rotation completes)."""
+        new_secret = client.start_key_rotation(device_id)
+        if new_secret is None:
+            return jsonify({'error': 'device not enrolled'}), 404
+        client.log_activity('agent_key_rotation_start', device_id, {})
+        return jsonify({'device_id': device_id, 'secret': new_secret, 'status': 'rotating'})
+
+    @bp.route('/agent-device/<device_id>/rotate-key/complete', methods=['POST'])
+    def agent_device_rotate_key_complete(device_id):
+        """Promote the pending secret to active and retire the old one."""
+        ok = client.complete_key_rotation(device_id)
+        if not ok:
+            return jsonify({'error': 'no pending rotation'}), 400
+        client.log_activity('agent_key_rotation_complete', device_id, {})
+        return jsonify({'device_id': device_id, 'status': 'rotated'})
+
     @bp.route('/agent-device/status')
     def agent_device_status():
         # The heartbeat reaper owns online->offline transitions (plan 07); run it here too so
