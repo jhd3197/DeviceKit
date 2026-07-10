@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, AlertCircle, Smartphone, X, Search, Play, Save, BookmarkPlus, Download, Zap, ChevronDown, Trash2 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
+import ExtensionSlot from '../extensions/ExtensionSlot'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -248,6 +249,9 @@ export default function Dashboard() {
             {error}
           </div>
         )}
+
+        {/* Extension widgets contributed to the dashboard top (plan 04) */}
+        <ExtensionSlot name="dashboard.top" className="grid gap-4 md:grid-cols-2" />
 
         {/* Metric Cards */}
         <div className="grid grid-cols-5 gap-4">
