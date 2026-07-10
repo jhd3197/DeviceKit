@@ -12,6 +12,7 @@ import {
   Bot,
   Users,
   BarChart3,
+  Puzzle,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -25,6 +26,7 @@ import Profiles from './views/Profiles'
 import ProfileEditor from './views/ProfileEditor'
 import FleetGroups from './views/FleetGroups'
 import DeviceCompare from './views/DeviceCompare'
+import Extensions from './views/Extensions'
 
 import { useContributions } from './extensions/contributions'
 import { buildExtensionRoutes } from './extensions/ExtensionRoutes'
@@ -42,6 +44,7 @@ const navSections = [
       { to: '/remote-adb', icon: Terminal, label: 'Remote ADB' },
       { to: '/fleet/groups', icon: Users, label: 'Device Groups' },
       { to: '/fleet/compare', icon: BarChart3, label: 'Compare' },
+      { to: '/extensions', icon: Puzzle, label: 'Extensions' },
     ],
   },
   {
@@ -206,6 +209,7 @@ export default function App() {
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
+          <Route path="/extensions" element={<Extensions />} />
           {extensionRoutes}
         </Routes>
       </main>
