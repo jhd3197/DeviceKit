@@ -69,7 +69,13 @@ class AdbMixin:
     def get_connected_devices(self):
         """Get list of connected devices using ADB."""
         try:
-            output = subprocess.check_output([ADB_PATH, "devices"]).decode('utf-8')
+            # Bounded like run_adb_command: a wedged/starting adb server must never block
+            # boot forever (this runs on the api_app startup path). On timeout we return no
+            # devices and let on-demand calls retry rather than hanging the process.
+            result = subprocess.run(
+                [ADB_PATH, "devices"], capture_output=True, text=True, timeout=30
+            )
+            output = result.stdout
             lines = output.strip().split('\n')[1:]
             devices = []
             for line in lines:
@@ -79,6 +85,9 @@ class AdbMixin:
                         devices.append(parts[0])
             logger.info(f"Found {len(devices)} connected devices")
             return devices
+        except subprocess.TimeoutExpired:
+            logger.error("ADB 'devices' timed out; treating fleet as empty for now")
+            return []
         except Exception as e:
             logger.error(f"Error getting device list: {e}")
             return []
