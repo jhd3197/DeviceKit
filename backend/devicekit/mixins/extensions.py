@@ -54,12 +54,31 @@ class ExtensionsMixin:
     """Installable extensions: manifest-driven backends hot-loaded into the running app."""
 
     def init_extensions(self):
-        """Initialize in-memory registries. Blueprint loading happens later, in
-        ``build_app`` (``load_all_extensions``), once the Flask app exists."""
+        """Initialize in-memory registries and wire the SDK host. Blueprint loading happens
+        later, in ``build_app`` (``load_all_extensions``), once the Flask app exists."""
         if not hasattr(self, "_extensions"):
             self._extensions = {}          # slug -> {manifest, status, url_prefix, bp_name}
         self._ext_bp_seq = getattr(self, "_ext_bp_seq", 0)
+        # slug -> {'step_types': set, 'fql_fields': set} — names to deregister on teardown.
+        if not hasattr(self, "_ext_contributions"):
+            self._ext_contributions = {}
+        # slug -> [(tool_name, func, description)] — extension AI tools (bound per-device).
+        if not hasattr(self, "_ext_ai_tools"):
+            self._ext_ai_tools = {}
         os.makedirs(_EXTENSIONS_PKG_DIR, exist_ok=True)
+
+        # Let the SDK façade route extension calls back to this live host.
+        import devicekit_sdk
+        devicekit_sdk.set_host(self)
+
+    # ------------------------------------------------------------------
+    # Contribution tracking (called by the SDK register_* helpers)
+    # ------------------------------------------------------------------
+    def _track_contribution(self, slug, kind, name):
+        self._ext_contributions.setdefault(slug, {}).setdefault(kind, set()).add(name)
+
+    def _register_ai_tool(self, slug, name, func, description):
+        self._ext_ai_tools.setdefault(slug, []).append((name, func, description))
 
     # ------------------------------------------------------------------
     # Queries
@@ -355,12 +374,48 @@ class ExtensionsMixin:
             self._run_lifecycle_hook(slug, manifest, "install")
 
     def _register_contributions(self, slug, manifest):
-        """Register step types / FQL fields / AI tools / models. Extended in Phase 2 (SDK).
+        """Register an extension's models, step types, FQL fields, and AI tools through the
+        SDK. Model creation is a hard failure (tables must exist); everything else is wired
+        best-effort so a partial contribution set still yields a usable extension."""
+        import devicekit_sdk
 
-        Base implementation is a no-op so Phase-1 blueprint-only extensions activate; the
-        SDK-backed version overrides the hooks below.
-        """
-        return None
+        # Fresh AI-tool list on (re-)activation so we don't double-bind.
+        self._ext_ai_tools[slug] = []
+        self._ext_contributions.setdefault(slug, {})
+
+        with devicekit_sdk._activating(slug):
+            # Models — import the module (registers tables on the shared Base) and create
+            # any missing ``ext_<slug>_*`` tables.
+            models_ref = manifest.get("models")
+            if models_ref:
+                func = self._import_ext_ref(slug, models_ref)
+                func(devicekit_sdk.db)
+                devicekit_sdk.db.create_all()
+
+            # Step types — func returns {type_name: {label, category, config, execute}}.
+            steps_ref = manifest.get("step_types")
+            if steps_ref:
+                specs = self._import_ext_ref(slug, steps_ref)()
+                for type_name, spec in (specs or {}).items():
+                    devicekit_sdk.register_step_type(type_name, spec)
+
+            # FQL fields — func returns {field_name: {resolver, description}}.
+            fql_ref = manifest.get("fql_fields")
+            if fql_ref:
+                specs = self._import_ext_ref(slug, fql_ref)()
+                for field_name, spec in (specs or {}).items():
+                    devicekit_sdk.register_fql_field(field_name, spec)
+
+            # AI tools — func receives a binder and registers namespaced tools.
+            ai_ref = manifest.get("ai_tools")
+            if ai_ref:
+                self._import_ext_ref(slug, ai_ref)(devicekit_sdk.ai(slug))
+
+    def _import_ext_ref(self, slug, ref):
+        """Resolve a ``module:attr`` manifest reference under ``devicekit.extensions.<slug>``."""
+        module_name, _, attr = ref.partition(":")
+        mod = importlib.import_module(f"devicekit.extensions.{slug}.{module_name}")
+        return getattr(mod, attr)
 
     def _register_ext_blueprint(self, bp, url_prefix, slug):
         """Register an extension blueprint on the live app with a status guard.
@@ -471,8 +526,16 @@ class ExtensionsMixin:
         return result
 
     def _deregister_contributions(self, slug, manifest):
-        """Remove in-memory contribution points. Extended in Phase 2 (SDK)."""
-        return None
+        """Remove an extension's in-memory contribution points (step types, FQL fields, AI
+        tools). These are plain dicts, so removal is trivial — the blueprint keeps serving
+        503 via the status guard until a restart."""
+        tracked = self._ext_contributions.get(slug, {})
+        for type_name in tracked.get("step_types", set()):
+            self.unregister_step_type(type_name)
+        for field_name in tracked.get("fql_fields", set()):
+            self.unregister_fql_field(field_name)
+        self._ext_contributions.pop(slug, None)
+        self._ext_ai_tools.pop(slug, None)
 
     # ------------------------------------------------------------------
     # Uninstall (keep-data default; purge drops ext_<slug>_* tables)

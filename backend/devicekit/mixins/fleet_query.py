@@ -35,6 +35,12 @@ SUPPORTED_FIELDS = {
     'online', 'status', 'agent_status', 'group', 'tags', 'model_name',
 }
 
+# Extension-contributed FQL fields (plan 03). Each entry is
+# ``{'resolver': callable(device) -> value, 'description': str}``. ``_get_field_value``
+# falls through to these so an extension makes its data queryable
+# (e.g. ``appium.session_count > 0``) without editing core.
+_EXT_FQL_FIELDS = {}
+
 TOKEN_PATTERNS = [
     ('LPAREN',   r'\('),
     ('RPAREN',   r'\)'),
@@ -275,6 +281,13 @@ def _get_field_value(device, field, fleet_mixin=None):
     if field == 'model_name':
         # AI model name from profile, if exists
         return device.get('model_name') or ''
+    # Extension-contributed fields (plan 03).
+    ext = _EXT_FQL_FIELDS.get(field)
+    if ext is not None:
+        try:
+            return ext['resolver'](device)
+        except Exception:
+            return ''
     return device.get(field, '')
 
 
@@ -397,6 +410,22 @@ class FleetQueryMixin:
     """Fleet Query Language: SQL-like queries across the device fleet."""
 
     # -----------------------------------------------------------
+    # Extension-contributed fields
+    # -----------------------------------------------------------
+    def register_fql_field(self, name, spec):
+        """Register (or replace) an extension FQL field. ``spec`` must carry a
+        ``resolver`` callable ``resolver(device) -> value`` and may carry ``description``."""
+        if not isinstance(spec, dict) or not callable(spec.get('resolver')):
+            raise ValueError(f"FQL field '{name}' must provide a 'resolver' callable")
+        _EXT_FQL_FIELDS[name] = spec
+        SUPPORTED_FIELDS.add(name)
+        logger.info(f"Registered extension FQL field '{name}'")
+
+    def unregister_fql_field(self, name):
+        _EXT_FQL_FIELDS.pop(name, None)
+        SUPPORTED_FIELDS.discard(name)
+
+    # -----------------------------------------------------------
     # Query execution
     # -----------------------------------------------------------
 
@@ -441,6 +470,8 @@ class FleetQueryMixin:
             'group': 'Device group membership',
             'tags': 'Device tags',
             'model_name': 'AI model name from profile',
+            **{name: spec.get('description', f'Extension field {name}')
+               for name, spec in _EXT_FQL_FIELDS.items()},
         }
 
     def get_preset_queries(self):

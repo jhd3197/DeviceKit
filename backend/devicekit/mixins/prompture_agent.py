@@ -74,7 +74,31 @@ def build_device_tools(mixin, device_id):
         d.app_start(package)
         return f"Opened {package}"
 
+    # Extension-contributed AI tools (plan 03), namespaced ``<slug>__<name>`` to satisfy
+    # provider function-name limits. Only tools from active extensions are bound.
+    _register_extension_ai_tools(mixin, registry, device_id)
+
     return registry
+
+
+def _register_extension_ai_tools(mixin, registry, device_id):
+    ext_tools = getattr(mixin, "_ext_ai_tools", None)
+    if not ext_tools:
+        return
+    for slug, tools in list(ext_tools.items()):
+        # Respect the status guard: skip tools from a disabled/errored extension.
+        try:
+            row = mixin.get_extension(slug)
+            if not row or row.get("status") != "active":
+                continue
+        except Exception:
+            pass
+        for name, func, description in tools:
+            tool_name = f"{slug.replace('-', '_')}__{name}"
+            try:
+                registry.register(func, name=tool_name, description=description)
+            except Exception as e:
+                logger.warning(f"Failed to bind extension AI tool {tool_name}: {e}")
 
 
 class DeviceConversation:
