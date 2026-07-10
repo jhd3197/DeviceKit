@@ -314,6 +314,8 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 ### Phase 22: Predictive Device Health
 **Goal**: Use historical device metrics to predict failures before they happen and surface proactive alerts on the dashboard.
 
+> Design doc: [docs/plans/08-metrics-history.md](docs/plans/08-metrics-history.md). Note: the plan supersedes the DynamoDB choice below in favor of the Phase 23 SQLite persistence layer, and this phase builds on Phases 23 + 25.
+
 - [ ] `MetricsHistoryMixin`: persist device metrics (CPU, RAM, battery, temperature, storage) to DynamoDB at configurable intervals (default 5min)
 - [ ] `GET /devices/<id>/metrics/history?hours=24` endpoint: return time-series metrics data for charting
 - [ ] Battery degradation tracking: compare charge capacity over time, detect batteries holding less charge than baseline
@@ -326,3 +328,124 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 - [ ] Frontend NodeDetail: metrics history charts (24h/7d/30d) for CPU, RAM, battery, temperature, storage
 - [ ] Fleet-wide trends: `GET /fleet/metrics/trends` — aggregate metrics across fleet over time (avg battery health declining, storage usage growing)
 - [ ] Anomaly detection: flag devices deviating significantly from fleet averages (e.g., one device running 30% hotter than peers)
+
+---
+
+## Platform Evolution Phases (ServerKit-inspired)
+
+Phases 23–34 come from the plan set in [docs/plans/](docs/plans/00-overview.md) — concepts harvested from ServerKit and adapted to DeviceKit. Each phase links its detailed plan doc; a local executor prompt (`docs/plans/prompt.md`, git-ignored) can drive any of them end-to-end. The dependency graph lives in the overview; numbering is the suggested order, but the frontend phases (30–32) and packaging (34) can run in parallel with the backend track.
+
+### Phase 23: Persistence Layer
+**Goal**: Durable state — nothing user-created is lost on a backend restart.
+See [docs/plans/01-persistence-layer.md](docs/plans/01-persistence-layer.md).
+
+- [ ] SQLAlchemy + SQLite foundation: `db.py` engine/session, `models/` package, `DEVICEKIT_DATABASE_URL` (Postgres-ready), Alembic migrations at boot
+- [ ] `PersistenceMixin` owning session lifecycle, registered before data-owning mixins
+- [ ] Migrate saved FQL queries + fleet groups/tags, then automations + schedules
+- [ ] Migrate runs + step results, visual baselines, debug-bundle metadata, stream-session metadata
+- [ ] Migrate agent-device registry rows (coordinates with Phase 29)
+- [ ] Response envelopes unchanged so the frontend needs zero edits
+
+### Phase 24: API Blueprint Refactor
+**Goal**: Split the ~2,100-line `api_app.py` into per-feature Flask Blueprints — the mounting surface the extension platform requires.
+See [docs/plans/02-api-blueprint-refactor.md](docs/plans/02-api-blueprint-refactor.md).
+
+- [ ] `backend/devicekit/routes/` package: one module per current section header, each exposing `make_blueprint(client)`
+- [ ] Extract the SSE broadcast helper first; move `api_app()` closure state onto mixins
+- [ ] `api_app()` reduced to app factory + CORS/limiter/auth + blueprint registration
+- [ ] Route-table snapshot diff proves URLs are byte-identical before/after
+
+### Phase 25: Jobs, Queue Bus & Scheduler
+**Goal**: Replace scattered daemon threads with persisted jobs, retries, and DB-defined schedules.
+See [docs/plans/05-jobs-and-queue.md](docs/plans/05-jobs-and-queue.md).
+
+- [ ] Port ServerKit's SQL-backed queue (visibility timeouts, priority, retry, dead-letter)
+- [ ] `Job` rows + single `JobConsumer` daemon + `kind → handler` registry
+- [ ] `ScheduledJob` rows (cron or interval) with restart-surviving `next_run_at`
+- [ ] Move automation runs and the schedule checker onto jobs; keep SSE progress events
+- [ ] Jobs API + a recent/failed jobs panel in the UI
+
+### Phase 26: Extension Platform — Backend
+**Goal**: Installable extensions contributing step types, FQL fields, AI tools, routes, jobs, and tables.
+See [docs/plans/03-extension-platform-backend.md](docs/plans/03-extension-platform-backend.md).
+
+- [ ] `extension.json` manifest spec + validator + `InstalledExtension` rows
+- [ ] Install pipeline: preview/consent → pinned sha256 → Zip-Slip-safe extract → hot-load blueprint
+- [ ] Status guard (disabled extension routes return 503 without restart) + boot loader + self-heal
+- [ ] `devicekit_sdk` façade with declaration-based permission gate; `ext_<slug>_*` table namespacing with keep-vs-purge uninstall
+- [ ] Step-type dispatch registry (retire the `_execute_step` elif chain) + FQL field + Prompture tool registration
+- [ ] `devicekit-extensions` registry repo (index.json + schema + validators + CI), fetch with offline fallback chain
+- [ ] First builtin extracted from core (visual regression) + scaffolding CLI + author docs
+
+### Phase 27: Extension Platform — Frontend & Marketplace
+**Goal**: Extensions contribute nav, routes, and widgets declaratively; users browse/install from a marketplace view.
+See [docs/plans/04-extension-platform-frontend.md](docs/plans/04-extension-platform-frontend.md).
+
+- [ ] Contributions envelope endpoint consumption: nav + routes + page titles, per-extension error boundaries
+- [ ] `ExtensionSlot` mount points (dashboard, run detail, settings) with SVG sanitization
+- [ ] Marketplace view: browse (builtin + registry), consent chips, installed management, schema-driven config forms, keep-vs-purge uninstall
+- [ ] `devicekit-sdk` Vite alias with versioned surface; builtin frontend sync script + CI drift gate
+
+### Phase 28: Notification Bus
+**Goal**: Fleet events reach operators — in-app, webhook, and email — with preferences and history.
+See [docs/plans/06-notification-bus.md](docs/plans/06-notification-bus.md).
+
+- [ ] Event catalog (`device.offline`, `automation.run.failed`, `automation.run.healed`, `regression.detected`, `device.battery.critical`, …)
+- [ ] Producer + persisted deliveries + queue-driven channel consumers; in-app channel over existing SSE
+- [ ] Bell dropdown with unread badge + optimistic mark-read; `/notifications` history view
+- [ ] Webhook (Slack/Discord-compatible) channel, then email; per-event preferences + quiet hours
+
+### Phase 29: Agent Security & Fleet Registry
+**Goal**: Authenticated agents, principled offline detection, audited commands, capability-based targeting.
+See [docs/plans/07-agent-security-and-fleet-registry.md](docs/plans/07-agent-security-and-fleet-registry.md).
+
+- [ ] Registry extraction from `api_app.py` closures + `AgentDevice`/`DeviceCommand` persistence
+- [ ] Heartbeat reaper with reconnect-race fixes (identity re-check under lock; fail in-flight commands on reconnect)
+- [ ] HMAC request signing + nonce replay guard + timestamp window (closes the deferred Phase 14 items; requires APK update)
+- [ ] Pairing-code enrollment flow (agent shows code, dashboard claims) + key rotation
+- [ ] Capability map → FQL fields, `require_capability` step type, capability-filtered device pickers
+
+### Phase 30: Frontend Foundations
+**Goal**: Shared primitives so views stop duplicating tables, empty states, and fetch wiring.
+See [docs/plans/09-frontend-foundations.md](docs/plans/09-frontend-foundations.md).
+
+- [ ] `DataTable` + `EmptyState` + `useConfirm` + toast provider (adopt in Automations list)
+- [ ] `api.js` split into domain modules behind an unchanged `api.*` surface
+- [ ] `ListPage` + `Set`-based bulk selection wired to `/fleet/query/bulk-action`
+- [ ] URL-as-state hooks (`useTabParam`), SSE hooks (`useEvents`/`useDeviceState`), terminal input queue for RemoteADB
+
+### Phase 31: Command Palette & Dashboard Widgets
+**Goal**: `Ctrl+K` jump-to-anything; a dashboard users compose themselves.
+See [docs/plans/10-command-palette.md](docs/plans/10-command-palette.md) and [docs/plans/11-dashboard-widgets.md](docs/plans/11-dashboard-widgets.md).
+
+- [ ] cmdk palette: pages + devices + automations + actions, fuzzy scoring, recents
+- [ ] FQL mode (`>` prefix) running fleet queries inline from the palette
+- [ ] Dashboard carved into widgets with a renderer map; toggle/reorder/reset persisted in localStorage with forward-compatible merge
+- [ ] Extension entries (palette) + extension widgets (`dashboard.top` slot)
+
+### Phase 32: Settings & Theming
+**Goal**: A real `/settings` (the sidebar link currently 404s) and runtime accent theming.
+See [docs/plans/12-settings-and-theming.md](docs/plans/12-settings-and-theming.md).
+
+- [ ] Settings shell at `/settings/:tab` with URL-driven tabs; General / API / About panes
+- [ ] AI (Prompture provider/model), Streaming, and Debug-Bundle panes backed by a settings table
+- [ ] Notification preferences pane (with Phase 28) + extension settings slot (with Phase 27)
+- [ ] Accent color ramp via CSS variables mapped into Tailwind; persisted preference
+
+### Phase 33: AI Confirmation Gate
+**Goal**: A human between the LLM and the hardware — write tools require approval.
+See [docs/plans/13-ai-confirmation-gate.md](docs/plans/13-ai-confirmation-gate.md).
+
+- [ ] Annotate device tools read vs write; confirmation gate blocks write tools pending approval (SSE `pending_action` + confirm endpoint, timeout = deny)
+- [ ] Session modes: observe / supervised / autonomous, with per-device defaults in Profiles
+- [ ] Approval cards in the NodeDetail chat; audit trail of every executed tool call
+- [ ] Extension AI tools always gated; supervised self-heal option (pause run, notify, resume on approval)
+
+### Phase 34: devicekit Python Package
+**Goal**: `pip install devicekit` — droidlink renamed and published under the one brand.
+See [docs/plans/14-devicekit-python-package.md](docs/plans/14-devicekit-python-package.md).
+
+- [ ] Rename: `droidlink/` → `devicekit-py/`, package `devicekit`, CLI `devicekit`, pytest entry + `DeviceKitReporter`; update workflow + docs in the same commit
+- [ ] PyPI Trusted Publishing workflow on `py-v*` tags; publish 0.1.x to claim the name (available as of 2026-07-09)
+- [ ] README quickstart for the PyPI page; root README "Python library" section
+- [ ] Document the name-shadowing rule (never install the lib into the backend venv); dependency inversion deferred to its own plan
