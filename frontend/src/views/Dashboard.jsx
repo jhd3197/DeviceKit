@@ -8,6 +8,8 @@ import useDashboardLayout from '../hooks/useDashboardLayout'
 import DashboardLayoutEditor from '../components/widgets/DashboardLayoutEditor'
 import FleetSummary from '../components/widgets/FleetSummary'
 import FleetHealth from '../components/widgets/FleetHealth'
+import ActiveRuns from '../components/widgets/ActiveRuns'
+import RecentFailures from '../components/widgets/RecentFailures'
 import FQLBar from '../components/widgets/FQLBar'
 import DeviceRegistry from '../components/widgets/DeviceRegistry'
 
@@ -33,6 +35,8 @@ export default function Dashboard() {
   const WIDGET_RENDERERS = {
     'fleet-summary': () => <FleetSummary stats={stats} fleetAiCost={fleetAiCost} />,
     'fleet-health': () => <FleetHealth fleetHealth={fleetHealth} />,
+    'active-runs': () => <ActiveRuns />,
+    'recent-failures': () => <RecentFailures />,
     'fql-bar': () => <FQLBar initialQuery={initialQuery} onResult={setQueryResult} />,
     'device-registry': () => (
       <DeviceRegistry devices={devices} sparklines={sparklines} queryResult={queryResult} />

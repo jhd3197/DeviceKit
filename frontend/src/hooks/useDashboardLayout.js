@@ -13,6 +13,8 @@ const STORAGE_KEY = 'devicekit_dashboard_layout'
 export const DEFAULT_WIDGETS = [
   { id: 'fleet-summary', label: 'Fleet Summary', visible: true },
   { id: 'fleet-health', label: 'Fleet Health', visible: true },
+  { id: 'active-runs', label: 'Active Runs', visible: true },
+  { id: 'recent-failures', label: 'Recent Failures', visible: true },
   { id: 'fql-bar', label: 'Fleet Query', visible: true },
   { id: 'device-registry', label: 'Device Registry', visible: true },
 ]
