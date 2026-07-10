@@ -11,6 +11,7 @@ from devicekit.models.agent_device import AgentDevice
 from devicekit.models.command import DeviceCommand
 from devicekit.models.pending_agent import PendingAgent
 from devicekit.models.extension import InstalledExtension
+from devicekit.models.setting import Setting
 from devicekit.models.metrics import (
     DeviceMetricRaw, DeviceMetricHourly, DeviceMetricDaily)
 from devicekit.models.metric_alert import MetricAlertRule
@@ -37,6 +38,7 @@ __all__ = [
     "DeviceCommand",
     "PendingAgent",
     "InstalledExtension",
+    "Setting",
     "DeviceMetricRaw",
     "DeviceMetricHourly",
     "DeviceMetricDaily",

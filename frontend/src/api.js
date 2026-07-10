@@ -104,6 +104,13 @@ export const api = {
   updateConfig: (data) =>
     request('/config', { method: 'PUT', body: JSON.stringify(data) }),
 
+  getHealth: () => request('/health'),
+
+  // Settings (durable, schema-backed — plan 12)
+  getSettings: () => request('/settings'),
+  updateSettings: (data) =>
+    request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
   // Automations
   getStepTypes: () => request('/automations/step-types'),
   getAutomations: () => request('/automations'),

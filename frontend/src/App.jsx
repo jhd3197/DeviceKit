@@ -37,6 +37,7 @@ import Jobs from './views/Jobs'
 import Notifications from './views/Notifications'
 import Enrollment from './views/Enrollment'
 import CommandHistory from './views/CommandHistory'
+import SettingsView from './views/Settings'
 
 import NotificationBell from './components/NotificationBell'
 import CommandPalette from './components/CommandPalette'
@@ -69,7 +70,7 @@ const navSections = [
       { to: '/automations', icon: Workflow, label: 'Automations' },
       { to: '/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/notifications', icon: Bell, label: 'Notifications' },
-      { to: '/settings', icon: Settings, label: 'SamanLabs Config' },
+      { to: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
   {
@@ -236,6 +237,8 @@ export default function App() {
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
           <Route path="/extensions" element={<Extensions />} />
+          <Route path="/settings" element={<SettingsView />} />
+          <Route path="/settings/:tab" element={<SettingsView />} />
           {extensionRoutes}
         </Routes>
       </main>

@@ -31,6 +31,7 @@ from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.jobs import JobsMixin
 from devicekit.mixins.notifications import NotificationsMixin
 from devicekit.mixins.metrics_history import MetricsHistoryMixin
+from devicekit.mixins.settings import SettingsMixin
 
 
 class Client(
@@ -56,6 +57,7 @@ class Client(
     JobsMixin,
     NotificationsMixin,
     MetricsHistoryMixin,
+    SettingsMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -102,6 +104,13 @@ class Client(
             self.init_metrics()
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Metrics history init skipped: {e}")
+
+        # Apply any persisted AI provider keys to the environment so Prompture picks them
+        # up without a restart (plan 12 settings).
+        try:
+            self.init_settings()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Settings init skipped: {e}")
 
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS
