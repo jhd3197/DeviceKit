@@ -101,6 +101,15 @@ class AgentGateMixin:
         mode = self.get_agent_mode(device_id)
         always_gate = bool(meta.get("always_gate"))
 
+        # observe = read-only: a write reaching the gate here (e.g. a direct caller like
+        # self-heal, not a filtered tool) is refused outright and logged.
+        if mode == "observe":
+            self._audit(device_id, tool_name, args, meta, source, mode,
+                        decision=AgentAuditLog.DECISION_DENIED, approver="observe-mode",
+                        result=None, error="observe mode: writes not permitted")
+            return (f"DENIED: session is in observe (read-only) mode, so '{tool_name}' was "
+                    f"NOT performed. Switch to supervised or autonomous to act.")
+
         # Autonomous auto-approves core tools; extension tools are never autonomous.
         if mode == "autonomous" and not always_gate:
             return self._execute_and_audit(

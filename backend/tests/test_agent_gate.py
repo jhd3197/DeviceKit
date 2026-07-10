@@ -201,3 +201,95 @@ def test_gate_http_endpoints(client):
     audit = c.get(f"/devices/{DEV}/agent/audit").get_json()
     assert audit["count"] == 1
     assert audit["audit"][0]["decision"] == "approved"
+
+
+# --------------------------------------------------------------------------- extensions (ph3)
+def _with_ext_tools(client, entries):
+    """Attach fake extension AI tools + an always-active status guard."""
+    client._ext_ai_tools = {"demo": entries}
+    client.get_extension = lambda slug: {"status": "active"}
+
+
+def test_sdk_binder_threads_is_write():
+    import devicekit_sdk
+
+    class _Host:
+        def __init__(self):
+            self.calls = []
+        def _register_ai_tool(self, slug, name, func, description, is_write=True):
+            self.calls.append((name, is_write))
+
+    host = _Host()
+    devicekit_sdk.set_host(host)
+    binder = devicekit_sdk.ai("demo")
+
+    @binder.tool
+    def act():
+        """A write tool."""
+
+    @binder.tool(is_write=False)
+    def look():
+        """A read tool."""
+
+    assert ("act", True) in host.calls
+    assert ("look", False) in host.calls
+
+
+def test_extension_read_tool_not_gated_write_tool_gated(client):
+    ran = {}
+
+    def look():
+        ran["look"] = True
+        return "seen"
+
+    def wipe():
+        ran["wipe"] = True
+        return "gone"
+
+    _with_ext_tools(client, [
+        ("look", look, "Read", False),
+        ("wipe", wipe, "Write", True),
+    ])
+    client.set_agent_mode(DEV, "autonomous")
+    reg = build_device_tools(client, DEV, mode="autonomous")
+
+    # Read extension tool runs free even in autonomous.
+    assert reg.execute("demo__look", {}) == "seen"
+    assert ran.get("look")
+
+    # Write extension tool is ALWAYS gated (always_gate), even under autonomous — so it
+    # creates a pending action and does not run synchronously.
+    box = {}
+    t = _call_in_thread(reg, "demo__wipe", {}, box, "r")
+    time.sleep(0.3)
+    pending = client.list_pending_actions(DEV)
+    assert len(pending) == 1
+    assert pending[0]["source"] == "extension:demo"
+    assert "wipe" not in ran, "extension write tool ran without approval under autonomous"
+    client.confirm_action(pending[0]["id"], True, approver="t", device_id=DEV)
+    t.join(timeout=3)
+    assert ran.get("wipe")
+
+
+def test_extension_write_hidden_in_observe(client):
+    _with_ext_tools(client, [
+        ("look", lambda: "seen", "Read", False),
+        ("wipe", lambda: "gone", "Write", True),
+    ])
+    reg = build_device_tools(client, DEV, mode="observe")
+    assert "demo__look" in reg.names
+    assert "demo__wipe" not in reg.names
+
+
+def test_observe_direct_write_is_denied(client):
+    """A write reaching the gate directly (e.g. self-heal) is refused in observe mode."""
+    client.set_agent_mode(DEV, "observe")
+    ran = {}
+    msg = client.gate_tool_call(
+        DEV, "self_heal", {"x": 1},
+        {"is_write": True, "category": "self_heal", "label": "Apply self-heal"},
+        source="self_heal", real_fn=lambda x: ran.setdefault("ran", True))
+    assert "DENIED" in msg
+    assert ran == {}
+    assert any(a["decision"] == "denied" and a["source"] == "self_heal"
+               for a in client.get_agent_audit(DEV))

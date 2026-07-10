@@ -1,6 +1,7 @@
 # Plan 13 — AI Confirmation Gate & Tool Registry Safety
 
-**Status:** 🚧 phases 1–2 shipped; phase 3 in progress
+**Status:** ✅ shipped (phases 1–3). Deferred: per-tool custom result renderers (the
+ServerKit `tool_renderers` idea — explicitly "Later" below).
 **Inspired by:** ServerKit's `backend/app/services/ai_service.py` (ConfirmationGate),
 `ai_tool_registry.py` (central registry, per-request filtering), `plugins_sdk/ai.py`
 (`PluginToolBinder` with `is_write` flags)
@@ -79,7 +80,7 @@ runs, keep today's auto-heal but log it through the same audit path.
 
 1. ✅ `is_write` annotation + gate + confirm endpoint + SSE event + chat approval card.
 2. ✅ Session modes + Profiles default + audit trail.
-3. 🚧 Extension tool binder integration; supervised self-heal option.
+3. ✅ Extension tool binder integration; supervised self-heal option.
 
 ### Implementation notes (as shipped)
 
@@ -108,9 +109,29 @@ runs, keep today's auto-heal but log it through the same audit path.
   cards (summary, tool/source chips, args expander, live countdown, Approve/Deny).
 - **Profiles:** new `agent_mode` field is the per-device default; settings add
   `ai.default_agent_mode` + `ai.gate_timeout_seconds`.
-- **Tests:** `backend/tests/test_agent_gate.py` (observe filtering, block/approve/deny,
+- **Extension tools (ph3):** `sdk.ai.tool` now takes `is_write` (`@sdk.ai.tool` or
+  `@sdk.ai.tool(is_write=False)`), threaded through `_register_ai_tool` into the
+  `_ext_ai_tools` tuple. Extension **write** tools are bound with `always_gate` so they're
+  gated under every mode (never autonomous) and hidden under observe; read tools run free.
+- **Self-heal (ph3):** `nl_automation` heals now re-execute through `gate_tool_call`
+  (`source="self_heal"`): supervised runs pause on an approval card, autonomous auto-apply
+  + audit (today's behavior, now logged), observe refuses. Guarded by
+  `hasattr(self, "gate_tool_call")` so a gate-less composition falls back to direct
+  execution. **Behavior note:** because the per-device default mode is `supervised`, a
+  self-healing run on a device with no explicit mode now waits for approval — set the
+  device's profile `agent_mode` to `autonomous` for unattended/CI runs.
+- **Tests:** `backend/tests/test_agent_gate.py` (14: observe filtering, block/approve/deny,
   timeout default-deny, autonomous auto-approve, audit persistence across restart, HTTP
-  endpoints) + a Prompture `TestMetadata` suite.
+  endpoints, SDK binder `is_write`, extension read-free/write-gated/observe-hidden,
+  observe direct-write deny) + a Prompture `TestMetadata` suite.
+
+### Deferred
+
+- Per-tool custom result renderers (screenshot tool → inline image), the ServerKit
+  `tool_renderers` idea — marked "Later" in the frontend section above.
+- Live device / provider-key verification: the gate, modes, audit, and endpoints are
+  proven by the test suite against fake tools; exercising a real LLM deciding to
+  `uninstall_app` on a physical phone needs a Prompture provider key + a connected device.
 
 ## Definition of done
 

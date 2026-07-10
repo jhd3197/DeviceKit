@@ -435,14 +435,14 @@ See [docs/plans/12-settings-and-theming.md](docs/plans/12-settings-and-theming.m
 - [x] Notification preferences pane (reuses Phase 28 editors) + extension settings slot (`settings.panels`)
 - [x] Accent color ramp via CSS variables mapped into Tailwind; persisted preference (localStorage + settings row)
 
-### Phase 33: AI Confirmation Gate
+### Phase 33: AI Confirmation Gate ✅
 **Goal**: A human between the LLM and the hardware — write tools require approval.
 See [docs/plans/13-ai-confirmation-gate.md](docs/plans/13-ai-confirmation-gate.md).
 
 - [x] Annotate device tools read vs write; confirmation gate blocks write tools pending approval (SSE `pending_action` + confirm endpoint, timeout = deny)
 - [x] Session modes: observe / supervised / autonomous, with per-device defaults in Profiles
 - [x] Approval cards in the NodeDetail chat; audit trail of every executed tool call
-- [ ] Extension AI tools always gated; supervised self-heal option (pause run, notify, resume on approval)
+- [x] Extension AI tools always gated; supervised self-heal option (pause run, notify, resume on approval)
 
 ### Phase 34: Python Library Publishing ✅
 **Goal**: Publish the Python client library to PyPI under one clean install name.

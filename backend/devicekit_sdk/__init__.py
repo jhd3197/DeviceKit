@@ -156,16 +156,24 @@ def register_fql_field(name, spec):
 
 class _AiBinder:
     """Passed to an extension's ``ai_tools`` register function; collects tools that get
-    bound (namespaced ``<slug>__<name>``) into every per-device Prompture ToolRegistry."""
+    bound (namespaced ``<slug>__<name>``) into every per-device Prompture ToolRegistry.
+
+    Tools declare whether they mutate the device via ``is_write`` (default ``True`` —
+    third-party code is untrusted). Extension **write** tools are always routed through the
+    host confirmation gate regardless of session mode (plan 13); read tools run free."""
 
     def __init__(self, slug):
         self._slug = slug
 
-    def tool(self, func):
-        name = getattr(func, "__name__", "tool")
-        description = (func.__doc__ or "").strip() or None
-        _host._register_ai_tool(self._slug, name, func, description)
-        return func
+    def tool(self, func=None, *, is_write=True):
+        """Register an extension AI tool. Usable bare (``@sdk.ai.tool``) or with options
+        (``@sdk.ai.tool(is_write=False)`` for a read-only tool)."""
+        def _register(f):
+            name = getattr(f, "__name__", "tool")
+            description = (f.__doc__ or "").strip() or None
+            _host._register_ai_tool(self._slug, name, f, description, is_write=is_write)
+            return f
+        return _register(func) if func is not None else _register
 
 
 def ai(slug):

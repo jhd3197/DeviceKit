@@ -630,21 +630,47 @@ class AutomationMixin:
                     try:
                         heal_result = self.self_heal_step(device_id, step, error_str)
                         if heal_result.get("healed"):
-                            # Re-execute with healed step config
+                            # A heal is a write-ish decision: apply it through the same
+                            # confirmation gate as agent tools (plan 13). Supervised runs
+                            # pause for approval; autonomous auto-applies + audits; observe
+                            # refuses. Falls back to direct execution if no gate is composed.
                             healed_step = heal_result["new_step"]
-                            heal_start = time.time()
-                            output = self._execute_step(healed_step, device_id)
-                            elapsed = int((time.time() - start_ts) * 1000)
-                            result["status"] = "completed"
-                            result["output"] = str(output) if output else None
-                            result["duration_ms"] = elapsed
-                            result["healed"] = True
-                            result["original_step"] = copy.deepcopy(step)
-                            result["healed_step"] = healed_step
-                            result["heal_reasoning"] = heal_result.get("reasoning", "")
-                            completed += 1
-                            healed = True
-                            self._notify_run_healed(run_record, idx, result.get("heal_reasoning", ""))
+                            reasoning = heal_result.get("reasoning", "")
+                            exec_box = {}
+
+                            def _apply_heal():
+                                exec_box["output"] = self._execute_step(healed_step, device_id)
+                                exec_box["ran"] = True
+                                return str(exec_box["output"]) if exec_box["output"] else ""
+
+                            if hasattr(self, "gate_tool_call"):
+                                gate_msg = self.gate_tool_call(
+                                    device_id, "self_heal",
+                                    {"proposed_step": healed_step, "reason": reasoning},
+                                    {"is_write": True, "category": "self_heal",
+                                     "label": "Apply self-heal"},
+                                    source="self_heal", real_fn=_apply_heal)
+                            else:
+                                _apply_heal()
+                                gate_msg = ""
+
+                            if exec_box.get("ran"):
+                                output = exec_box["output"]
+                                elapsed = int((time.time() - start_ts) * 1000)
+                                result["status"] = "completed"
+                                result["output"] = str(output) if output else None
+                                result["duration_ms"] = elapsed
+                                result["healed"] = True
+                                result["original_step"] = copy.deepcopy(step)
+                                result["healed_step"] = healed_step
+                                result["heal_reasoning"] = reasoning
+                                completed += 1
+                                healed = True
+                                self._notify_run_healed(run_record, idx, result.get("heal_reasoning", ""))
+                            else:
+                                # Gate denied/timed out — the heal was not applied.
+                                result["healed"] = False
+                                result["heal_reasoning"] = gate_msg or "Heal not approved"
                         else:
                             # Heal attempted but failed
                             result["healed"] = False

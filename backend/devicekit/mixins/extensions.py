@@ -72,7 +72,8 @@ class ExtensionsMixin:
         # slug -> {'step_types': set, 'fql_fields': set} — names to deregister on teardown.
         if not hasattr(self, "_ext_contributions"):
             self._ext_contributions = {}
-        # slug -> [(tool_name, func, description)] — extension AI tools (bound per-device).
+        # slug -> [(tool_name, func, description, is_write)] — extension AI tools
+        # (bound per-device; write tools are always gated, plan 13).
         if not hasattr(self, "_ext_ai_tools"):
             self._ext_ai_tools = {}
         os.makedirs(_EXTENSIONS_PKG_DIR, exist_ok=True)
@@ -87,8 +88,8 @@ class ExtensionsMixin:
     def _track_contribution(self, slug, kind, name):
         self._ext_contributions.setdefault(slug, {}).setdefault(kind, set()).add(name)
 
-    def _register_ai_tool(self, slug, name, func, description):
-        self._ext_ai_tools.setdefault(slug, []).append((name, func, description))
+    def _register_ai_tool(self, slug, name, func, description, is_write=True):
+        self._ext_ai_tools.setdefault(slug, []).append((name, func, description, is_write))
 
     # ------------------------------------------------------------------
     # Queries
