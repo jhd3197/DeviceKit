@@ -1,4 +1,4 @@
-"""Data types for droidlink."""
+"""Data types for devicekit."""
 
 from dataclasses import dataclass, field
 from typing import List, Optional

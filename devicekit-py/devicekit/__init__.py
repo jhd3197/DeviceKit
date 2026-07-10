@@ -1,12 +1,12 @@
 """
-droidlink - Python bridge for Android device control via DeviceKit agent.
+devicekit - Python bridge for Android device control via DeviceKit agent.
 
 Usage:
-    import droidlink
+    import devicekit
 
-    d = droidlink.connect()                     # auto-detect USB device
-    d = droidlink.connect("SERIAL")             # specific device
-    d = droidlink.connect_wifi("192.168.1.5")   # WiFi direct
+    d = devicekit.connect()                     # auto-detect USB device
+    d = devicekit.connect("SERIAL")             # specific device
+    d = devicekit.connect_wifi("192.168.1.5")   # WiFi direct
 
     d(text="Login").click()
     d.screenshot("screen.png")
@@ -22,7 +22,7 @@ from .connection import connect_wifi as _connect_wifi_conn
 from .adb import list_devices as _list_adb_devices
 from .discovery import discover, discover_and_connect
 from .exceptions import (
-    DroidLinkError,
+    DeviceKitError,
     DeviceNotFoundError,
     ConnectionError,
     AdbError,
@@ -55,7 +55,7 @@ __all__ = [
     "Connection",
     "AGENT_PORT",
     # Exceptions
-    "DroidLinkError",
+    "DeviceKitError",
     "DeviceNotFoundError",
     "ConnectionError",
     "AdbError",

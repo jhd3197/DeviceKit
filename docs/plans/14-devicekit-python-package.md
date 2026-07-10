@@ -80,6 +80,13 @@ plan if/when wanted.
 
 ## Phases
 
+> **Status (2026-07-09):** Phase 1 ✅ complete — executed early to claim the PyPI name.
+> Wire-protocol strings (`DROIDLINK_DISCOVER`, `DROIDLINK_DEVICE:`, `droidlink_frame`)
+> deliberately kept for deployed-agent compatibility. Phase 3 ✅ (root README +
+> ci-setup updated in the same commit). Phase 2 🚧 — 0.1.0 built and twine-checked
+> locally, uploaded manually to claim the name; the trusted-publishing GitHub Actions
+> workflow is still to do.
+
 1. Rename: directory, package, pyproject (name/scripts/entry points), imports,
    `DeviceKitReporter` class, CI workflow, docs, README quickstart.
 2. Publish workflow with trusted publishing; tag `py-v0.1.0`; verify

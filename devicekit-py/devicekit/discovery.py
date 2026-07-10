@@ -7,13 +7,15 @@ from typing import List, Optional
 from .types import DeviceInfo
 
 DISCOVERY_PORT = 9801
+# Wire-protocol constants — the deployed Android agent matches these exact
+# strings (DiscoveryService.kt), so they keep the legacy DROIDLINK prefix.
 DISCOVERY_PROBE = "DROIDLINK_DISCOVER"
 DISCOVERY_RESPONSE_PREFIX = "DROIDLINK_DEVICE:"
 
 
 def discover(timeout: float = 3.0, broadcast_address: str = "255.255.255.255") -> List[dict]:
     """
-    Discover droidlink devices on the local network via UDP broadcast.
+    Discover DeviceKit agent devices on the local network via UDP broadcast.
 
     Sends a broadcast probe and collects responses from devices running
     the DeviceKit agent with the discovery service enabled.

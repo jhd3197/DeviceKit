@@ -1,5 +1,5 @@
 """
-pytest-droidlink: pytest plugin for DeviceKit integration.
+pytest-devicekit: pytest plugin for DeviceKit integration.
 
 Provides device fixtures, screenshot-on-failure capture, and automatic
 result reporting to the DeviceKit backend pipeline.
@@ -23,17 +23,17 @@ import requests
 # ---------------------------------------------------------------------------
 
 def pytest_addoption(parser):
-    group = parser.getgroup("droidlink", "DroidLink device testing")
+    group = parser.getgroup("devicekit", "DeviceKit device testing")
     group.addoption(
         "--device",
         action="store",
-        default=os.environ.get("DROIDLINK_DEVICE"),
+        default=os.environ.get("DEVICEKIT_DEVICE"),
         help="Device serial (USB) or IP:port (WiFi)",
     )
     group.addoption(
         "--device-wifi",
         action="store",
-        default=os.environ.get("DROIDLINK_DEVICE_WIFI"),
+        default=os.environ.get("DEVICEKIT_DEVICE_WIFI"),
         help="WiFi device IP shorthand",
     )
     group.addoption(
@@ -66,7 +66,7 @@ def pytest_addoption(parser):
 # Reporter
 # ---------------------------------------------------------------------------
 
-class DroidLinkReporter:
+class DeviceKitReporter:
     """Reports test results to the DeviceKit pipeline API."""
 
     def __init__(self, base_url, api_key=""):
@@ -100,7 +100,7 @@ class DroidLinkReporter:
         total_tests = len(items) if items else 0
         resp = self._post("/pipeline/builds", {
             "title": f"pytest run ({total_tests} tests)",
-            "source": "pytest-droidlink",
+            "source": "pytest-devicekit",
             "total_tests": total_tests,
         })
         if resp and resp.ok:
@@ -156,32 +156,32 @@ class DroidLinkReporter:
 @pytest.fixture(scope="session")
 def device(request):
     """
-    Session-scoped droidlink Device.
+    Session-scoped devicekit Device.
 
     Connects via --device (serial/USB), --device-wifi (WiFi IP), or auto-detect.
     """
-    import droidlink
+    import devicekit
 
     serial = request.config.getoption("--device")
     wifi = request.config.getoption("--device-wifi")
 
     if wifi:
-        return droidlink.connect_wifi(wifi)
+        return devicekit.connect_wifi(wifi)
     if serial:
         # If serial contains ":" it's a WiFi address
         if ":" in serial and not serial.startswith("emulator"):
             host, _, port = serial.partition(":")
-            return droidlink.connect_wifi(host, int(port) if port else 9800)
-        return droidlink.connect(serial)
+            return devicekit.connect_wifi(host, int(port) if port else 9800)
+        return devicekit.connect(serial)
     # Auto-detect
-    return droidlink.connect()
+    return devicekit.connect()
 
 
 @pytest.fixture(scope="session")
 def device_pool():
-    """Session-scoped list of all available devices via droidlink.connect_all()."""
-    import droidlink
-    return droidlink.connect_all()
+    """Session-scoped list of all available devices via devicekit.connect_all()."""
+    import devicekit
+    return devicekit.connect_all()
 
 
 # ---------------------------------------------------------------------------
@@ -191,16 +191,16 @@ def device_pool():
 def pytest_configure(config):
     """Create reporter if reporting is enabled."""
     if config.getoption("--no-report", default=False):
-        config._droidlink_reporter = None
+        config._devicekit_reporter = None
         return
     url = config.getoption("--devicekit-url", default="http://127.0.0.1:5050")
     api_key = config.getoption("--devicekit-api-key", default="")
-    config._droidlink_reporter = DroidLinkReporter(url, api_key)
+    config._devicekit_reporter = DeviceKitReporter(url, api_key)
 
 
 def pytest_sessionstart(session):
     """Start a build in the backend."""
-    reporter = getattr(session.config, "_droidlink_reporter", None)
+    reporter = getattr(session.config, "_devicekit_reporter", None)
     if reporter:
         reporter.start_build(session)
 
@@ -215,7 +215,7 @@ def pytest_runtest_makereport(item, call):
     if report.when != "call":
         return
 
-    reporter = getattr(item.config, "_droidlink_reporter", None)
+    reporter = getattr(item.config, "_devicekit_reporter", None)
     if not reporter:
         return
 
@@ -265,17 +265,17 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_sessionfinish(session, exitstatus):
     """Finalize the build."""
-    reporter = getattr(session.config, "_droidlink_reporter", None)
+    reporter = getattr(session.config, "_devicekit_reporter", None)
     if reporter:
         reporter.finish_build(exitstatus)
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Print build ID and backend URL link."""
-    reporter = getattr(config, "_droidlink_reporter", None)
+    reporter = getattr(config, "_devicekit_reporter", None)
     if reporter and reporter.build_id:
         url = reporter.base_url
         build_id = reporter.build_id
-        terminalreporter.write_sep("=", "DroidLink Pipeline Report")
+        terminalreporter.write_sep("=", "DeviceKit Pipeline Report")
         terminalreporter.write_line(f"Build ID: {build_id}")
         terminalreporter.write_line(f"View results: {url}/pipeline/builds/{build_id}")

@@ -1,4 +1,4 @@
-"""CLI tool for droidlink."""
+"""CLI tool for devicekit."""
 
 import argparse
 import json
@@ -132,10 +132,10 @@ def cmd_files(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="droidlink",
-        description="droidlink - Python bridge for Android device control",
+        prog="devicekit",
+        description="devicekit - Python bridge for Android device control",
     )
-    parser.add_argument("--version", action="version", version=f"droidlink {__version__}")
+    parser.add_argument("--version", action="version", version=f"devicekit {__version__}")
     parser.add_argument("-s", "--serial", help="ADB device serial")
     parser.add_argument("-w", "--wifi", help="WiFi device IP address")
 

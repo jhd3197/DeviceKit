@@ -1,37 +1,37 @@
-"""droidlink exceptions."""
+"""devicekit exceptions."""
 
 
-class DroidLinkError(Exception):
-    """Base exception for droidlink."""
+class DeviceKitError(Exception):
+    """Base exception for devicekit."""
     pass
 
 
-class DeviceNotFoundError(DroidLinkError):
+class DeviceNotFoundError(DeviceKitError):
     """No device found or device not reachable."""
     pass
 
 
-class ConnectionError(DroidLinkError):
+class ConnectionError(DeviceKitError):
     """Failed to connect to device agent."""
     pass
 
 
-class AdbError(DroidLinkError):
+class AdbError(DeviceKitError):
     """ADB command failed."""
     pass
 
 
-class UiElementNotFoundError(DroidLinkError):
+class UiElementNotFoundError(DeviceKitError):
     """UI element matching selector was not found."""
     pass
 
 
-class AgentNotRunningError(DroidLinkError):
+class AgentNotRunningError(DeviceKitError):
     """Agent app is not running or HTTP server not started."""
     pass
 
 
-class ShellCommandError(DroidLinkError):
+class ShellCommandError(DeviceKitError):
     """Shell command execution failed."""
 
     def __init__(self, command: str, exit_code: int, output: str):
