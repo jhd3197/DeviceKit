@@ -524,6 +524,26 @@ class ExtensionsMixin:
             if ai_ref:
                 self._import_ext_ref(slug, ai_ref)(devicekit_sdk.ai(slug))
 
+            # Jobs — func returns {kind: handler(job_dict) -> result} (plan 05).
+            jobs_ref = manifest.get("jobs")
+            if jobs_ref:
+                specs = self._import_ext_ref(slug, jobs_ref)()
+                for kind, fn in (specs or {}).items():
+                    devicekit_sdk.jobs.register(kind, fn)
+
+            # Schedules — func returns a list of dicts:
+            # {name, kind, interval_seconds|cron, payload?, max_attempts?}.
+            schedules_ref = manifest.get("schedules")
+            if schedules_ref:
+                specs = self._import_ext_ref(slug, schedules_ref)()
+                for spec in (specs or []):
+                    devicekit_sdk.jobs.schedule(
+                        spec["name"], spec["kind"],
+                        interval_seconds=spec.get("interval_seconds"),
+                        cron=spec.get("cron"), payload=spec.get("payload"),
+                        max_attempts=spec.get("max_attempts", 1),
+                        startup_delay_seconds=spec.get("startup_delay_seconds", 0))
+
     def _import_ext_ref(self, slug, ref):
         """Resolve a ``module:attr`` manifest reference under ``devicekit.extensions.<slug>``."""
         module_name, _, attr = ref.partition(":")
@@ -614,6 +634,13 @@ class ExtensionsMixin:
             self._register_contributions(slug, result["manifest"])
         except Exception as e:
             logger.warning(f"Re-register on enable failed for '{slug}': {e}")
+        # Resume the extension's schedules — ensure() preserves the paused flag, so they need
+        # an explicit un-pause.
+        if hasattr(self, "resume_jobs"):
+            try:
+                self.resume_jobs("extension", slug)
+            except Exception as e:
+                logger.warning(f"Resuming schedules for '{slug}' failed: {e}")
         if slug in self._extensions:
             self._extensions[slug]["status"] = STATUS_ACTIVE
         logger.info(f"Enabled extension '{slug}'")
@@ -647,6 +674,16 @@ class ExtensionsMixin:
             self.unregister_step_type(type_name)
         for field_name in tracked.get("fql_fields", set()):
             self.unregister_fql_field(field_name)
+        # Job kinds: drop the handler; pause the extension's schedules as a set so they
+        # stop firing (they survive in the DB — resume on re-enable, delete on purge).
+        for kind in tracked.get("job_kinds", set()):
+            if hasattr(self, "unregister_job_kind"):
+                self.unregister_job_kind(kind)
+        if hasattr(self, "pause_jobs"):
+            try:
+                self.pause_jobs("extension", slug)
+            except Exception as e:
+                logger.warning(f"Pausing schedules for '{slug}' failed: {e}")
         self._ext_contributions.pop(slug, None)
         self._ext_ai_tools.pop(slug, None)
 
@@ -665,6 +702,13 @@ class ExtensionsMixin:
             self._deregister_contributions(slug, manifest)
         except Exception as e:
             logger.warning(f"Deregister on uninstall failed for '{slug}': {e}")
+        # Remove the extension's schedules entirely (deregister only paused them).
+        if hasattr(self, "list_scheduled_jobs") and hasattr(self, "delete_scheduled_job"):
+            try:
+                for sch in self.list_scheduled_jobs(owner_type="extension", owner_id=slug):
+                    self.delete_scheduled_job(sch["id"])
+            except Exception as e:
+                logger.warning(f"Removing schedules for '{slug}' failed: {e}")
 
         if purge:
             self._drop_ext_tables(slug)

@@ -172,8 +172,46 @@ def ai(slug):
     return _AiBinder(slug)
 
 
-# Jobs / notifications seams (plans 05 / 06). Present so extension authors code against a
-# stable import today; wired when those platforms land.
+# --------------------------------------------------------------------------- jobs
+class _Jobs:
+    """Background-work seam (plan 05). Extensions enqueue durable work, register their own
+    job kinds, and declare periodic schedules — all riding the host's unified job system.
+
+    Handlers and schedules registered during activation are tracked against the current
+    slug so ``disable``/``uninstall`` can tear them down (schedules pause as a set via the
+    host's ``pause_jobs``)."""
+
+    def enqueue(self, kind, payload=None, max_attempts=3, priority=0, delay_ms=0,
+                owner_type=None, owner_id=None):
+        return _host.enqueue_job(
+            kind, payload=payload, max_attempts=max_attempts, priority=priority,
+            delay_ms=delay_ms, owner_type=owner_type, owner_id=owner_id)
+
+    def register(self, kind, handler, replace=True):
+        """Register a ``kind → handler(job_dict) -> result`` mapping (tracked for teardown)."""
+        _host.register_job_kind(kind, handler, replace=replace)
+        if _current_slug is not None:
+            _host._track_contribution(_current_slug, "job_kinds", kind)
+
+    def schedule(self, name, kind, interval_seconds=None, cron=None, payload=None,
+                 max_attempts=1, startup_delay_seconds=0):
+        """Idempotently declare a periodic schedule owned by this extension so the host can
+        pause/resume every schedule for the extension together on disable/enable."""
+        return _host.ensure_scheduled_job(
+            name, kind, interval_seconds=interval_seconds, cron=cron, payload=payload,
+            max_attempts=max_attempts, startup_delay_seconds=startup_delay_seconds,
+            owner_type="extension", owner_id=_current_slug)
+
+    def get(self, job_id):
+        return _host.get_job(job_id)
+
+    def list(self, **kwargs):
+        return _host.list_jobs(**kwargs)
+
+
+jobs = _Jobs()
+
+
 class _Unavailable:
     def __init__(self, what):
         self._what = what
@@ -182,7 +220,6 @@ class _Unavailable:
         raise NotImplementedError(f"{self._what} SDK is not available yet (see roadmap)")
 
 
-jobs = _Unavailable("jobs")
 notify = _Unavailable("notify")
 
 __all__ = [
