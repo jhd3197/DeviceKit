@@ -61,6 +61,12 @@ class Client(
         # mixin touches the database.
         self.init_persistence()
 
+        # Resume any enabled automation schedules that survived a restart.
+        try:
+            self.resume_schedules()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Schedule resume skipped: {e}")
+
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS
         self.configure_auth(API_KEY, AGENT_TOKENS)

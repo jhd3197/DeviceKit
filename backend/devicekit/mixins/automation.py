@@ -5,6 +5,9 @@ import threading
 import base64
 import copy
 
+from devicekit.db import session_scope
+from devicekit.models import Automation, AutomationRun, AutomationSchedule
+
 logger = logging.getLogger(__name__)
 
 STEP_TYPES = {
@@ -152,11 +155,8 @@ STEP_TYPES = {
 
 
 class AutomationMixin:
-    _automations = []
-    _automation_runs = []
-    _active_runs = {}  # run_id -> cancel_event
+    _active_runs = {}  # run_id -> cancel_event (ephemeral: live cancel handles)
     _recording_sessions = {}  # session_id -> {device_id, actions, started_at}
-    _schedules = []
     _scheduler_thread = None
     _scheduler_stop_event = None
 
@@ -167,40 +167,52 @@ class AutomationMixin:
     # Automation CRUD
     # ---------------------------------------------------------------
     def create_automation(self, name, description="", steps=None, tags=None):
-        automation = {
-            "id": str(uuid.uuid4()),
-            "name": name,
-            "description": description,
-            "steps": steps or [],
-            "tags": tags or [],
-            "created_at": time.time(),
-            "updated_at": time.time(),
-        }
-        self._automations.append(automation)
-        logger.info(f"Created automation '{name}' ({automation['id']})")
-        return automation
+        now = time.time()
+        with session_scope() as s:
+            automation = Automation(
+                id=str(uuid.uuid4()),
+                name=name,
+                description=description,
+                steps=steps or [],
+                tags=tags or [],
+                created_at=now,
+                updated_at=now,
+            )
+            s.add(automation)
+            s.flush()
+            result = automation.to_dict()
+        logger.info(f"Created automation '{name}' ({result['id']})")
+        return result
 
     def get_automation(self, automation_id):
-        return next((a for a in self._automations if a["id"] == automation_id), None)
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            return automation.to_dict() if automation else None
 
     def list_automations(self):
-        return list(self._automations)
+        with session_scope() as s:
+            return [a.to_dict() for a in s.query(Automation).all()]
 
     def update_automation(self, automation_id, updates):
-        automation = self.get_automation(automation_id)
-        if not automation:
-            return None
-        updates["updated_at"] = time.time()
-        automation.update(updates)
-        return automation
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            if not automation:
+                return None
+            for key in ("name", "description", "steps", "tags"):
+                if key in updates:
+                    setattr(automation, key, updates[key])
+            automation.updated_at = time.time()
+            s.flush()
+            return automation.to_dict()
 
     def delete_automation(self, automation_id):
-        before = len(self._automations)
-        self._automations = [a for a in self._automations if a["id"] != automation_id]
-        deleted = len(self._automations) < before
-        if deleted:
-            logger.info(f"Deleted automation {automation_id}")
-        return deleted
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            if not automation:
+                return False
+            s.delete(automation)
+        logger.info(f"Deleted automation {automation_id}")
+        return True
 
     # ---------------------------------------------------------------
     # Execution
@@ -226,7 +238,7 @@ class AutomationMixin:
             "error": None,
             "self_heal": self_heal,
         }
-        self._automation_runs.append(run_record)
+        self._save_run(run_record)
 
         cancel_event = threading.Event()
         self._active_runs[run_record["id"]] = cancel_event
@@ -256,6 +268,7 @@ class AutomationMixin:
                     "current_step_index": idx,
                     "step_results": step_results,
                 })
+                self._save_run(run_record)
                 self._active_runs.pop(run_record["id"], None)
                 return
 
@@ -363,12 +376,14 @@ class AutomationMixin:
                         "step_results": step_results,
                         "error": error_str,
                     })
+                    self._save_run(run_record)
                     self._active_runs.pop(run_record["id"], None)
                     return
 
             step_results.append(result)
             run_record["completed_steps"] = completed
             run_record["step_results"] = step_results
+            self._save_run(run_record)
 
         run_record.update({
             "status": "completed",
@@ -377,6 +392,7 @@ class AutomationMixin:
             "current_step_index": len(steps),
             "step_results": step_results,
         })
+        self._save_run(run_record)
         self._active_runs.pop(run_record["id"], None)
 
     def _execute_step(self, step, device_id):
@@ -541,17 +557,42 @@ class AutomationMixin:
             return True
         return False
 
+    def _save_run(self, run_record):
+        """Upsert an automation-run row from the live in-memory record. Called at
+        creation and after every step/terminal transition so polling and restart both
+        see current progress."""
+        with session_scope() as s:
+            row = s.get(AutomationRun, run_record["id"])
+            if not row:
+                row = AutomationRun(id=run_record["id"])
+                s.add(row)
+            row.automation_id = run_record.get("automation_id")
+            row.automation_name = run_record.get("automation_name", "")
+            row.device_id = run_record.get("device_id")
+            row.status = run_record.get("status")
+            row.started_at = run_record.get("started_at")
+            row.finished_at = run_record.get("finished_at")
+            row.total_steps = run_record.get("total_steps", 0)
+            row.completed_steps = run_record.get("completed_steps", 0)
+            row.current_step_index = run_record.get("current_step_index", 0)
+            row.step_results = run_record.get("step_results", [])
+            row.error = run_record.get("error")
+            row.self_heal = run_record.get("self_heal", False)
+
     def get_automation_run(self, run_id):
-        return next((r for r in self._automation_runs if r["id"] == run_id), None)
+        with session_scope() as s:
+            run = s.get(AutomationRun, run_id)
+            return run.to_dict() if run else None
 
     def list_automation_runs(self, automation_id=None, device_id=None, limit=50):
-        runs = list(self._automation_runs)
-        if automation_id:
-            runs = [r for r in runs if r.get("automation_id") == automation_id]
-        if device_id:
-            runs = [r for r in runs if r.get("device_id") == device_id]
-        runs.sort(key=lambda r: r.get("started_at", 0), reverse=True)
-        return runs[:limit]
+        with session_scope() as s:
+            q = s.query(AutomationRun)
+            if automation_id:
+                q = q.filter(AutomationRun.automation_id == automation_id)
+            if device_id:
+                q = q.filter(AutomationRun.device_id == device_id)
+            q = q.order_by(AutomationRun.started_at.desc()).limit(limit)
+            return [r.to_dict() for r in q.all()]
 
     # ---------------------------------------------------------------
     # Recording
@@ -627,49 +668,76 @@ class AutomationMixin:
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
         now = time.time()
-        schedule = {
-            "id": str(uuid.uuid4()),
-            "automation_id": automation_id,
-            "automation_name": automation.get("name", ""),
-            "device_id": device_id,
-            "interval_minutes": interval_minutes,
-            "enabled": enabled,
-            "last_run_at": None,
-            "next_run_at": now + interval_minutes * 60,
-            "created_at": now,
-        }
-        self._schedules.append(schedule)
+        with session_scope() as s:
+            schedule = AutomationSchedule(
+                id=str(uuid.uuid4()),
+                automation_id=automation_id,
+                automation_name=automation.get("name", ""),
+                device_id=device_id,
+                interval_minutes=interval_minutes,
+                enabled=enabled,
+                last_run_at=None,
+                next_run_at=now + interval_minutes * 60,
+                created_at=now,
+            )
+            s.add(schedule)
+            s.flush()
+            result = schedule.to_dict()
         self._ensure_scheduler_running()
-        logger.info(f"Created schedule {schedule['id']} for automation '{automation.get('name')}'")
-        return schedule
+        logger.info(f"Created schedule {result['id']} for automation '{automation.get('name')}'")
+        return result
 
     def get_schedule(self, schedule_id):
-        return next((s for s in self._schedules if s["id"] == schedule_id), None)
+        with session_scope() as s:
+            schedule = s.get(AutomationSchedule, schedule_id)
+            return schedule.to_dict() if schedule else None
 
     def list_schedules(self, automation_id=None):
-        schedules = list(self._schedules)
-        if automation_id:
-            schedules = [s for s in schedules if s.get("automation_id") == automation_id]
-        return schedules
+        with session_scope() as s:
+            q = s.query(AutomationSchedule)
+            if automation_id:
+                q = q.filter(AutomationSchedule.automation_id == automation_id)
+            return [sch.to_dict() for sch in q.all()]
 
     def update_schedule(self, schedule_id, updates):
-        schedule = self.get_schedule(schedule_id)
-        if not schedule:
-            return None
-        for key in ("interval_minutes", "enabled", "device_id"):
-            if key in updates:
-                schedule[key] = updates[key]
-        if "interval_minutes" in updates:
-            schedule["next_run_at"] = time.time() + updates["interval_minutes"] * 60
-        return schedule
+        with session_scope() as s:
+            schedule = s.get(AutomationSchedule, schedule_id)
+            if not schedule:
+                return None
+            for key in ("interval_minutes", "enabled", "device_id"):
+                if key in updates:
+                    setattr(schedule, key, updates[key])
+            if "interval_minutes" in updates:
+                schedule.next_run_at = time.time() + updates["interval_minutes"] * 60
+            s.flush()
+            result = schedule.to_dict()
+        # A newly-enabled schedule needs the checker running.
+        if updates.get("enabled"):
+            self._ensure_scheduler_running()
+        return result
 
     def delete_schedule(self, schedule_id):
-        before = len(self._schedules)
-        self._schedules = [s for s in self._schedules if s["id"] != schedule_id]
-        deleted = len(self._schedules) < before
-        if deleted:
-            logger.info(f"Deleted schedule {schedule_id}")
-        return deleted
+        with session_scope() as s:
+            schedule = s.get(AutomationSchedule, schedule_id)
+            if not schedule:
+                return False
+            s.delete(schedule)
+        logger.info(f"Deleted schedule {schedule_id}")
+        return True
+
+    def resume_schedules(self):
+        """Start the scheduler thread at boot if any enabled schedule exists (their
+        ``next_run_at`` survived the restart in the DB)."""
+        with session_scope() as s:
+            has_enabled = (
+                s.query(AutomationSchedule)
+                .filter(AutomationSchedule.enabled == True)  # noqa: E712
+                .first()
+                is not None
+            )
+        if has_enabled:
+            self._ensure_scheduler_running()
+            logger.info("Resumed scheduler for persisted schedules")
 
     def _ensure_scheduler_running(self):
         if self._scheduler_thread and self._scheduler_thread.is_alive():
@@ -686,21 +754,30 @@ class AutomationMixin:
     def _scheduler_loop(self, stop_event):
         while not stop_event.is_set():
             now = time.time()
-            for schedule in list(self._schedules):
-                if not schedule.get("enabled"):
-                    continue
-                next_run = schedule.get("next_run_at", 0)
-                if now >= next_run:
-                    try:
-                        self.execute_automation(
-                            schedule["automation_id"],
-                            schedule["device_id"],
-                        )
-                        schedule["last_run_at"] = now
-                        schedule["next_run_at"] = now + schedule["interval_minutes"] * 60
-                        logger.info(f"Scheduler ran automation {schedule['automation_id']}")
-                    except Exception as e:
-                        logger.error(f"Scheduler error for {schedule['id']}: {e}")
+            # Read due schedules from the DB each tick (short-lived session), so restarts
+            # and external edits are always reflected.
+            with session_scope() as s:
+                due = (
+                    s.query(AutomationSchedule)
+                    .filter(AutomationSchedule.enabled == True)  # noqa: E712
+                    .filter(AutomationSchedule.next_run_at <= now)
+                    .all()
+                )
+                due_specs = [
+                    (sch.id, sch.automation_id, sch.device_id, sch.interval_minutes)
+                    for sch in due
+                ]
+            for sched_id, automation_id, device_id, interval_minutes in due_specs:
+                try:
+                    self.execute_automation(automation_id, device_id)
+                    with session_scope() as s:
+                        sch = s.get(AutomationSchedule, sched_id)
+                        if sch:
+                            sch.last_run_at = now
+                            sch.next_run_at = now + (sch.interval_minutes or interval_minutes) * 60
+                    logger.info(f"Scheduler ran automation {automation_id}")
+                except Exception as e:
+                    logger.error(f"Scheduler error for {sched_id}: {e}")
             stop_event.wait(30)
 
     # ---------------------------------------------------------------
@@ -710,14 +787,15 @@ class AutomationMixin:
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
-        cloned = copy.deepcopy(automation)
-        cloned["id"] = str(uuid.uuid4())
-        cloned["name"] = new_name or f"{automation['name']} (Copy)"
-        cloned["created_at"] = time.time()
-        cloned["updated_at"] = time.time()
-        for step in cloned.get("steps", []):
+        steps = copy.deepcopy(automation.get("steps", []))
+        for step in steps:
             step["id"] = str(uuid.uuid4())
-        self._automations.append(cloned)
+        cloned = self.create_automation(
+            name=new_name or f"{automation['name']} (Copy)",
+            description=automation.get("description", ""),
+            steps=steps,
+            tags=list(automation.get("tags", [])),
+        )
         logger.info(f"Cloned automation '{automation['name']}' -> '{cloned['name']}'")
         return cloned
 
