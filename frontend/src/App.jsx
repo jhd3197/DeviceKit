@@ -15,6 +15,8 @@ import {
   Puzzle,
   Briefcase,
   Bell,
+  ShieldCheck,
+  History,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -31,6 +33,8 @@ import DeviceCompare from './views/DeviceCompare'
 import Extensions from './views/Extensions'
 import Jobs from './views/Jobs'
 import Notifications from './views/Notifications'
+import Enrollment from './views/Enrollment'
+import CommandHistory from './views/CommandHistory'
 
 import NotificationBell from './components/NotificationBell'
 import { useContributions } from './extensions/contributions'
@@ -49,6 +53,8 @@ const navSections = [
       { to: '/remote-adb', icon: Terminal, label: 'Remote ADB' },
       { to: '/fleet/groups', icon: Users, label: 'Device Groups' },
       { to: '/fleet/compare', icon: BarChart3, label: 'Compare' },
+      { to: '/enrollment', icon: ShieldCheck, label: 'Enrollment' },
+      { to: '/command-history', icon: History, label: 'Command History' },
       { to: '/extensions', icon: Puzzle, label: 'Extensions' },
     ],
   },
@@ -218,6 +224,8 @@ export default function App() {
           <Route path="/remote-adb" element={<RemoteADB />} />
           <Route path="/fleet/groups" element={<FleetGroups />} />
           <Route path="/fleet/compare" element={<DeviceCompare />} />
+          <Route path="/enrollment" element={<Enrollment />} />
+          <Route path="/command-history" element={<CommandHistory />} />
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />

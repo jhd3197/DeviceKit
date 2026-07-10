@@ -447,6 +447,20 @@ export const api = {
     request('/notifications/preferences', { method: 'PUT', body: JSON.stringify(data) }),
   setNotificationMute: (data) =>
     request('/notifications/preferences/mute', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Agent Security & Fleet Registry (plan 07)
+  getPendingAgents: () => request('/agent-devices/pending'),
+  claimAgent: (code, passphrase) =>
+    request('/agent-devices/claim', {
+      method: 'POST',
+      body: JSON.stringify({ code, passphrase }),
+    }),
+  getDeviceCommands: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/device-commands${qs ? `?${qs}` : ''}`)
+  },
 }
 
 export function subscribeToEvents(handlers = {}) {

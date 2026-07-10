@@ -1,6 +1,11 @@
 # Plan 07 — Agent Security & Fleet Registry Hardening
 
-**Status:** 🚧 in progress (backend of all phases ✅; frontend + APK UI remain)
+**Status:** ✅ shipped (backend + dashboard UI of all phases; APK pairing *screen* deferred — needs rebuild+device)
+
+Frontend: `views/Enrollment.jsx` (pending-agent list + claim-by-code + manual entry,
+5s poll), `views/CommandHistory.jsx` (device-action audit trail with status filter +
+expandable args/result/error), wired into `App.jsx` routes + Management nav; `api.js`
+gained `getPendingAgents`/`claimAgent`/`getDeviceCommands`. `npm run build` clean.
 **Inspired by:** ServerKit's `backend/app/services/agent_registry.py` (1,035 lines — the
 richest single code reference), `agent_gateway.py`, `pairing_service.py`,
 `docs/FLEET_CONTRACT.md`
