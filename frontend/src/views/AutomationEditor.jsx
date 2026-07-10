@@ -946,7 +946,6 @@ export default function AutomationEditor() {
             </div>
           </div>
         )}
-      </div>
 
       {/* Step type picker overlay */}
       {showPicker && (
