@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, AlertCircle, Smartphone, X, Search, Play, Save, BookmarkPlus, Download, Zap, ChevronDown, Trash2 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 import ExtensionSlot from '../extensions/ExtensionSlot'
@@ -7,6 +7,7 @@ import Sparkline from '../components/ds/Sparkline'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [stats, setStats] = useState(null)
   const [devices, setDevices] = useState([])
   const [filter, setFilter] = useState('')
@@ -80,6 +81,18 @@ export default function Dashboard() {
     setQueryMatches(null)
     setQueryError(null)
   }
+
+  // Apply an FQL expression passed via `?q=` (e.g. "Open in Dashboard" from the command
+  // palette). Runs once when the param is present.
+  const appliedQParam = useRef(false)
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q && !appliedQParam.current) {
+      appliedQParam.current = true
+      setQueryExpr(q)
+      executeQuery(q)
+    }
+  }, [searchParams])
 
   const saveCurrentQuery = async () => {
     const name = prompt('Save query as:')

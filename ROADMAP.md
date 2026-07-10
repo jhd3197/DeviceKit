@@ -421,10 +421,10 @@ See [docs/plans/09-frontend-foundations.md](docs/plans/09-frontend-foundations.m
 **Goal**: `Ctrl+K` jump-to-anything; a dashboard users compose themselves.
 See [docs/plans/10-command-palette.md](docs/plans/10-command-palette.md) and [docs/plans/11-dashboard-widgets.md](docs/plans/11-dashboard-widgets.md).
 
-- [ ] cmdk palette: pages + devices + automations + actions, fuzzy scoring, recents
-- [ ] FQL mode (`>` prefix) running fleet queries inline from the palette
+- [x] cmdk palette: pages + devices + automations + actions, fuzzy scoring, recents
+- [x] FQL mode (`>` prefix) running fleet queries inline from the palette
 - [ ] Dashboard carved into widgets with a renderer map; toggle/reorder/reset persisted in localStorage with forward-compatible merge
-- [ ] Extension entries (palette) + extension widgets (`dashboard.top` slot)
+- [ ] Extension entries (palette) + extension widgets (`dashboard.top` slot) — palette `command_palette` entries done (plan 10); widgets pending (plan 11)
 
 ### Phase 32: Settings & Theming
 **Goal**: A real `/settings` (the sidebar link currently 404s) and runtime accent theming.

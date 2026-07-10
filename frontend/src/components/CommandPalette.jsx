@@ -126,6 +126,15 @@ export default function CommandPalette() {
   const [devices, setDevices] = useState([])
   const [automations, setAutomations] = useState([])
   const [recents, setRecents] = useState(loadRecents)
+  const [fql, setFql] = useState({ matches: [], total: 0, loading: false, error: null })
+
+  // FQL mode: a `>`-prefixed query runs `/fleet/query` inline. `fqlExpr` is the expression
+  // after the `>` (empty string until the user types one); null means we're not in FQL mode.
+  const fqlExpr = useMemo(() => {
+    const t = query.trimStart()
+    return t.startsWith('>') ? t.slice(1).trim() : null
+  }, [query])
+  const fqlMode = fqlExpr !== null
 
   // Global Ctrl/Cmd+K toggles the palette; Escape closes it. The chord fires regardless of
   // focus so it works from inside any input.
@@ -154,12 +163,30 @@ export default function CommandPalette() {
     return () => { cancelled = true }
   }, [open])
 
+  // Debounced FQL execution — reuses the untouched `/fleet/query` endpoint. Runs only while the
+  // palette is open and the query is a non-empty `>` expression.
+  useEffect(() => {
+    if (!open || fqlExpr === null) return
+    if (!fqlExpr) {
+      setFql({ matches: [], total: 0, loading: false, error: null })
+      return
+    }
+    setFql((f) => ({ ...f, loading: true, error: null }))
+    let cancelled = false
+    const t = setTimeout(() => {
+      api.fleetQuery(fqlExpr)
+        .then((r) => { if (!cancelled) setFql({ matches: r.matches || [], total: r.total || 0, loading: false, error: null }) })
+        .catch((e) => { if (!cancelled) setFql({ matches: [], total: 0, loading: false, error: e.message || 'Query failed' }) })
+    }, 250)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [open, fqlExpr])
+
   const close = useCallback(() => setOpen(false), [])
 
   // Execute an item: close, run its action (custom `onRun` or navigate to `path`), and record
   // it in recents when it has a stable `path`.
   const runItem = useCallback((item) => {
-    close()
+    if (!item.keepOpen) close()
     if (item.onRun) item.onRun()
     else if (item.path) navigate(item.path)
     if (item.path) {
@@ -210,6 +237,17 @@ export default function CommandPalette() {
     for (const ac of ACTIONS) {
       out.push({ id: ac.id, group: 'Actions', label: ac.label, keywords: ac.keywords, icon: ac.icon, path: ac.path })
     }
+    // Discoverability entry for FQL mode: seeds the input with `> ` and keeps the palette open.
+    out.push({
+      id: 'action:fleet-query',
+      group: 'Actions',
+      label: 'Query Fleet…',
+      sublabel: '> battery < 20',
+      keywords: 'fql query fleet filter search devices expression',
+      icon: Search,
+      keepOpen: true,
+      onRun: () => setQuery('> '),
+    })
     for (const e of extEntries) {
       if (!e.path) continue
       out.push({
@@ -243,6 +281,34 @@ export default function CommandPalette() {
     })
   }, [recents, items])
 
+  // FQL results as palette items: an "Open in Dashboard" action first, then a device row per
+  // match. Only computed while in FQL mode with a non-empty expression.
+  const fqlItems = useMemo(() => {
+    if (!fqlMode || !fqlExpr) return []
+    const out = [{
+      id: 'fql:open-dashboard',
+      group: 'Fleet Query',
+      label: 'Open in Dashboard',
+      sublabel: fql.matches.length ? `${fql.matches.length} of ${fql.total}` : undefined,
+      icon: LayoutGrid,
+      path: `/?q=${encodeURIComponent(fqlExpr)}`,
+    }]
+    for (const d of fql.matches) {
+      const id = d.device_id || d.serial
+      if (!id) continue
+      out.push({
+        id: `fql-device:${id}`,
+        group: 'Fleet Query',
+        label: d.model || d.name || id,
+        sublabel: id,
+        icon: Smartphone,
+        online: d.online,
+        path: `/node/${id}`,
+      })
+    }
+    return out
+  }, [fqlMode, fqlExpr, fql.matches, fql.total])
+
   // Filter + rank against the query, then bucket by group in rank order. Recents replace the
   // full listing while the query is empty.
   const grouped = useMemo(() => {
@@ -267,6 +333,11 @@ export default function CommandPalette() {
       .map((g) => ({ group: g, items: byGroup.get(g) }))
   }, [items, recentItems, query])
 
+  // In FQL mode the fleet-query results replace the normal listing.
+  const displayGroups = fqlMode
+    ? (fqlItems.length ? [{ group: 'Fleet Query', items: fqlItems }] : [])
+    : grouped
+
   if (!open) return null
 
   return (
@@ -281,11 +352,15 @@ export default function CommandPalette() {
       >
         <Command shouldFilter={false} label="Command Palette" className="flex flex-col">
           <div className="flex items-center gap-2 px-4 border-b border-main">
-            <Search className="w-4 h-4 text-zinc-500 shrink-0" />
+            {fqlMode ? (
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 shrink-0">FQL</span>
+            ) : (
+              <Search className="w-4 h-4 text-zinc-500 shrink-0" />
+            )}
             <Command.Input
               value={query}
               onValueChange={setQuery}
-              placeholder="Search pages, devices, automations…"
+              placeholder="Search… or > for a fleet query (e.g. > battery < 20)"
               autoFocus
               className="flex-1 bg-transparent py-3.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
             />
@@ -293,11 +368,27 @@ export default function CommandPalette() {
           </div>
 
           <Command.List className="max-h-[52vh] overflow-y-auto p-2">
-            <Command.Empty className="px-3 py-8 text-center text-xs text-zinc-500">
-              No results found.
-            </Command.Empty>
+            {fqlMode ? (
+              (!fqlExpr || fql.loading || fql.error || fqlItems.length === 0) && (
+                <div className="px-3 py-8 text-center text-xs">
+                  {!fqlExpr ? (
+                    <span className="text-zinc-500">Type a fleet query, e.g. <span className="mono text-zinc-400">battery &lt; 20 and online</span></span>
+                  ) : fql.loading ? (
+                    <span className="text-zinc-500">Running query…</span>
+                  ) : fql.error ? (
+                    <span className="text-red-400">{fql.error}</span>
+                  ) : (
+                    <span className="text-zinc-500">No devices match <span className="mono text-zinc-400">{fqlExpr}</span></span>
+                  )}
+                </div>
+              )
+            ) : (
+              <Command.Empty className="px-3 py-8 text-center text-xs text-zinc-500">
+                No results found.
+              </Command.Empty>
+            )}
 
-            {grouped.map(({ group, items: groupItems }) => (
+            {displayGroups.map(({ group, items: groupItems }) => (
               <Command.Group
                 key={group}
                 heading={group}
@@ -318,7 +409,7 @@ export default function CommandPalette() {
                         <ExtensionIcon svg={it.extIcon} className="w-4 h-4 shrink-0 text-zinc-400" />
                       ) : null}
                       <span className="flex-1 min-w-0 truncate">{it.label}</span>
-                      {it.group === 'Devices' && (
+                      {it.online !== undefined && (
                         <span
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${it.online ? 'bg-emerald-500' : 'bg-zinc-600'}`}
                         />
