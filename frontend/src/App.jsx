@@ -13,6 +13,7 @@ import {
   Users,
   BarChart3,
   Puzzle,
+  Briefcase,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -27,6 +28,7 @@ import ProfileEditor from './views/ProfileEditor'
 import FleetGroups from './views/FleetGroups'
 import DeviceCompare from './views/DeviceCompare'
 import Extensions from './views/Extensions'
+import Jobs from './views/Jobs'
 
 import { useContributions } from './extensions/contributions'
 import { buildExtensionRoutes } from './extensions/ExtensionRoutes'
@@ -52,6 +54,7 @@ const navSections = [
     items: [
       { to: '/pipeline', icon: PlayCircle, label: 'Pipeline' },
       { to: '/automations', icon: Workflow, label: 'Automations' },
+      { to: '/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/settings', icon: Settings, label: 'SamanLabs Config' },
     ],
   },
@@ -203,6 +206,7 @@ export default function App() {
           <Route path="/automations/new" element={<AutomationEditor />} />
           <Route path="/automations/:id/edit" element={<AutomationEditor />} />
           <Route path="/automations/runs/:runId" element={<AutomationRunDetail />} />
+          <Route path="/jobs" element={<Jobs />} />
           <Route path="/remote-adb" element={<RemoteADB />} />
           <Route path="/fleet/groups" element={<FleetGroups />} />
           <Route path="/fleet/compare" element={<DeviceCompare />} />

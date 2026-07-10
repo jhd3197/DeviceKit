@@ -195,6 +195,7 @@ export default function Automations() {
       completed: 'bg-emerald-500/10 text-emerald-400',
       failed: 'bg-red-500/10 text-red-400',
       running: 'bg-blue-500/10 text-blue-400',
+      queued: 'bg-amber-500/10 text-amber-400',
       cancelled: 'bg-zinc-500/10 text-zinc-400',
     }
     return (
@@ -384,12 +385,12 @@ export default function Automations() {
                       <td className="px-4 py-3 mono text-zinc-500 text-[10px]">
                         {r.finished_at && r.started_at
                           ? `${((Number(r.finished_at) - Number(r.started_at)) * 1000).toFixed(0)}ms`
-                          : r.status === 'running'
+                          : r.status === 'running' || r.status === 'queued'
                             ? 'In progress'
                             : '--'}
                       </td>
                       <td className="px-4 py-3 text-right text-zinc-500">
-                        {r.status === 'running' && (
+                        {(r.status === 'running' || r.status === 'queued') && (
                           <Loader className="w-3 h-3 animate-spin inline" />
                         )}
                       </td>

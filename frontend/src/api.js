@@ -391,6 +391,25 @@ export const api = {
   updateExtensionConfig: (slug, data) =>
     request(`/extensions/${slug}/config`, { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Jobs & Scheduler (plan 05)
+  listJobs: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/jobs${qs ? `?${qs}` : ''}`)
+  },
+  getJob: (id) => request(`/jobs/${id}`),
+  getJobStats: () => request('/jobs/stats'),
+  retryJob: (id) => request(`/jobs/${id}/retry`, { method: 'POST' }),
+  cancelJob: (id) => request(`/jobs/${id}/cancel`, { method: 'POST' }),
+  listScheduledJobs: () => request('/jobs/schedules'),
+  runScheduledJob: (id) => request(`/jobs/schedules/${id}/run`, { method: 'POST' }),
+  setScheduledJobEnabled: (id, enabled) =>
+    request(`/jobs/schedules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
+
   // AI Agent (Prompture)
   getConversationHistory: (deviceId) => request(`/devices/${deviceId}/conversation/history`),
   clearConversation: (deviceId) => request(`/devices/${deviceId}/conversation`, { method: 'DELETE' }),
@@ -440,6 +459,9 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('stream_viewer', (e) => {
     handlers.onStreamViewer?.(JSON.parse(e.data))
+  })
+  es.addEventListener('job', (e) => {
+    handlers.onJob?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()
