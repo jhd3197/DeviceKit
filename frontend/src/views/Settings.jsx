@@ -15,15 +15,36 @@ import {
   Sparkles,
   MonitorPlay,
   Package,
+  Bell,
+  Palette,
+  Puzzle,
 } from 'lucide-react'
 
 import { api } from '../api'
+import { useContributions } from '../extensions/contributions'
+import ExtensionSlot from '../extensions/ExtensionSlot'
 import General from '../components/settings/General'
 import ApiAccess from '../components/settings/ApiAccess'
 import About from '../components/settings/About'
 import AiSettings from '../components/settings/AiSettings'
 import Streaming from '../components/settings/Streaming'
 import Bundles from '../components/settings/Bundles'
+import Appearance from '../components/settings/Appearance'
+import NotificationsPane from '../components/settings/NotificationsPane'
+
+// Pane that hosts extension-contributed settings forms (plan 04's `settings.panels` slot).
+// Host settings + save are forwarded so a schema-driven form can read/write them.
+function ExtensionPanels({ settings, save }) {
+  return (
+    <div className="max-w-2xl">
+      <div className="mb-6">
+        <h2 className="text-lg font-bold tracking-tight">Extensions</h2>
+        <p className="text-xs text-zinc-500 mt-1">Settings contributed by installed extensions.</p>
+      </div>
+      <ExtensionSlot name="settings.panels" settings={settings} save={save} className="space-y-6" />
+    </div>
+  )
+}
 
 // Tab registry. `section` groups items in the nav; `component` receives { settings, save }.
 const TABS = [
@@ -32,8 +53,19 @@ const TABS = [
   { id: 'ai', label: 'AI', icon: Sparkles, section: 'Devices & AI', component: AiSettings },
   { id: 'streaming', label: 'Streaming', icon: MonitorPlay, section: 'Devices & AI', component: Streaming },
   { id: 'bundles', label: 'Debug Bundles', icon: Package, section: 'Devices & AI', component: Bundles },
+  { id: 'notifications', label: 'Notifications', icon: Bell, section: 'Devices & AI', component: NotificationsPane },
+  { id: 'appearance', label: 'Appearance', icon: Palette, section: 'Personalization', component: Appearance },
   { id: 'about', label: 'About', icon: Info, section: 'Workspace', component: About },
 ]
+
+// The extension-panels tab only appears when an installed extension targets the slot.
+const EXTENSION_TAB = {
+  id: 'extensions',
+  label: 'Extensions',
+  icon: Puzzle,
+  section: 'Personalization',
+  component: ExtensionPanels,
+}
 
 const SECTION_ORDER = ['Workspace', 'Devices & AI', 'Personalization']
 
@@ -51,12 +83,17 @@ function groupTabs(tabs) {
 export default function Settings() {
   const { tab } = useParams()
   const navigate = useNavigate()
+  const { envelope } = useContributions()
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const activeId = TABS.some((t) => t.id === tab) ? tab : TABS[0].id
-  const active = TABS.find((t) => t.id === activeId)
+  // Only surface the Extensions tab when something actually contributes to the slot.
+  const hasExtensionPanels = (envelope.widgets || []).some((w) => w.slot === 'settings.panels')
+  const tabs = hasExtensionPanels ? [...TABS, EXTENSION_TAB] : TABS
+
+  const activeId = tabs.some((t) => t.id === tab) ? tab : tabs[0].id
+  const active = tabs.find((t) => t.id === activeId)
 
   useEffect(() => {
     let alive = true
@@ -82,7 +119,7 @@ export default function Settings() {
     if (!loading && tab !== activeId) navigate(`/settings/${activeId}`, { replace: true })
   }, [loading, tab, activeId, navigate])
 
-  const grouped = groupTabs(TABS)
+  const grouped = groupTabs(tabs)
   const Pane = active.component
 
   return (

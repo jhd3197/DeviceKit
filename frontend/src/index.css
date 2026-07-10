@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Runtime accent ramp (plan 12). Values are "R G B" triplets so Tailwind's
+   rgb(var(--accent) / <alpha-value>) mapping works. These defaults are DeviceKit's
+   historical emerald; ThemeProvider overwrites them from the saved accent hex on boot. */
+:root {
+  --accent: 16 185 129;
+  --accent-hover: 52 211 153;
+  --accent-dim: 5 150 105;
+  --accent-bg: 6 78 59;
+}
+
 @layer base {
   body {
     font-family: 'Inter', system-ui, sans-serif;
@@ -37,7 +47,8 @@
   }
 
   .tab-active {
-    border-bottom: 2px solid #10b981;
+    /* Active-tab indicator = brand accent (not a success state), so it tracks the ramp. */
+    border-bottom: 2px solid rgb(var(--accent));
     color: #fff;
   }
 }
@@ -56,9 +67,9 @@
   background: transparent;
 }
 
-/* Subtle glow for active nodes */
+/* Subtle glow for active nodes — brand accent, tracks the ramp. */
 .active-glow {
-  box-shadow: 0 0 15px -5px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 15px -5px rgb(var(--accent) / 0.2);
 }
 
 /* Test result borders */
