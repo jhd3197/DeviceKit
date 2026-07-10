@@ -1,6 +1,6 @@
 # Plan 02 — API Blueprint Refactor
 
-**Status:** proposed
+**Status:** ✅ shipped
 **Inspired by:** ServerKit's app-factory + Blueprint layout (`backend/app/__init__.py`, ~90 blueprints under `backend/app/api/`)
 **Depends on:** nothing (01 can land before or after; 03 requires this)
 
@@ -68,3 +68,27 @@ control and automations last (largest).
 `api_app.py` under ~150 lines; every route group is a blueprint module; the dumped
 route table (methods + rules) is byte-identical before and after; the app boots and the
 frontend works with zero `api.js` changes.
+
+## Outcome (shipped)
+
+- `ApiAppMixin.api_app()` split into `build_app()` (factory) + `api_app()` (starts the
+  dev server). The mixin is **100 lines**, down from 2,315.
+- New package `backend/devicekit/routes/` — 19 blueprint modules, each exposing
+  `make_blueprint(client, limiter) -> Blueprint`; `routes/__init__.register_all(app,
+  client, limiter)` mounts them. Sections map to modules as listed in the design, plus
+  small `dashboard.py` and `config.py` modules for the two section headers the plan's
+  list didn't enumerate.
+- Closure state relocated onto mixins: SSE fan-out → new `EventsMixin`
+  (`client.broadcast` / `client.sse_stream`); the agent-device registry
+  (`_agent_device_states` / `_events` / `_serial_index` + `find_agent_device`) →
+  `AgentDeviceMixin`, hydrated once from `Client.__init__` via `init_agent_registry()`.
+  `streaming.py` now calls `client.find_agent_device` directly (the
+  `_find_agent_device_for_stream` attachment is gone).
+- **Verification:** `tools/route_snapshot.py` dumps the rule+method table from
+  `build_app()`; before/after diff is empty — **140 rules, byte-identical**. App boots
+  and serves requests via a Flask test client (GET/POST/PUT/DELETE round-trips incl.
+  audit `after_request` + broadcast); `frontend/ npm run build` succeeds with zero
+  `api.js` edits.
+- Endpoint *names* changed (blueprint namespacing, e.g. `events.sse_stream`) — expected
+  and excluded from the snapshot; no `url_for` callers depend on them. Path-based auth in
+  `check_auth` is unaffected.

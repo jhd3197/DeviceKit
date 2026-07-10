@@ -83,8 +83,8 @@ class StreamingMixin:
     def _resolve_agent_stream_address(self, device_id):
         """Resolve the agent IP and port for streaming. Returns (ip, port) or (None, None)."""
         # Try agent device registry first
-        if hasattr(self, '_find_agent_device_for_stream'):
-            agent_data = self._find_agent_device_for_stream(device_id)
+        if hasattr(self, 'find_agent_device'):
+            agent_data = self.find_agent_device(device_id)
         else:
             agent_data = None
 

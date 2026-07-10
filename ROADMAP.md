@@ -350,10 +350,10 @@ See [docs/plans/01-persistence-layer.md](docs/plans/01-persistence-layer.md).
 **Goal**: Split the ~2,100-line `api_app.py` into per-feature Flask Blueprints — the mounting surface the extension platform requires.
 See [docs/plans/02-api-blueprint-refactor.md](docs/plans/02-api-blueprint-refactor.md).
 
-- [ ] `backend/devicekit/routes/` package: one module per current section header, each exposing `make_blueprint(client)`
-- [ ] Extract the SSE broadcast helper first; move `api_app()` closure state onto mixins
-- [ ] `api_app()` reduced to app factory + CORS/limiter/auth + blueprint registration
-- [ ] Route-table snapshot diff proves URLs are byte-identical before/after
+- [x] `backend/devicekit/routes/` package: one module per current section header, each exposing `make_blueprint(client, limiter)`
+- [x] Extract the SSE broadcast helper first (`EventsMixin.broadcast`); move `api_app()` closure state onto mixins (agent registry → `AgentDeviceMixin`)
+- [x] `api_app()` reduced to `build_app()` factory + CORS/limiter/auth + blueprint registration (100 lines, down from 2,315)
+- [x] Route-table snapshot diff proves URLs are byte-identical before/after (140 rules, zero diff)
 
 ### Phase 25: Jobs, Queue Bus & Scheduler
 **Goal**: Replace scattered daemon threads with persisted jobs, retries, and DB-defined schedules.

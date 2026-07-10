@@ -9,6 +9,7 @@ from devicekit.mixins.cdp import CdpMixin
 from devicekit.mixins.dynamodb import DynamodbMixin
 from devicekit.mixins.aws_storage import AwsStorageMixin
 from devicekit.mixins.uiautomator import Uiautomator2Mixin
+from devicekit.mixins.events import EventsMixin
 from devicekit.mixins.api_app import ApiAppMixin
 from devicekit.mixins.queue import QueueMixin
 from devicekit.mixins.alerts import AlertMixin
@@ -45,6 +46,7 @@ class Client(
     VisualRegressionMixin,
     DebugBundleMixin,
     AgentDeviceMixin,
+    EventsMixin,
     ApiAppMixin,
     QueueMixin,
     AlertMixin,
@@ -62,6 +64,9 @@ class Client(
         # Bring up the persistence layer (engine + schema) before any data-owning
         # mixin touches the database.
         self.init_persistence()
+
+        # Hydrate the in-memory agent-device registry from persisted rows.
+        self.init_agent_registry()
 
         # Resume any enabled automation schedules that survived a restart.
         try:
