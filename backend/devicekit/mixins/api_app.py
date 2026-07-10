@@ -1559,10 +1559,31 @@ class ApiAppMixin:
         # -----------------------------------------------------------
         # Agent Device (on-device DeviceKitAgent APK endpoints)
         # -----------------------------------------------------------
-        # In-memory store for agent device state
+        # In-memory cache for agent device state (backed by AgentDevice rows so the
+        # registry survives a restart). The event ring buffer stays ephemeral.
         _agent_device_states = {}
         _agent_device_events = []
         _agent_device_serial_index = {}  # serial -> device_id mapping
+
+        # Hydrate the cache from persisted rows at boot.
+        try:
+            for _row in client.load_agent_devices():
+                _did = _row['device_id']
+                _serial = _row.pop('serial', None)
+                _agent_device_states[_did] = {
+                    'device_id': _did,
+                    'info': _row.get('info', {}),
+                    'registered_at': _row.get('registered_at'),
+                    'last_heartbeat': _row.get('last_heartbeat'),
+                    'state': _row.get('state', {}),
+                    'online': _row.get('online', False),
+                }
+                if _serial:
+                    _agent_device_serial_index[_serial] = _did
+            if _agent_device_states:
+                logger.info(f"Loaded {len(_agent_device_states)} persisted agent device(s)")
+        except Exception as e:
+            logger.warning(f"Could not load persisted agent devices: {e}")
 
         @app.route('/agent-device/register', methods=['POST'])
         def agent_device_register():
@@ -1570,11 +1591,12 @@ class ApiAppMixin:
             model = data.get('model', 'unknown')
             manufacturer = data.get('manufacturer', 'unknown')
             device_id = f"{manufacturer}_{model}".replace(' ', '_')
+            now = time.time()
             _agent_device_states[device_id] = {
                 'device_id': device_id,
                 'info': data,
-                'registered_at': time.time(),
-                'last_heartbeat': time.time(),
+                'registered_at': now,
+                'last_heartbeat': now,
                 'state': {},
                 'online': True,
             }
@@ -1582,6 +1604,10 @@ class ApiAppMixin:
             serial = data.get('serial')
             if serial:
                 _agent_device_serial_index[serial] = device_id
+            client.save_agent_device(
+                device_id, info=data, serial=serial, registered_at=now,
+                last_heartbeat=now, state={}, online=True,
+            )
             logger.info(f"Agent device registered: {device_id} (serial={serial})")
             client.log_activity('agent_device_register', device_id, data)
             _sse_broadcast('device_connected', {'device_id': device_id, 'info': data})
@@ -1593,8 +1619,12 @@ class ApiAppMixin:
             data = request.get_json(silent=True) or {}
             device_id = data.get('device_id')
             if device_id and device_id in _agent_device_states:
+                now = time.time()
                 _agent_device_states[device_id]['state'] = data
-                _agent_device_states[device_id]['last_heartbeat'] = time.time()
+                _agent_device_states[device_id]['last_heartbeat'] = now
+                client.update_agent_device_fields(
+                    device_id, state=data, last_heartbeat=now, online=True,
+                )
                 _sse_broadcast('device_state', {'device_id': device_id, 'state': data})
 
                 # Auto-generate alerts from agent metrics
@@ -1654,9 +1684,11 @@ class ApiAppMixin:
             data = request.get_json(silent=True) or {}
             device_id = data.get('device_id')
             if device_id and device_id in _agent_device_states:
-                _agent_device_states[device_id]['last_heartbeat'] = time.time()
+                now = time.time()
+                _agent_device_states[device_id]['last_heartbeat'] = now
                 _agent_device_states[device_id]['online'] = True
-                _sse_broadcast('device_heartbeat', {'device_id': device_id, 'timestamp': time.time()})
+                client.update_agent_device_fields(device_id, last_heartbeat=now, online=True)
+                _sse_broadcast('device_heartbeat', {'device_id': device_id, 'timestamp': now})
             return jsonify({'status': 'ok'})
 
         @app.route('/agent-device/event', methods=['POST'])
@@ -1717,9 +1749,10 @@ class ApiAppMixin:
             # Mark stale devices as offline (no heartbeat in 15s)
             now = time.time()
             for d in _agent_device_states.values():
-                if now - d.get('last_heartbeat', 0) > 15:
+                if now - (d.get('last_heartbeat') or 0) > 15:
                     if d.get('online', False):
                         d['online'] = False
+                        client.update_agent_device_fields(d.get('device_id'), online=False)
                         _sse_broadcast('device_disconnected', {'device_id': d.get('device_id')})
             return jsonify({'devices': list(_agent_device_states.values())})
 

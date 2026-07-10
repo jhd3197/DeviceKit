@@ -24,6 +24,7 @@ from devicekit.mixins.streaming import StreamingMixin
 from devicekit.mixins.visual_regression import VisualRegressionMixin
 from devicekit.mixins.fleet_query import FleetQueryMixin
 from devicekit.mixins.debug_bundle import DebugBundleMixin
+from devicekit.mixins.agent_device import AgentDeviceMixin
 
 
 class Client(
@@ -43,6 +44,7 @@ class Client(
     StreamingMixin,
     VisualRegressionMixin,
     DebugBundleMixin,
+    AgentDeviceMixin,
     ApiAppMixin,
     QueueMixin,
     AlertMixin,
