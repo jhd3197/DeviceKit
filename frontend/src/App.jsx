@@ -14,6 +14,7 @@ import {
   BarChart3,
   Puzzle,
   Briefcase,
+  Bell,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -29,7 +30,9 @@ import FleetGroups from './views/FleetGroups'
 import DeviceCompare from './views/DeviceCompare'
 import Extensions from './views/Extensions'
 import Jobs from './views/Jobs'
+import Notifications from './views/Notifications'
 
+import NotificationBell from './components/NotificationBell'
 import { useContributions } from './extensions/contributions'
 import { buildExtensionRoutes } from './extensions/ExtensionRoutes'
 import ExtensionIcon from './extensions/ExtensionIcon'
@@ -55,6 +58,7 @@ const navSections = [
       { to: '/pipeline', icon: PlayCircle, label: 'Pipeline' },
       { to: '/automations', icon: Workflow, label: 'Automations' },
       { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+      { to: '/notifications', icon: Bell, label: 'Notifications' },
       { to: '/settings', icon: Settings, label: 'SamanLabs Config' },
     ],
   },
@@ -125,6 +129,9 @@ function Sidebar() {
           <Layers className="text-black w-5 h-5" />
         </div>
         <span className="font-bold tracking-tight text-lg">DeviceKit</span>
+        <div className="ml-auto">
+          <NotificationBell />
+        </div>
       </div>
 
       {/* Nav */}
@@ -207,6 +214,7 @@ export default function App() {
           <Route path="/automations/:id/edit" element={<AutomationEditor />} />
           <Route path="/automations/runs/:runId" element={<AutomationRunDetail />} />
           <Route path="/jobs" element={<Jobs />} />
+          <Route path="/notifications" element={<Notifications />} />
           <Route path="/remote-adb" element={<RemoteADB />} />
           <Route path="/fleet/groups" element={<FleetGroups />} />
           <Route path="/fleet/compare" element={<DeviceCompare />} />

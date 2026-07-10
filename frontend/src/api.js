@@ -419,6 +419,23 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ model_name: modelName }),
     }),
+
+  // Notifications (plan 06)
+  getNotifications: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/notifications${qs ? `?${qs}` : ''}`)
+  },
+  getNotification: (id) => request(`/notifications/${id}`),
+  getUnreadCount: () => request('/notifications/unread-count'),
+  getNotificationEvents: () => request('/notifications/events'),
+  markNotificationRead: (id, read = true) =>
+    request(`/notifications/${id}/read`, { method: 'PUT', body: JSON.stringify({ read }) }),
+  markAllNotificationsRead: () =>
+    request('/notifications/read-all', { method: 'PUT' }),
+  deleteNotification: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
+  clearNotifications: () => request('/notifications', { method: 'DELETE' }),
 }
 
 export function subscribeToEvents(handlers = {}) {
@@ -462,6 +479,9 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('job', (e) => {
     handlers.onJob?.(JSON.parse(e.data))
+  })
+  es.addEventListener('notification', (e) => {
+    handlers.onNotification?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()

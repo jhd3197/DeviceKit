@@ -1,6 +1,6 @@
 # Plan 06 — Notification Bus & Notification Center
 
-**Status:** proposed
+**Status:** 🚧 in progress — Phase 1 ✅ shipped (catalog + models + producer + in-app SSE + bell/history UI)
 **Inspired by:** ServerKit's `backend/app/notifications/` (event catalog, per-channel
 delivery, digests) and `NotificationsContext` / `NotificationBell` on the frontend
 **Depends on:** 01 (delivery rows), 05 (async channel delivery rides the queue)
@@ -64,7 +64,17 @@ happens to be open.
 
 ## Phases
 
-1. Catalog + models + producer + in-app channel over SSE + bell UI.
+1. ✅ Catalog + models + producer + in-app channel over SSE + bell UI.
+   Shipped: `devicekit/notifications/` (`catalog.py` with `register()` + 10 seeded fleet
+   events, `service.py` producer, `channels/inapp.py`); `models/notification.py`
+   (`Notification` + `NotificationDelivery`, epoch timestamps); `NotificationsMixin`
+   (`notify_event`, read/query façade, retention prune job+schedule); `routes/notifications.py`
+   blueprint; migration `c3d4e5f6a7b8`. Producer call sites wired: automation run
+   failed/healed, device offline (heartbeat reaper stopgap in `agent-device/status`),
+   battery critical, storage low. SDK `notify` seam live (`send` + `register_event`, tracked
+   for extension teardown). Frontend: `store/notifications.js` (single-SSE singleton),
+   `NotificationBell` in the sidebar (unread badge, optimistic mark-read, deep links),
+   `/notifications` history view. Tests: `test_notifications.py` (14).
 2. Webhook channel + delivery rows + retry via queue (plan 05).
 3. Preferences (per-event mute, quiet hours) + email channel + digests.
 

@@ -28,6 +28,7 @@ from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.jobs import JobsMixin
+from devicekit.mixins.notifications import NotificationsMixin
 
 
 class Client(
@@ -50,6 +51,7 @@ class Client(
     AgentDeviceMixin,
     ExtensionsMixin,
     JobsMixin,
+    NotificationsMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -82,6 +84,13 @@ class Client(
             self.init_jobs()
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Job system init skipped: {e}")
+
+        # Seed the notification catalog and its retention schedule (after jobs so the prune
+        # kind/schedule can register onto the live job system).
+        try:
+            self.init_notifications()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Notification bus init skipped: {e}")
 
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS

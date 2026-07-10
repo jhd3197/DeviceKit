@@ -7,6 +7,17 @@ from flask import Blueprint, jsonify, request
 logger = logging.getLogger(__name__)
 
 
+def _device_name(client, device_id):
+    """A human-friendly label for notifications (the device model), falling back to the id."""
+    if not device_id:
+        return 'A device'
+    try:
+        info = (client._agent_device_states.get(device_id) or {}).get('info') or {}
+        return info.get('model') or device_id
+    except Exception:
+        return device_id
+
+
 def make_blueprint(client, limiter):
     bp = Blueprint('agent_devices', __name__)
 
@@ -70,6 +81,13 @@ def make_blueprint(client, limiter):
                             severity='critical' if battery < 10 else 'warning'
                         )
                         client.broadcast('alert', alert)
+                        if battery < 10:
+                            client.notify_event(
+                                'device.battery.critical',
+                                data={'device_id': device_id,
+                                      'device_name': _device_name(client, device_id),
+                                      'level': battery},
+                                subject_type='device', subject_id=device_id)
 
                 # Overheating alert (>45C)
                 if temp > 45:
@@ -101,6 +119,12 @@ def make_blueprint(client, limiter):
                                 severity='critical' if free < total * 0.02 else 'warning'
                             )
                             client.broadcast('alert', alert)
+                            client.notify_event(
+                                'device.storage.low',
+                                data={'device_id': device_id,
+                                      'device_name': _device_name(client, device_id),
+                                      'free_pct': pct, 'free_mb': free},
+                                subject_type='device', subject_id=device_id)
 
         return jsonify({'status': 'ok'})
 
@@ -179,6 +203,11 @@ def make_blueprint(client, limiter):
                     d['online'] = False
                     client.update_agent_device_fields(d.get('device_id'), online=False)
                     client.broadcast('device_disconnected', {'device_id': d.get('device_id')})
+                    client.notify_event(
+                        'device.offline',
+                        data={'device_id': d.get('device_id'),
+                              'device_name': _device_name(client, d.get('device_id'))},
+                        subject_type='device', subject_id=d.get('device_id'))
         return jsonify({'devices': list(client._agent_device_states.values())})
 
     @bp.route('/agent-device/events')

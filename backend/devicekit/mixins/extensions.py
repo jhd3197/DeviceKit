@@ -679,6 +679,13 @@ class ExtensionsMixin:
         for kind in tracked.get("job_kinds", set()):
             if hasattr(self, "unregister_job_kind"):
                 self.unregister_job_kind(kind)
+        # Notification catalog entries (plan 06): drop the extension's registered events.
+        for event_key in tracked.get("notification_events", set()):
+            try:
+                from devicekit.notifications import catalog
+                catalog.unregister(event_key)
+            except Exception:
+                pass
         if hasattr(self, "pause_jobs"):
             try:
                 self.pause_jobs("extension", slug)

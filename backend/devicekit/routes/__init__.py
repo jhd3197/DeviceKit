@@ -30,6 +30,7 @@ from devicekit.routes import (
     debug_bundles,
     extensions,
     jobs,
+    notifications,
 )
 
 # Registration order does not affect URL matching (Flask matches by rule specificity),
@@ -56,6 +57,7 @@ BLUEPRINT_MODULES = [
     debug_bundles,
     extensions,
     jobs,
+    notifications,
 ]
 
 

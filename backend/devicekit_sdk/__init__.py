@@ -212,15 +212,36 @@ class _Jobs:
 jobs = _Jobs()
 
 
-class _Unavailable:
-    def __init__(self, what):
-        self._what = what
+# ------------------------------------------------------------------- notify
+class _Notify:
+    """Notification-bus seam (plan 06). Extensions emit fleet events through the host's
+    unified notification bus and can register their own catalog entries — a Slack/Discord
+    notifier is a natural extension. In-app delivery is immediate (SSE); webhook/email ride
+    the queue when configured."""
 
-    def __getattr__(self, _name):
-        raise NotImplementedError(f"{self._what} SDK is not available yet (see roadmap)")
+    def send(self, event_key, data=None, recipient="default", subject_type=None,
+             subject_id=None, severity=None):
+        if _host is None:
+            return None
+        return _host.notify_event(
+            event_key, data=data, recipient=recipient, subject_type=subject_type,
+            subject_id=subject_id, severity=severity)
+
+    def register_event(self, event_key, title, severity="info", category="general",
+                       body="", deep_link=""):
+        """Register a catalog entry so ``send`` renders it (tracked for teardown on
+        disable/uninstall)."""
+        if _host is None:
+            return None
+        result = _host.register_notification_event(
+            event_key, title, severity=severity, category=category, body=body,
+            deep_link=deep_link)
+        if _current_slug is not None:
+            _host._track_contribution(_current_slug, "notification_events", event_key)
+        return result
 
 
-notify = _Unavailable("notify")
+notify = _Notify()
 
 __all__ = [
     "set_host", "get_host", "devicekit_version",

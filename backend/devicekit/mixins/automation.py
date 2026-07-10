@@ -536,6 +536,8 @@ class AutomationMixin:
             logger.error(f"Automation run {run_id} crashed: {e}")
             run_record.update({"status": "failed", "finished_at": time.time(), "error": str(e)})
             self._save_run(run_record)
+            self._notify_run_failed(run_record, run_record.get("current_step_index", 0),
+                                    None, str(e))
             self._active_runs.pop(run_id, None)
         finally:
             self._run_jobs.pop(run_id, None)
@@ -615,6 +617,7 @@ class AutomationMixin:
                             result["heal_reasoning"] = heal_result.get("reasoning", "")
                             completed += 1
                             healed = True
+                            self._notify_run_healed(run_record, idx, result.get("heal_reasoning", ""))
                         else:
                             # Heal attempted but failed
                             result["healed"] = False
@@ -676,6 +679,7 @@ class AutomationMixin:
                         "error": error_str,
                     })
                     self._save_run(run_record)
+                    self._notify_run_failed(run_record, idx, step, error_str)
                     self._active_runs.pop(run_record["id"], None)
                     return
 
@@ -731,6 +735,43 @@ class AutomationMixin:
             except Exception:
                 pass
         return True
+
+    # ---------------------------------------------------------------
+    # Notification producer hooks (plan 06). Best-effort — a notification problem must
+    # never affect a run. ``notify_event`` is provided by NotificationsMixin on the
+    # composite and is itself exception-safe; the hasattr guard keeps AutomationMixin
+    # usable in isolation (tests compose a bare subset).
+    # ---------------------------------------------------------------
+    def _notify_run_failed(self, run_record, step_index, step, error):
+        if not hasattr(self, "notify_event"):
+            return
+        self.notify_event(
+            "automation.run.failed",
+            data={
+                "automation_name": run_record.get("automation_name") or "automation",
+                "automation_id": run_record.get("automation_id"),
+                "run_id": run_record.get("id"),
+                "device_id": run_record.get("device_id"),
+                "step_index": step_index,
+                "step_type": (step or {}).get("type", "") if step else "",
+                "error": (error or "")[:300],
+            },
+            subject_type="automation_run", subject_id=run_record.get("id"))
+
+    def _notify_run_healed(self, run_record, step_index, reasoning):
+        if not hasattr(self, "notify_event"):
+            return
+        self.notify_event(
+            "automation.run.healed",
+            data={
+                "automation_name": run_record.get("automation_name") or "automation",
+                "automation_id": run_record.get("automation_id"),
+                "run_id": run_record.get("id"),
+                "device_id": run_record.get("device_id"),
+                "step_index": step_index,
+                "heal_reasoning": (reasoning or "")[:300],
+            },
+            subject_type="automation_run", subject_id=run_record.get("id"))
 
     def _find_run_job(self, run_id):
         """Locate the ``automation.run`` job for a run (in-memory map lost after a restart)."""

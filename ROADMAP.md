@@ -391,9 +391,9 @@ See [docs/plans/04-extension-platform-frontend.md](docs/plans/04-extension-platf
 **Goal**: Fleet events reach operators — in-app, webhook, and email — with preferences and history.
 See [docs/plans/06-notification-bus.md](docs/plans/06-notification-bus.md).
 
-- [ ] Event catalog (`device.offline`, `automation.run.failed`, `automation.run.healed`, `regression.detected`, `device.battery.critical`, …)
-- [ ] Producer + persisted deliveries + queue-driven channel consumers; in-app channel over existing SSE
-- [ ] Bell dropdown with unread badge + optimistic mark-read; `/notifications` history view
+- [x] Event catalog (`device.offline`, `automation.run.failed`, `automation.run.healed`, `regression.detected`, `device.battery.critical`, …) — `notifications/catalog.py`, 10 seeded events, extensible via `register()` / SDK
+- [x] Producer (`notify_event`) + persisted `Notification`/`NotificationDelivery` rows; in-app channel over existing SSE (`notification` event). Queue-driven async channel consumers land in Phase 28.2
+- [x] Bell dropdown with unread badge + optimistic mark-read; `/notifications` history view (single-SSE store)
 - [ ] Webhook (Slack/Discord-compatible) channel, then email; per-event preferences + quiet hours
 
 ### Phase 29: Agent Security & Fleet Registry

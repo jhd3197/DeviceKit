@@ -9,6 +9,7 @@ from devicekit.models.bundle import DebugBundle
 from devicekit.models.session import StreamSession
 from devicekit.models.agent_device import AgentDevice
 from devicekit.models.extension import InstalledExtension
+from devicekit.models.notification import Notification, NotificationDelivery
 
 # Queue Bus + Jobs live in their own packages (plan 05) but must register on the shared
 # ``Base`` here so ``create_all`` and Alembic's autogenerate see every table.
@@ -27,6 +28,8 @@ __all__ = [
     "StreamSession",
     "AgentDevice",
     "InstalledExtension",
+    "Notification",
+    "NotificationDelivery",
     "QueueGroup",
     "Queue",
     "QueueMessage",
