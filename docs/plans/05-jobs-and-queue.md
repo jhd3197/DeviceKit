@@ -1,9 +1,36 @@
 # Plan 05 — Jobs, Queue Bus & Scheduler
 
-**Status:** proposed
+**Status:** ✅ shipped (2026-07-10)
 **Inspired by:** ServerKit's `backend/app/queue_bus/` (SQL-backed SQS-like broker) and
 `backend/app/jobs/` (unified Job rows + single consumer + DB-defined schedules)
 **Depends on:** 01 (both subsystems are SQLAlchemy tables)
+
+> **Shipped notes.** Ported to `backend/devicekit/queue_bus/` (`models.py` + `QueueBusService`
+> façade collapsing ServerKit's broker into DeviceKit's `session_scope` layer) and
+> `backend/devicekit/jobs/` (`Job`/`ScheduledJob`, `kind→handler` registry, `JobService` +
+> `ScheduledJobService`, `JobConsumer`, `JobScheduler`). `JobsMixin` wires the façade,
+> registers core kinds, and starts the consumer + scheduler at server boot (`build_app`);
+> `init_jobs` runs at `Client.__init__`. Automation runs now enqueue `automation.run` jobs
+> (steps snapshotted in the payload, `max_attempts=1`, per-device serialization lock) — the
+> old run daemon thread and the interval schedule-checker daemon are gone; an
+> `automation.schedule.tick` `ScheduledJob` (every 30s, DB clock) enqueues due runs.
+> Boot reconciliation fails any run left `queued`/`running` by a prior process. Migration
+> `b2c3d4e5f6a7` adds the five tables. API: `GET /jobs`, `/jobs/stats`, `/jobs/<id>`,
+> `POST /jobs/<id>/retry|cancel`, `/jobs/schedules` (+ run/enable). Frontend: `Jobs.jsx`
+> view (recent/failed jobs, schedules, live `job` SSE). SDK: `devicekit_sdk.jobs`
+> (enqueue/register/schedule) + extension `jobs`/`schedules` manifest keys with
+> pause-on-disable / resume-on-enable / delete-on-uninstall. Tests: `test_queue_bus.py`,
+> `test_jobs.py`, `test_scheduler.py`, `test_automation_jobs.py` (81 backend tests green).
+>
+> **Deviations:** (1) Consumer runs handlers on a bounded `ThreadPoolExecutor` (default 4)
+> rather than ServerKit's inline serial loop, so a minutes-long automation can't stall
+> schedule ticks; only as many messages as free worker slots are claimed. (2) Visibility
+> timeout for the jobs queue is 1h (automations run long; single-process crash = restart,
+> handled by reconciliation) and the consumer reaps expired in-flight messages each poll.
+> (3) The `AutomationSchedule` table is unchanged (interval-only, frontend untouched); the
+> tick handler drives it. Cron cadence is available on system/extension `ScheduledJob` rows
+> today; wiring cron into the automation-schedule UI is a follow-up. (4) Session-recording
+> capture stays a thread (a tight frame loop, per the plan's judgment call).
 
 ## Problem
 
@@ -86,3 +113,12 @@ No feature-owned daemon threads except stream capture; automations queue, run, r
 and survive a mid-run backend restart with a coherent status (failed with reason, not
 vanished); schedules live in the DB and persist their clocks across restarts; a failed
 run is inspectable in a jobs list with its error.
+
+✅ **All met.** The run + schedule-checker daemons are retired (only stream capture keeps a
+thread); `execute_automation` enqueues and the run completes/retries on the job system;
+`reconcile_interrupted_runs` turns a mid-run restart into `failed` with a reason (verified by
+`test_run_survives_restart_as_failed`); `ScheduledJobService.ensure` preserves `next_run_at`
+across a restart (`test_ensure_is_idempotent_and_preserves_clock`); and failed jobs/runs are
+inspectable via `GET /jobs` and the Jobs view with their error. Verified live: an automation
+run went `queued → succeeded` through the consumer and the `automation.schedule.tick`
+schedule fired on its own.

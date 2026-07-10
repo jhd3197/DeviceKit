@@ -73,6 +73,12 @@ class JobConsumer:
     # ------------------------------------------------------------------
     def poll_once(self):
         """Claim up to the number of free worker slots and dispatch each to the pool."""
+        # Reclaim any in-flight message whose visibility deadline lapsed (a worker that died
+        # without taking the process down) so it can be redelivered.
+        try:
+            QueueBusService.reap_expired(GROUP_SLUG, QUEUE_SLUG)
+        except Exception:
+            pass
         with self._inflight_lock:
             free = self.max_workers - self._inflight
         if free <= 0:

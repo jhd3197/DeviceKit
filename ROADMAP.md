@@ -355,15 +355,15 @@ See [docs/plans/02-api-blueprint-refactor.md](docs/plans/02-api-blueprint-refact
 - [x] `api_app()` reduced to `build_app()` factory + CORS/limiter/auth + blueprint registration (100 lines, down from 2,315)
 - [x] Route-table snapshot diff proves URLs are byte-identical before/after (140 rules, zero diff)
 
-### Phase 25: Jobs, Queue Bus & Scheduler
+### Phase 25: Jobs, Queue Bus & Scheduler ✅
 **Goal**: Replace scattered daemon threads with persisted jobs, retries, and DB-defined schedules.
 See [docs/plans/05-jobs-and-queue.md](docs/plans/05-jobs-and-queue.md).
 
-- [ ] Port ServerKit's SQL-backed queue (visibility timeouts, priority, retry, dead-letter)
-- [ ] `Job` rows + single `JobConsumer` daemon + `kind → handler` registry
-- [ ] `ScheduledJob` rows (cron or interval) with restart-surviving `next_run_at`
-- [ ] Move automation runs and the schedule checker onto jobs; keep SSE progress events
-- [ ] Jobs API + a recent/failed jobs panel in the UI
+- [x] Port ServerKit's SQL-backed queue (visibility timeouts, priority, retry, dead-letter) — `devicekit/queue_bus/` (`QueueBusService` on `session_scope`, process-wide receive lock, expired-message reaper)
+- [x] `Job` rows + single `JobConsumer` daemon + `kind → handler` registry — consumer runs handlers on a bounded worker pool so long automations don't stall schedule ticks
+- [x] `ScheduledJob` rows (cron or interval) with restart-surviving `next_run_at` — idempotent `ensure()` preserves the clock; croniter for cron cadence
+- [x] Move automation runs and the schedule checker onto jobs; keep SSE progress events — `automation.run` + `automation.schedule.tick`; run/schedule daemon threads retired; boot reconciliation fails interrupted runs; `job` SSE events on every transition
+- [x] Jobs API + a recent/failed jobs panel in the UI — `GET/POST /jobs*` blueprint + `Jobs.jsx` view (stats, filters, retry/cancel, schedules); SDK `jobs` seam + extension `jobs`/`schedules` manifest keys; migration `b2c3d4e5f6a7`; tests green
 
 ### Phase 26: Extension Platform — Backend ✅
 **Goal**: Installable extensions contributing step types, FQL fields, AI tools, routes, jobs, and tables.
