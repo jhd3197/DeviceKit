@@ -4,28 +4,30 @@ Build the DeviceKit Agent Android app, install it on a connected device, and rel
 
 ## Environment Setup
 
-The build requires JAVA_HOME and ANDROID_HOME. On this machine:
+The build requires JAVA_HOME and ANDROID_HOME. Standard Windows locations:
 
 ```
 JAVA_HOME = C:\Program Files\Android\Android Studio\jbr
-ANDROID_HOME = C:\Users\Juan\AppData\Local\Android\Sdk
-ADB = C:\Users\Juan\AppData\Local\Android\Sdk\platform-tools\adb
+ANDROID_HOME = %LOCALAPPDATA%\Android\Sdk
+ADB = %LOCALAPPDATA%\Android\Sdk\platform-tools\adb
 ```
 
-Since these are not in the system PATH, all commands must be run via Git Bash with inline env vars.
+Since these are not in the system PATH, all commands must be run via Git Bash with inline env vars. In Git Bash the SDK resolves as `~/AppData/Local/Android/Sdk`; set a shorthand once per session:
+
+```bash
+ADB=~/AppData/Local/Android/Sdk/platform-tools/adb
+```
 
 ## Steps
 
 ### 1. Build the Debug APK
 
-Run the Gradle build from the `agent-android` directory:
+Run the Gradle build from the repo root (the project lives in `agent-android/`):
 
 ```bash
 JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" \
-ANDROID_HOME="/c/Users/Juan/AppData/Local/Android/Sdk" \
-/c/Users/Juan/Documents/GitHub/DeviceKit/agent-android/gradlew \
-  -p /c/Users/Juan/Documents/GitHub/DeviceKit/agent-android \
-  assembleDebug
+ANDROID_HOME=~/AppData/Local/Android/Sdk \
+./agent-android/gradlew -p agent-android assembleDebug
 ```
 
 The APK is output to:
@@ -41,10 +43,10 @@ If the build fails, read the error output. Common issues:
 ### 2. Check Connected Devices
 
 ```bash
-/c/Users/Juan/AppData/Local/Android/Sdk/platform-tools/adb devices
+"$ADB" devices
 ```
 
-This lists devices by serial number (e.g. `R9TT311P25N`). If no device shows, the user needs to:
+This lists devices by serial number (e.g. `ABC1234567`). If no device shows, the user needs to:
 - Enable USB Debugging on the phone
 - Trust the computer when prompted
 - Reconnect the USB cable
@@ -52,8 +54,8 @@ This lists devices by serial number (e.g. `R9TT311P25N`). If no device shows, th
 ### 3. Install the APK
 
 ```bash
-/c/Users/Juan/AppData/Local/Android/Sdk/platform-tools/adb -s <SERIAL> install -r \
-  /c/Users/Juan/Documents/GitHub/DeviceKit/agent-android/app/build/outputs/apk/debug/app-debug.apk
+"$ADB" -s <SERIAL> install -r \
+  agent-android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 The `-r` flag allows reinstall over existing app without losing data.
@@ -63,7 +65,7 @@ The `-r` flag allows reinstall over existing app without losing data.
 Force-stop and cold restart to pick up all changes:
 
 ```bash
-/c/Users/Juan/AppData/Local/Android/Sdk/platform-tools/adb -s <SERIAL> shell \
+"$ADB" -s <SERIAL> shell \
   "am start -S -W -n com.devicekit.agent/.MainActivity --activity-clear-task"
 ```
 
@@ -74,8 +76,8 @@ This ensures a cold launch (`LaunchState: COLD` in output).
 - Check the adb output shows `Status: ok` and `Complete`
 - If the app crashes on launch, check logcat:
   ```bash
-  /c/Users/Juan/AppData/Local/Android/Sdk/platform-tools/adb -s <SERIAL> logcat -d --pid=$(
-    /c/Users/Juan/AppData/Local/Android/Sdk/platform-tools/adb -s <SERIAL> shell pidof com.devicekit.agent
+  "$ADB" -s <SERIAL> logcat -d --pid=$(
+    "$ADB" -s <SERIAL> shell pidof com.devicekit.agent
   ) | tail -50
   ```
 
@@ -83,7 +85,7 @@ This ensures a cold launch (`LaunchState: COLD` in output).
 
 | Item | Path |
 |------|------|
-| Project root | `C:\Users\Juan\Documents\GitHub\DeviceKit\agent-android` |
+| Project root | `agent-android/` (in the repo root) |
 | App source | `app/src/main/java/com/devicekit/agent/` |
 | Layouts | `app/src/main/res/layout/` |
 | Drawables | `app/src/main/res/drawable/` |
