@@ -73,6 +73,10 @@ backend/devicekit.db
 backend/recordings/
 backend/output/debug_bundles/
 
+# Installed extensions are extracted here at runtime (tracked: only the package marker)
+backend/devicekit/extensions/*
+!backend/devicekit/extensions/__init__.py
+
 # Scrapy stuff:
 .scrapy
 

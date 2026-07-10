@@ -87,6 +87,16 @@ class ApiAppMixin:
 
         # Mount every route group. URLs are identical to the pre-refactor closures.
         register_all(app, client, limiter)
+
+        # Boot the extension platform: hot-load every active extension's blueprint onto the
+        # app while it is still safe to register (before the first request). Runtime installs
+        # register through the same path with a flag-flip (see ExtensionsMixin).
+        self._flask_app = app
+        try:
+            self.load_all_extensions(app)
+        except Exception as e:
+            logger.warning(f"Extension boot load skipped: {e}")
+
         return app
 
     def api_app(self, host='0.0.0.0', port=5050, debug=True):

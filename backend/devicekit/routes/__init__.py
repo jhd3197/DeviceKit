@@ -28,6 +28,7 @@ from devicekit.routes import (
     visual_regression,
     fleet_query,
     debug_bundles,
+    extensions,
 )
 
 # Registration order does not affect URL matching (Flask matches by rule specificity),
@@ -52,6 +53,7 @@ BLUEPRINT_MODULES = [
     visual_regression,
     fleet_query,
     debug_bundles,
+    extensions,
 ]
 
 

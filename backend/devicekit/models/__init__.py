@@ -8,6 +8,7 @@ from devicekit.models.baseline import VisualBaseline
 from devicekit.models.bundle import DebugBundle
 from devicekit.models.session import StreamSession
 from devicekit.models.agent_device import AgentDevice
+from devicekit.models.extension import InstalledExtension
 
 __all__ = [
     "Automation",
@@ -20,4 +21,5 @@ __all__ = [
     "DebugBundle",
     "StreamSession",
     "AgentDevice",
+    "InstalledExtension",
 ]

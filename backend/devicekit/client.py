@@ -26,6 +26,7 @@ from devicekit.mixins.visual_regression import VisualRegressionMixin
 from devicekit.mixins.fleet_query import FleetQueryMixin
 from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
+from devicekit.mixins.extensions import ExtensionsMixin
 
 
 class Client(
@@ -46,6 +47,7 @@ class Client(
     VisualRegressionMixin,
     DebugBundleMixin,
     AgentDeviceMixin,
+    ExtensionsMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -67,6 +69,9 @@ class Client(
 
         # Hydrate the in-memory agent-device registry from persisted rows.
         self.init_agent_registry()
+
+        # Initialize the extension registries (blueprints load later, in build_app).
+        self.init_extensions()
 
         # Resume any enabled automation schedules that survived a restart.
         try:
