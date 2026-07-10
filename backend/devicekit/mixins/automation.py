@@ -7,6 +7,7 @@ import copy
 
 from devicekit.db import session_scope
 from devicekit.models import Automation, AutomationRun, AutomationSchedule
+from devicekit.jobs.service import JobService
 
 logger = logging.getLogger(__name__)
 
@@ -350,10 +351,21 @@ for _type_name, _executor in _CORE_EXECUTORS.items():
 
 class AutomationMixin:
     _active_runs = {}  # run_id -> cancel_event (ephemeral: live cancel handles)
+    _run_jobs = {}  # run_id -> job_id (ephemeral: lets cancel find a still-queued run's job)
     _recording_sessions = {}  # session_id -> {device_id, actions, started_at}
-    _scheduler_thread = None
-    _scheduler_stop_event = None
+    _device_run_locks = {}  # device_id -> threading.Lock (per-device run serialization)
+    _device_run_locks_guard = threading.Lock()
     _ext_step_types = {}  # type_name -> spec (contributed by extensions; overlays STEP_TYPES)
+
+    def _device_run_lock(self, device_id):
+        """A per-device lock so two automation jobs never drive the same device at once
+        (fleet-wide parallelism is still allowed — different devices run concurrently)."""
+        with self._device_run_locks_guard:
+            lock = self._device_run_locks.get(device_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._device_run_locks[device_id] = lock
+            return lock
 
     # ---------------------------------------------------------------
     # Step-type dispatch registry
@@ -440,6 +452,13 @@ class AutomationMixin:
     # Execution
     # ---------------------------------------------------------------
     def execute_automation(self, automation_id, device_id, self_heal=False):
+        """Create a run record and enqueue an ``automation.run`` job that executes it.
+
+        Formerly this spawned a raw daemon thread; now the run is durable work on the job
+        system — it survives a restart with a coherent status, can be retried, and appears in
+        the jobs list. The step loop itself is unchanged; it just runs inside the job handler
+        (``_job_run_automation``) on a bounded worker pool. Returns the queued run record
+        immediately so the API still responds 201 without blocking."""
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
@@ -450,7 +469,7 @@ class AutomationMixin:
             "automation_id": automation_id,
             "automation_name": automation.get("name", ""),
             "device_id": device_id,
-            "status": "running",
+            "status": "queued",
             "started_at": time.time(),
             "finished_at": None,
             "total_steps": len(steps),
@@ -462,20 +481,78 @@ class AutomationMixin:
         }
         self._save_run(run_record)
 
-        cancel_event = threading.Event()
-        self._active_runs[run_record["id"]] = cancel_event
-
-        thread = threading.Thread(
-            target=self._run_automation_thread,
-            args=(run_record, steps, device_id, cancel_event),
-            daemon=True,
+        # A thin pointer rides the queue; the steps snapshot travels in the payload so an edit
+        # to the automation between enqueue and execution doesn't change what this run does.
+        job = JobService.enqueue(
+            "automation.run",
+            payload={
+                "run_id": run_record["id"],
+                "automation_id": automation_id,
+                "device_id": device_id,
+                "self_heal": self_heal,
+                "steps": steps,
+            },
+            max_attempts=1,  # a failed automation is a terminal outcome, not a job to retry
+            owner_type="automation_run",
+            owner_id=run_record["id"],
         )
-        thread.start()
-
+        self._run_jobs[run_record["id"]] = job["id"]
         return run_record
 
-    def _run_automation_thread(self, run_record, steps, device_id, cancel_event):
+    def _job_run_automation(self, job):
+        """Job handler for ``automation.run`` — drives one run's step loop to completion.
+
+        Registered by JobsMixin. Honors a cancel requested before pickup, serializes per
+        device, and never raises for a normal step failure (that's a ``failed`` run, a
+        succeeded job). Returns a compact summary as the job result."""
+        payload = job.get("payload", {})
+        run_id = payload.get("run_id")
+        device_id = payload.get("device_id")
+        steps = payload.get("steps") or []
+        self_heal = payload.get("self_heal", False)
+        if not run_id:
+            return {"error": "missing run_id"}
+
+        run_record = self.get_automation_run(run_id)
+        if not run_record:
+            return {"skipped": "run record missing"}
+        if run_record.get("status") in ("cancelled", "failed", "completed"):
+            # Cancelled, or reconciled-as-failed on a prior restart — do not re-run.
+            return {"skipped": run_record.get("status")}
+
+        run_record["self_heal"] = self_heal
+        cancel_event = threading.Event()
+        self._active_runs[run_id] = cancel_event
+
+        try:
+            lock = self._device_run_lock(device_id)
+            with lock:
+                if cancel_event.is_set():
+                    run_record.update({"status": "cancelled", "finished_at": time.time()})
+                    self._save_run(run_record)
+                    return {"run_id": run_id, "status": "cancelled"}
+                self._run_automation_steps(run_record, steps, device_id, cancel_event)
+        except Exception as e:
+            logger.error(f"Automation run {run_id} crashed: {e}")
+            run_record.update({"status": "failed", "finished_at": time.time(), "error": str(e)})
+            self._save_run(run_record)
+            self._active_runs.pop(run_id, None)
+        finally:
+            self._run_jobs.pop(run_id, None)
+
+        final = self.get_automation_run(run_id)
+        return {
+            "run_id": run_id,
+            "status": final.get("status") if final else None,
+            "completed_steps": final.get("completed_steps") if final else None,
+        }
+
+    def _run_automation_steps(self, run_record, steps, device_id, cancel_event):
         from devicekit.mixins.nl_automation import UI_TARGETING_STEP_TYPES
+
+        # Flip queued -> running now that a worker owns this run.
+        run_record["status"] = "running"
+        self._save_run(run_record)
 
         step_results = []
         completed = 0
@@ -633,11 +710,32 @@ class AutomationMixin:
     # Run management
     # ---------------------------------------------------------------
     def cancel_automation_run(self, run_id):
+        # Actively running on a worker: signal the cooperative cancel event; the step loop
+        # marks the run cancelled at the next step boundary.
         cancel_event = self._active_runs.get(run_id)
         if cancel_event:
             cancel_event.set()
             return True
-        return False
+        # Still queued (no worker yet): mark it cancelled and cancel the underlying job so the
+        # consumer skips the message when it arrives.
+        run = self.get_automation_run(run_id)
+        if not run or run.get("status") not in ("queued", "running"):
+            return False
+        run["status"] = "cancelled"
+        run["finished_at"] = time.time()
+        self._save_run(run)
+        job_id = self._run_jobs.get(run_id) or self._find_run_job(run_id)
+        if job_id:
+            try:
+                JobService.cancel(job_id)
+            except Exception:
+                pass
+        return True
+
+    def _find_run_job(self, run_id):
+        """Locate the ``automation.run`` job for a run (in-memory map lost after a restart)."""
+        jobs = JobService.list(owner_type="automation_run", owner_id=run_id, limit=1)
+        return jobs[0]["id"] if jobs else None
 
     def _save_run(self, run_record):
         """Upsert an automation-run row from the live in-memory record. Called at
@@ -765,7 +863,6 @@ class AutomationMixin:
             s.add(schedule)
             s.flush()
             result = schedule.to_dict()
-        self._ensure_scheduler_running()
         logger.info(f"Created schedule {result['id']} for automation '{automation.get('name')}'")
         return result
 
@@ -793,9 +890,6 @@ class AutomationMixin:
                 schedule.next_run_at = time.time() + updates["interval_minutes"] * 60
             s.flush()
             result = schedule.to_dict()
-        # A newly-enabled schedule needs the checker running.
-        if updates.get("enabled"):
-            self._ensure_scheduler_running()
         return result
 
     def delete_schedule(self, schedule_id):
@@ -807,60 +901,62 @@ class AutomationMixin:
         logger.info(f"Deleted schedule {schedule_id}")
         return True
 
-    def resume_schedules(self):
-        """Start the scheduler thread at boot if any enabled schedule exists (their
-        ``next_run_at`` survived the restart in the DB)."""
+    def _job_schedule_tick(self, job):
+        """Job handler for ``automation.schedule.tick`` — the unified replacement for the old
+        per-mixin scheduler daemon. The always-on JobScheduler fires this every 30s; it
+        enqueues an ``automation.run`` job for every due schedule and advances its clock."""
+        return {"fired": self.run_due_automation_schedules()}
+
+    def run_due_automation_schedules(self):
+        """Enqueue a run for every enabled schedule whose ``next_run_at`` has passed, then
+        advance its ``next_run_at``. Reads the DB each tick (short-lived session) so restarts
+        and external edits are always reflected. Returns the number fired."""
+        now = time.time()
         with session_scope() as s:
-            has_enabled = (
+            due = (
                 s.query(AutomationSchedule)
                 .filter(AutomationSchedule.enabled == True)  # noqa: E712
-                .first()
-                is not None
+                .filter(AutomationSchedule.next_run_at <= now)
+                .all()
             )
-        if has_enabled:
-            self._ensure_scheduler_running()
-            logger.info("Resumed scheduler for persisted schedules")
+            due_specs = [
+                (sch.id, sch.automation_id, sch.device_id, sch.interval_minutes)
+                for sch in due
+            ]
+        fired = 0
+        for sched_id, automation_id, device_id, interval_minutes in due_specs:
+            try:
+                self.execute_automation(automation_id, device_id)
+                with session_scope() as s:
+                    sch = s.get(AutomationSchedule, sched_id)
+                    if sch:
+                        sch.last_run_at = now
+                        sch.next_run_at = now + (sch.interval_minutes or interval_minutes) * 60
+                fired += 1
+                logger.info(f"Scheduler enqueued automation {automation_id}")
+            except Exception as e:
+                logger.error(f"Scheduler error for {sched_id}: {e}")
+        return fired
 
-    def _ensure_scheduler_running(self):
-        if self._scheduler_thread and self._scheduler_thread.is_alive():
-            return
-        self._scheduler_stop_event = threading.Event()
-        self._scheduler_thread = threading.Thread(
-            target=self._scheduler_loop,
-            args=(self._scheduler_stop_event,),
-            daemon=True,
-        )
-        self._scheduler_thread.start()
-        logger.info("Scheduler thread started")
-
-    def _scheduler_loop(self, stop_event):
-        while not stop_event.is_set():
-            now = time.time()
-            # Read due schedules from the DB each tick (short-lived session), so restarts
-            # and external edits are always reflected.
-            with session_scope() as s:
-                due = (
-                    s.query(AutomationSchedule)
-                    .filter(AutomationSchedule.enabled == True)  # noqa: E712
-                    .filter(AutomationSchedule.next_run_at <= now)
-                    .all()
-                )
-                due_specs = [
-                    (sch.id, sch.automation_id, sch.device_id, sch.interval_minutes)
-                    for sch in due
-                ]
-            for sched_id, automation_id, device_id, interval_minutes in due_specs:
-                try:
-                    self.execute_automation(automation_id, device_id)
-                    with session_scope() as s:
-                        sch = s.get(AutomationSchedule, sched_id)
-                        if sch:
-                            sch.last_run_at = now
-                            sch.next_run_at = now + (sch.interval_minutes or interval_minutes) * 60
-                    logger.info(f"Scheduler ran automation {automation_id}")
-                except Exception as e:
-                    logger.error(f"Scheduler error for {sched_id}: {e}")
-            stop_event.wait(30)
+    def reconcile_interrupted_runs(self, reason="Backend restarted during run"):
+        """At boot, fail any run left ``queued``/``running`` by a previous process — its
+        in-memory execution is gone. Called by JobsMixin.start_job_workers so a mid-run
+        restart yields a coherent 'failed' status instead of a run stuck 'running' forever.
+        Returns the number reconciled."""
+        now = time.time()
+        with session_scope() as s:
+            rows = (
+                s.query(AutomationRun)
+                .filter(AutomationRun.status.in_(("queued", "running")))
+                .all()
+            )
+            n = 0
+            for r in rows:
+                r.status = "failed"
+                r.error = reason
+                r.finished_at = now
+                n += 1
+            return n
 
     # ---------------------------------------------------------------
     # Clone / Export / Import

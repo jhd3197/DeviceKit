@@ -27,6 +27,7 @@ from devicekit.mixins.fleet_query import FleetQueryMixin
 from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
 from devicekit.mixins.extensions import ExtensionsMixin
+from devicekit.mixins.jobs import JobsMixin
 
 
 class Client(
@@ -48,6 +49,7 @@ class Client(
     DebugBundleMixin,
     AgentDeviceMixin,
     ExtensionsMixin,
+    JobsMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -73,11 +75,13 @@ class Client(
         # Initialize the extension registries (blueprints load later, in build_app).
         self.init_extensions()
 
-        # Resume any enabled automation schedules that survived a restart.
+        # Register core job kinds and ensure the default system schedules exist. The consumer
+        # and scheduler daemons start later, at server boot (build_app -> start_job_workers),
+        # so imports and the test-suite never spawn threads.
         try:
-            self.resume_schedules()
+            self.init_jobs()
         except Exception as e:
-            logging.getLogger('devicekit').warning(f"Schedule resume skipped: {e}")
+            logging.getLogger('devicekit').warning(f"Job system init skipped: {e}")
 
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS

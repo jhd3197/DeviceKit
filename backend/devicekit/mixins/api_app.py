@@ -97,6 +97,13 @@ class ApiAppMixin:
         except Exception as e:
             logger.warning(f"Extension boot load skipped: {e}")
 
+        # Start the job consumer + scheduler daemons now that the app (and every mixin's
+        # handlers) are wired. Reconciles any work interrupted by a previous process first.
+        try:
+            self.start_job_workers()
+        except Exception as e:
+            logger.warning(f"Job workers not started: {e}")
+
         return app
 
     def api_app(self, host='0.0.0.0', port=5050, debug=True):
