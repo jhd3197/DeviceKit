@@ -10,3 +10,5 @@ colorlog==6.9.0
 python-slugify==8.0.4
 prompture>=0.0.36
 flask-limiter==3.8.0
+SQLAlchemy==2.0.23
+alembic==1.14.1

@@ -3,6 +3,7 @@ import logging
 import colorlog
 
 from devicekit.tools import ToolsMixin
+from devicekit.mixins.persistence import PersistenceMixin
 from devicekit.mixins.adb import AdbMixin
 from devicekit.mixins.cdp import CdpMixin
 from devicekit.mixins.dynamodb import DynamodbMixin
@@ -26,6 +27,7 @@ from devicekit.mixins.debug_bundle import DebugBundleMixin
 
 
 class Client(
+    PersistenceMixin,
     AdbMixin,
     Uiautomator2Mixin,
     CdpMixin,
@@ -54,6 +56,10 @@ class Client(
         self.local_port = local_port
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
+
+        # Bring up the persistence layer (engine + schema) before any data-owning
+        # mixin touches the database.
+        self.init_persistence()
 
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS

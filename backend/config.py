@@ -14,6 +14,15 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 DYNAMODB_TABLE_PREFIX = os.getenv("DYNAMODB_TABLE_PREFIX", "devicekit_")
 DYNAMODB_ENDPOINT = os.getenv("DYNAMODB_ENDPOINT", None)
 
+# Persistence (SQLAlchemy)
+# Default: embedded SQLite file next to the backend. Set DEVICEKIT_DATABASE_URL to a
+# Postgres URL (e.g. postgresql+psycopg2://user:pass@host/db) to scale out.
+_DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "devicekit.db")
+DEVICEKIT_DATABASE_URL = os.getenv(
+    "DEVICEKIT_DATABASE_URL",
+    f"sqlite:///{_DEFAULT_DB_PATH}",
+)
+
 # CORS
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 

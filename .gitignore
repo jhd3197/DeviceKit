@@ -65,6 +65,14 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# DeviceKit persistence (SQLite store + WAL sidecars)
+*.db
+*.db-wal
+*.db-shm
+backend/devicekit.db
+backend/recordings/
+backend/output/debug_bundles/
+
 # Scrapy stuff:
 .scrapy
 
