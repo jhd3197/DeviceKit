@@ -36,10 +36,33 @@ import {
   SkipForward,
   Users,
   Settings2,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Eye,
+  Check,
+  X,
+  Clock,
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 import StreamCanvas from '../components/StreamCanvas'
 import MetricChart, { seriesColor } from '../components/ds/MetricChart'
+
+// AI session-mode metadata (plan 13): how each mode looks + its one-line guarantee.
+const MODE_META = {
+  observe: {
+    label: 'Observe', icon: Eye, hint: 'read-only — no write tools',
+    active: 'bg-sky-500/20 text-sky-300 border border-sky-500/30',
+  },
+  supervised: {
+    label: 'Supervised', icon: ShieldCheck, hint: 'write tools need approval',
+    active: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+  },
+  autonomous: {
+    label: 'Autonomous', icon: ShieldAlert, hint: 'writes auto-approved + logged',
+    active: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+  },
+}
 
 // Historical metric selector config (plan 08) — device-scoped view.
 const HIST_METRICS = [
@@ -83,6 +106,8 @@ export default function NodeDetail() {
   const [commandInput, setCommandInput] = useState('')
   const [urgentCommand, setUrgentCommand] = useState(false)
   const [hasProfile, setHasProfile] = useState(null)
+  const [confirming, setConfirming] = useState({})   // action_id -> true while a decision is in flight
+  const [nowMs, setNowMs] = useState(Date.now())     // 1s tick for gate countdowns
   const agentLogRef = useRef(null)
 
   // Recording state
@@ -163,6 +188,12 @@ export default function NodeDetail() {
     const aid = setInterval(fetchAgent, 2000)
     return () => { clearInterval(tid); clearInterval(aid) }
   }, [fetchData, fetchAgent])
+
+  // 1s tick so gate countdowns tick down smoothly between the 2s status polls.
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
 
   // SSE subscription for real-time device state
   useEffect(() => {
@@ -436,6 +467,31 @@ export default function NodeDetail() {
       // silent
     }
   }
+
+  // Confirmation gate (plan 13): release a blocked write-tool action.
+  const handleConfirmAction = async (actionId, approve) => {
+    setConfirming((c) => ({ ...c, [actionId]: true }))
+    try {
+      await api.confirmAgentAction(deviceId, actionId, approve)
+      fetchAgent()
+    } catch {
+      // silent
+    } finally {
+      setConfirming((c) => { const n = { ...c }; delete n[actionId]; return n })
+    }
+  }
+
+  const handleSetMode = async (mode) => {
+    try {
+      await api.setAgentMode(deviceId, mode)
+      fetchAgent()
+    } catch {
+      // silent
+    }
+  }
+
+  const agentMode = agentStatus.mode || 'supervised'
+  const pendingActions = agentStatus.pending_actions || []
 
   const macroCommands = [
     { label: 'Clear Cache', cmd: 'pm clear com.android.chrome' },
@@ -1020,6 +1076,34 @@ export default function NodeDetail() {
                     </div>
                   )}
 
+                  {/* Session mode (plan 13) — observe / supervised / autonomous */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                        <Shield className="w-3 h-3" /> Session Mode
+                      </span>
+                      <span className="text-[10px] text-zinc-600">{MODE_META[agentMode]?.hint}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 bg-zinc-900 border border-main rounded p-1">
+                      {['observe', 'supervised', 'autonomous'].map((m) => {
+                        const meta = MODE_META[m]
+                        const Icon = meta.icon
+                        const active = agentMode === m
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => handleSetMode(m)}
+                            className={`flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-bold transition-all ${
+                              active ? meta.active : 'text-zinc-500 hover:text-zinc-300'
+                            }`}
+                          >
+                            <Icon className="w-3 h-3" /> {meta.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
                   {/* Start/Stop */}
                   <button
                     onClick={handleAgentToggle}
@@ -1043,6 +1127,57 @@ export default function NodeDetail() {
                       {agentStatus.current_action}
                     </div>
                   )}
+
+                  {/* Pending action approval cards (plan 13) */}
+                  {pendingActions.map((action) => {
+                    const remaining = Math.max(0, Math.round((action.deadline * 1000 - nowMs) / 1000))
+                    const busy = !!confirming[action.id]
+                    return (
+                      <div key={action.id} className="bg-amber-950/40 border border-amber-500/40 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-amber-300 uppercase tracking-widest flex items-center gap-1.5">
+                            <ShieldAlert className="w-3 h-3" /> Approval required
+                          </span>
+                          <span className="text-[10px] text-amber-400/80 mono flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5" /> {remaining}s
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-200 font-medium">{action.summary}</p>
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500 mono">
+                          <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{action.tool}</span>
+                          {action.source && action.source !== 'core' && (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                              {action.source}
+                            </span>
+                          )}
+                        </div>
+                        {action.args && Object.keys(action.args).length > 0 && (
+                          <details className="text-[10px] text-zinc-500">
+                            <summary className="cursor-pointer hover:text-zinc-300">args</summary>
+                            <pre className="mt-1 bg-[#020202] rounded p-2 overflow-x-auto text-zinc-400">
+{JSON.stringify(action.args, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => handleConfirmAction(action.id, true)}
+                            disabled={busy}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-900 disabled:opacity-40"
+                          >
+                            <Check className="w-3 h-3" /> Approve
+                          </button>
+                          <button
+                            onClick={() => handleConfirmAction(action.id, false)}
+                            disabled={busy}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-bold bg-red-950 text-red-400 border border-red-900/50 hover:bg-red-900 disabled:opacity-40"
+                          >
+                            <X className="w-3 h-3" /> Deny
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
 
                   {/* Command input */}
                   <div className="flex gap-2">

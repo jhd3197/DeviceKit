@@ -12,7 +12,7 @@ class ProfileMixin:
 
     def create_profile(self, device_id, name, personality="", niche="",
                        interests=None, behavior_patterns=None, apps=None,
-                       model_name=""):
+                       model_name="", agent_mode="supervised"):
         profile = {
             "id": str(uuid.uuid4()),
             "device_id": device_id,
@@ -28,6 +28,9 @@ class ProfileMixin:
             },
             "apps": apps or [],
             "model_name": model_name,
+            # Default AI session mode for this device's agent (plan 13):
+            # observe | supervised | autonomous.
+            "agent_mode": agent_mode if agent_mode in ("observe", "supervised", "autonomous") else "supervised",
             "created_at": time.time(),
             "updated_at": time.time(),
         }
@@ -49,7 +52,8 @@ class ProfileMixin:
         if not profile:
             return None
         for key in ("name", "personality", "niche", "interests",
-                     "behavior_patterns", "apps", "device_id", "model_name"):
+                     "behavior_patterns", "apps", "device_id", "model_name",
+                     "agent_mode"):
             if key in updates:
                 profile[key] = updates[key]
         profile["updated_at"] = time.time()

@@ -24,19 +24,57 @@ class DeviceAction(BaseModel):
     wait_seconds: float = Field(default=2.0, ge=0, le=30)
 
 
-def build_device_tools(mixin, device_id):
-    """Create tool registry with device actions bound to a specific device."""
+def build_device_tools(mixin, device_id, mode="supervised"):
+    """Create a tool registry bound to a specific device, annotated for the safety gate.
+
+    Every tool carries ``metadata`` (``is_write`` + ``category`` + a human ``label``).
+    Read tools run unmediated. Write tools are wrapped so their execution routes through
+    ``mixin.gate_tool_call`` (the ConfirmationGate). In ``observe`` mode write tools are
+    filtered out of the registry entirely — the model never even sees them (plan 13).
+    """
     from prompture import ToolRegistry
 
     registry = ToolRegistry()
 
-    @registry.tool
+    def add(fn, *, is_write, category, label, name=None):
+        # observe = read-only: hide write tools from the model, don't merely block them.
+        if is_write and mode == "observe":
+            return
+        meta = {"is_write": is_write, "category": category, "label": label}
+        tool_name = name or fn.__name__
+        td = registry.register(fn, name=tool_name, metadata=meta)
+        if is_write:
+            _gate_write_tool(mixin, device_id, td, meta, source="core")
+
+    # ---------------------------------------------------------------- read tools (no gate)
+    def get_battery() -> str:
+        """Report the device battery level and charging state."""
+        return str(mixin.get_device_battery(device=device_id))
+
+    def device_properties() -> str:
+        """Return device model, resolution, and Android build info."""
+        return str(mixin.get_device(device_id).info)
+
+    def get_ui_hierarchy() -> str:
+        """Dump the current on-screen UI element tree (XML)."""
+        return (mixin.get_device(device_id).dump_hierarchy() or "")[:8000]
+
+    def list_installed_apps() -> str:
+        """List third-party app package names installed on the device."""
+        return str(mixin.run_adb_command(["shell", "pm", "list", "packages", "-3"],
+                                         device=device_id))
+
+    add(get_battery, is_write=False, category="read", label="Get battery")
+    add(device_properties, is_write=False, category="read", label="Device properties")
+    add(get_ui_hierarchy, is_write=False, category="read", label="UI hierarchy")
+    add(list_installed_apps, is_write=False, category="read", label="List apps")
+
+    # -------------------------------------------------------------- write tools (gated)
     def tap(x: int, y: int) -> str:
         """Tap at screen coordinates (x, y)."""
         mixin.click(x, y, device_id)
         return f"Tapped at ({x}, {y})"
 
-    @registry.tool
     def swipe(direction: str) -> str:
         """Swipe the screen. Direction: up, down, left, right."""
         d = mixin.get_device(device_id)
@@ -54,34 +92,70 @@ def build_device_tools(mixin, device_id):
         d.swipe(*coords, duration=0.5)
         return f"Swiped {direction}"
 
-    @registry.tool
     def type_text(text: str) -> str:
         """Type text into the currently focused input field."""
         d = mixin.get_device(device_id)
         d.send_keys(text)
         return f"Typed: {text}"
 
-    @registry.tool
     def press_key(key: str) -> str:
         """Press a device key: home, back, enter, recent."""
         mixin.press_action(key, device_id)
         return f"Pressed {key}"
 
-    @registry.tool
     def open_app(package: str) -> str:
         """Open an app by its package name."""
         d = mixin.get_device(device_id)
         d.app_start(package)
         return f"Opened {package}"
 
+    def uninstall_app(package: str) -> str:
+        """Uninstall an app by its package name."""
+        out = mixin.run_adb_command(["uninstall", package], device=device_id)
+        return f"Uninstalled {package}: {out}"
+
+    def adb_shell(command: str) -> str:
+        """Run an arbitrary adb shell command on the device."""
+        return str(mixin.run_adb_command(["shell", command], device=device_id))
+
+    def reboot_device() -> str:
+        """Reboot the device."""
+        mixin.reboot_device(device=device_id)
+        return "Reboot requested"
+
+    add(tap, is_write=True, category="input", label="Tap")
+    add(swipe, is_write=True, category="input", label="Swipe")
+    add(type_text, is_write=True, category="input", label="Type text")
+    add(press_key, is_write=True, category="input", label="Press key")
+    add(open_app, is_write=True, category="app", label="Open app")
+    add(uninstall_app, is_write=True, category="app", label="Uninstall app")
+    add(adb_shell, is_write=True, category="shell", label="adb shell")
+    add(reboot_device, is_write=True, category="power", label="Reboot device")
+
     # Extension-contributed AI tools (plan 03), namespaced ``<slug>__<name>`` to satisfy
     # provider function-name limits. Only tools from active extensions are bound.
-    _register_extension_ai_tools(mixin, registry, device_id)
+    _register_extension_ai_tools(mixin, registry, device_id, mode)
 
     return registry
 
 
-def _register_extension_ai_tools(mixin, registry, device_id):
+def _gate_write_tool(mixin, device_id, td, meta, source, always_gate=False):
+    """Replace a tool's callable with a gated wrapper. The JSON schema was already built
+    from the real function at registration time, so the model still sees the true
+    signature; only execution is mediated."""
+    real_fn = td.function
+    tool_name = td.name
+    gate_meta = dict(meta)
+    if always_gate:
+        gate_meta["always_gate"] = True
+
+    def gated(**kwargs):
+        return mixin.gate_tool_call(device_id, tool_name, kwargs, gate_meta, source, real_fn)
+
+    td.function = gated
+
+
+def _register_extension_ai_tools(mixin, registry, device_id, mode="supervised"):
     ext_tools = getattr(mixin, "_ext_ai_tools", None)
     if not ext_tools:
         return
@@ -93,10 +167,24 @@ def _register_extension_ai_tools(mixin, registry, device_id):
                 continue
         except Exception:
             pass
-        for name, func, description in tools:
+        for entry in tools:
+            # Tuple is (name, func, description) or (name, func, description, is_write).
+            name, func, description = entry[0], entry[1], entry[2]
+            is_write = entry[3] if len(entry) > 3 else True
+            # Extension write tools are always gated — third-party code never gets
+            # autonomous hardware access — and are hidden in observe mode.
+            if is_write and mode == "observe":
+                continue
             tool_name = f"{slug.replace('-', '_')}__{name}"
             try:
-                registry.register(func, name=tool_name, description=description)
+                td = registry.register(func, name=tool_name, description=description,
+                                       metadata={"is_write": is_write, "category": "extension",
+                                                 "label": f"{slug}: {name}"})
+                if is_write:
+                    _gate_write_tool(mixin, device_id, td,
+                                     {"is_write": True, "category": "extension",
+                                      "label": f"{slug}: {name}"},
+                                     source=f"extension:{slug}", always_gate=True)
             except Exception as e:
                 logger.warning(f"Failed to bind extension AI tool {tool_name}: {e}")
 
@@ -194,6 +282,8 @@ class PromptureAgentMixin:
         if conv:
             state["usage"] = conv.usage
             state["model_name"] = conv.model_name
+        state["mode"] = self.get_agent_mode(device_id)
+        state["pending_actions"] = self.list_pending_actions(device_id)
         return state
 
     def get_all_agent_status(self):
@@ -211,8 +301,9 @@ class PromptureAgentMixin:
         # without a .env edit.
         model = model_name or profile.get("model_name") or self.ai_default_model()
 
-        # Build tool registry for this device
-        tools = build_device_tools(self, device_id)
+        # Build tool registry for this device, filtered/gated for the session mode.
+        mode = self.get_agent_mode(device_id)
+        tools = build_device_tools(self, device_id, mode=mode)
 
         # Create or reuse conversation (preserves memory across restarts)
         if device_id not in self._agent_conversations:

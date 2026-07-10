@@ -439,9 +439,9 @@ See [docs/plans/12-settings-and-theming.md](docs/plans/12-settings-and-theming.m
 **Goal**: A human between the LLM and the hardware — write tools require approval.
 See [docs/plans/13-ai-confirmation-gate.md](docs/plans/13-ai-confirmation-gate.md).
 
-- [ ] Annotate device tools read vs write; confirmation gate blocks write tools pending approval (SSE `pending_action` + confirm endpoint, timeout = deny)
-- [ ] Session modes: observe / supervised / autonomous, with per-device defaults in Profiles
-- [ ] Approval cards in the NodeDetail chat; audit trail of every executed tool call
+- [x] Annotate device tools read vs write; confirmation gate blocks write tools pending approval (SSE `pending_action` + confirm endpoint, timeout = deny)
+- [x] Session modes: observe / supervised / autonomous, with per-device defaults in Profiles
+- [x] Approval cards in the NodeDetail chat; audit trail of every executed tool call
 - [ ] Extension AI tools always gated; supervised self-heal option (pause run, notify, resume on approval)
 
 ### Phase 34: Python Library Publishing ✅

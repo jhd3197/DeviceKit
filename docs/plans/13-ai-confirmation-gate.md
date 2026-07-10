@@ -1,6 +1,6 @@
 # Plan 13 — AI Confirmation Gate & Tool Registry Safety
 
-**Status:** proposed
+**Status:** 🚧 phases 1–2 shipped; phase 3 in progress
 **Inspired by:** ServerKit's `backend/app/services/ai_service.py` (ConfirmationGate),
 `ai_tool_registry.py` (central registry, per-request filtering), `plugins_sdk/ai.py`
 (`PluginToolBinder` with `is_write` flags)
@@ -77,9 +77,40 @@ runs, keep today's auto-heal but log it through the same audit path.
 
 ## Phases
 
-1. `is_write` annotation + gate + confirm endpoint + SSE event + chat approval card.
-2. Session modes + Profiles default + audit trail.
-3. Extension tool binder integration; supervised self-heal option.
+1. ✅ `is_write` annotation + gate + confirm endpoint + SSE event + chat approval card.
+2. ✅ Session modes + Profiles default + audit trail.
+3. 🚧 Extension tool binder integration; supervised self-heal option.
+
+### Implementation notes (as shipped)
+
+- **Prompture (owned lib):** `ToolDefinition` gained a free-form `metadata` dict
+  (`register(..., metadata=...)`), preserved through `filter/subset/exclude`. That's the
+  seam the gate needs — no fork/workaround. (`prompture` commit `4eff308`.)
+- **`build_device_tools(mixin, device_id, mode)`** now annotates every tool with
+  `{is_write, category, label}`. Read tools (battery, properties, UI hierarchy, app list)
+  run free; write tools (tap/swipe/type/press, open/uninstall app, `adb shell`, reboot)
+  are wrapped so execution routes through `AgentGateMixin.gate_tool_call`. Write tools
+  the model never should see in `observe` are filtered out of the registry entirely.
+- **`AgentGateMixin`** (`mixins/agent_gate.py`): owns per-device session mode, the pending
+  action registry (blocks the agent thread on a `threading.Event` with a settings-driven
+  timeout → default-deny), SSE `pending_action` / `pending_action_resolved`, and the
+  audit writer. Modes: `observe` (read-only), `supervised` (gate, default),
+  `autonomous` (auto-approve + log). Extension write tools carry `always_gate` so they're
+  gated even under autonomous.
+- **Audit trail:** own table `agent_audit_log` (model + Alembic `b13a1c0de13`); every
+  write decision (approved/denied/timeout/auto) persisted with who/what/when. Survives
+  restart. `GET /devices/<id>/agent/audit`.
+- **Endpoints:** `GET .../agent/pending`, `POST .../agent/confirm {action_id, approve}`,
+  `GET|PUT .../agent/mode`, `GET .../agent/audit`. `get_agent_status` also carries `mode`
+  + `pending_actions` so the existing 2s NodeDetail poll surfaces cards with no new SSE
+  wiring.
+- **Frontend:** NodeDetail AI panel gained a mode segmented-control and amber approval
+  cards (summary, tool/source chips, args expander, live countdown, Approve/Deny).
+- **Profiles:** new `agent_mode` field is the per-device default; settings add
+  `ai.default_agent_mode` + `ai.gate_timeout_seconds`.
+- **Tests:** `backend/tests/test_agent_gate.py` (observe filtering, block/approve/deny,
+  timeout default-deny, autonomous auto-approve, audit persistence across restart, HTTP
+  endpoints) + a Prompture `TestMetadata` suite.
 
 ## Definition of done
 

@@ -31,6 +31,8 @@ SETTINGS_DEFAULTS = {
     "ai.default_model": None,                  # None => fall back to PROMPTURE_DEFAULT_MODEL
     "ai.model_overrides": {},                  # {generation, self_heal, analysis} -> model id
     "ai.provider_keys": {},                    # {ENV_VAR: value} pushed into os.environ
+    "ai.default_agent_mode": "supervised",     # observe | supervised | autonomous (per-device default)
+    "ai.gate_timeout_seconds": 120,            # confirmation gate deadline; default-deny on expiry
     # Streaming
     "streaming.default_fps": 10,
     "streaming.default_quality": 50,
@@ -154,6 +156,18 @@ class SettingsMixin:
         """Per-feature model override (generation | self_heal | analysis), else default."""
         overrides = self.get_setting("ai.model_overrides") or {}
         return overrides.get(feature) or self.ai_default_model()
+
+    def ai_default_agent_mode(self):
+        """Fallback session mode when a device has no per-profile agent_mode."""
+        mode = self.get_setting("ai.default_agent_mode") or "supervised"
+        return mode if mode in ("observe", "supervised", "autonomous") else "supervised"
+
+    def ai_gate_timeout_seconds(self):
+        """Seconds the confirmation gate waits for a human before default-denying."""
+        try:
+            return max(1, int(self.get_setting("ai.gate_timeout_seconds") or 120))
+        except (TypeError, ValueError):
+            return 120
 
     def streaming_defaults(self):
         """Return ``(fps, quality)`` defaults for new stream/recording sessions."""

@@ -75,4 +75,47 @@ def make_blueprint(client, limiter):
         result = client.switch_agent_model(device_id, model_name)
         return jsonify(result)
 
+    # ---- Confirmation gate (plan 13) --------------------------------------------------
+
+    @bp.route('/devices/<device_id>/agent/pending')
+    def agent_pending(device_id):
+        actions = client.list_pending_actions(device_id)
+        return jsonify({'pending_actions': actions, 'count': len(actions)})
+
+    @bp.route('/devices/<device_id>/agent/confirm', methods=['POST'])
+    def agent_confirm(device_id):
+        data = request.get_json(silent=True) or {}
+        action_id = data.get('action_id')
+        if not action_id:
+            return jsonify({'error': 'action_id is required'}), 400
+        approve = bool(data.get('approve', False))
+        approver = request.headers.get('X-API-Key', '')[:8] or 'api'
+        result = client.confirm_action(action_id, approve, approver=approver,
+                                       device_id=device_id)
+        if 'error' in result:
+            return jsonify(result), 404
+        client.log_activity('agent_confirm', device_id,
+                            {'action_id': action_id, 'approve': approve})
+        return jsonify(result)
+
+    @bp.route('/devices/<device_id>/agent/mode', methods=['GET'])
+    def agent_mode_get(device_id):
+        return jsonify({'mode': client.get_agent_mode(device_id)})
+
+    @bp.route('/devices/<device_id>/agent/mode', methods=['PUT'])
+    def agent_mode_set(device_id):
+        data = request.get_json(silent=True) or {}
+        mode = data.get('mode', '')
+        result = client.set_agent_mode(device_id, mode)
+        if 'error' in result:
+            return jsonify(result), 400
+        client.log_activity('agent_mode', device_id, {'mode': mode})
+        return jsonify(result)
+
+    @bp.route('/devices/<device_id>/agent/audit')
+    def agent_audit(device_id):
+        limit = int(request.args.get('limit', 100))
+        entries = client.get_agent_audit(device_id, limit)
+        return jsonify({'audit': entries, 'count': len(entries)})
+
     return bp

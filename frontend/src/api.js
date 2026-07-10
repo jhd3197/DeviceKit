@@ -427,6 +427,22 @@ export const api = {
       body: JSON.stringify({ model_name: modelName }),
     }),
 
+  // AI Confirmation Gate (plan 13)
+  getAgentPending: (deviceId) => request(`/devices/${deviceId}/agent/pending`),
+  confirmAgentAction: (deviceId, actionId, approve) =>
+    request(`/devices/${deviceId}/agent/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ action_id: actionId, approve }),
+    }),
+  getAgentMode: (deviceId) => request(`/devices/${deviceId}/agent/mode`),
+  setAgentMode: (deviceId, mode) =>
+    request(`/devices/${deviceId}/agent/mode`, {
+      method: 'PUT',
+      body: JSON.stringify({ mode }),
+    }),
+  getAgentAudit: (deviceId, limit = 100) =>
+    request(`/devices/${deviceId}/agent/audit?limit=${limit}`),
+
   // Notifications (plan 06)
   getNotifications: (params = {}) => {
     const qs = new URLSearchParams(
@@ -540,6 +556,12 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('notification', (e) => {
     handlers.onNotification?.(JSON.parse(e.data))
+  })
+  es.addEventListener('pending_action', (e) => {
+    handlers.onPendingAction?.(JSON.parse(e.data))
+  })
+  es.addEventListener('pending_action_resolved', (e) => {
+    handlers.onPendingActionResolved?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()

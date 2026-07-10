@@ -17,6 +17,7 @@ from devicekit.mixins.activity import ActivityMixin
 from devicekit.mixins.automation import AutomationMixin
 from devicekit.mixins.profile import ProfileMixin
 from devicekit.mixins.prompture_agent import PromptureAgentMixin
+from devicekit.mixins.agent_gate import AgentGateMixin
 from devicekit.mixins.nl_automation import NLAutomationMixin
 from devicekit.mixins.fleet import FleetMixin
 from devicekit.mixins.device_lock import DeviceLockMixin
@@ -45,6 +46,7 @@ class Client(
     ProfileMixin,
     NLAutomationMixin,
     PromptureAgentMixin,
+    AgentGateMixin,
     FleetMixin,
     FleetQueryMixin,
     DeviceLockMixin,
