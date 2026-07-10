@@ -30,7 +30,7 @@ jobs:
 
       - name: Install devicekit library
         run: |
-          pip install -e ./devicekit-py
+          pip install devicekit
           pip install pytest pytest-junitxml
 
       - name: Verify ADB devices

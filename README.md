@@ -227,10 +227,8 @@ DeviceKit/
 │       ├── App.jsx     Router + sidebar layout
 │       ├── api.js      API client
 │       └── views/      11 views (Dashboard, NodeDetail, Pipeline, etc.)
-├── devicekit-py/       Python library (pip install devicekit)
-│   ├── connection.py   USB (ADB) and WiFi connections
-│   ├── device.py       Manager composition pattern
-│   └── pytest_plugin   CI/CD test fixtures
+├── devicekit (PyPI)    Python library — separate repo: jhd3197/devicekit-py
+│                       pip install devicekit (CLI + pytest plugin)
 ├── agent-android/      Kotlin agent app
 │   └── app/            BackgroundAgent service, HTTP server (port 9800),
 │                       UDP discovery (port 9801), accessibility service

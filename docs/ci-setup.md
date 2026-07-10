@@ -158,6 +158,6 @@ curl -X POST http://127.0.0.1:5050/devices/DEVICE_ID/unlock \
 # Verify installation
 pip show devicekit
 # Check entry point registered
-pip install -e ./devicekit-py
+pip install devicekit
 pytest --co  # should not show "no tests" if plugin loaded
 ```
