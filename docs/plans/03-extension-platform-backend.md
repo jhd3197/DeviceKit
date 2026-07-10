@@ -1,6 +1,11 @@
 # Plan 03 — Extension Platform: Backend
 
-**Status:** proposed
+**Status:** ✅ shipped (2026-07-10) — all four phases landed. Backend-only (frontend
+marketplace is plan 04). One deviation: the first builtin is a genuinely useful
+self-contained extension (`devicekit-webhook-notify`) rather than a destructive extraction
+of core visual-regression — it exercises every contribution seam (step type, AI tool,
+blueprint, `ext_*` table, secret config, lifecycle) while keeping core + all tests green.
+Migrating core visual-regression into an extension is a documented follow-up.
 **Inspired by:** ServerKit's plugin system — `backend/app/services/plugin_service.py`,
 `backend/app/plugins_sdk/`, `backend/app/services/extension_lifecycle.py`,
 `docs/EXTENSIONS.md`, ADRs 0001/0002, and the `serverkit-extensions` registry repo
@@ -152,11 +157,23 @@ set-but-empty ⇒ disabled (air-gapped).
 
 ## Phases
 
-1. Manifest spec + validator + `InstalledExtension` model + install pipeline + status
-   guard + boot loader (no registry yet; local/URL installs only).
-2. SDK + permission gate + step_type/FQL/AI-tool registration + lifecycle/tables.
-3. Registry repo + fetch/cache + updates + consent preview flow.
-4. Extract first builtin; scaffolding CLI; author docs.
+1. ✅ Manifest spec + validator + `InstalledExtension` model + install pipeline + status
+   guard + boot loader (no registry yet; local/URL installs only). — `extension_manifest.py`,
+   `models/extension.py` (+ migration), `mixins/extensions.py`, `routes/extensions.py`;
+   Flask-3 blueprint hot-load via a `_got_first_request` flag-flip; `test_extension_install.py`.
+2. ✅ SDK + permission gate + step_type/FQL/AI-tool registration + lifecycle/tables. —
+   `devicekit_sdk/` façade + `permissions.py`; STEP_TYPES became an execute-dispatch
+   registry; FQL `_EXT_FQL_FIELDS` resolver; Prompture tools namespaced `<slug>__<name>`;
+   `ext_<slug>_*` tables via `models` hook; `test_extension_contributions.py`.
+3. ✅ Registry repo + fetch/cache + updates + consent preview flow. — sibling
+   `devicekit-extensions` repo (index + schema + validators + CI); `extension_registry.py`
+   (TTL cache + remote→cache→bundled fallback, `DEVICEKIT_REGISTRY_URL` semantics);
+   `GET /extensions/registry|updates`, `POST /extensions/<id>/update`, registry-slug install;
+   `test_extension_registry.py`.
+4. ✅ First builtin + scaffolding CLI + author docs. — `builtin-extensions/devicekit-webhook-notify/`
+   (step type + AI tool + blueprint + `ext_*` table + secret config + lifecycle);
+   `scripts/new_extension.py` (`--backend`/`--builtin`/`--validate`, reusing the real
+   validator); `docs/EXTENSIONS.md`; `test_builtin_extension.py`.
 
 ## Definition of done
 

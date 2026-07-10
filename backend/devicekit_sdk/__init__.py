@@ -84,8 +84,7 @@ def config(slug):
     extension needs, unlike the masked API response)."""
     if _host is None:
         return {}
-    row = _host.get_extension(slug)
-    return dict((row or {}).get("config") or {}) if row else {}
+    return _host.get_extension_config_raw(slug)
 
 
 def broadcast(event_type, data):

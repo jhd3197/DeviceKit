@@ -42,7 +42,7 @@ def test_disabled_uses_bundled(monkeypatch):
     assert reg.get_registry_url() is None
     entries = reg.list_extensions()
     slugs = {e["slug"] for e in entries}
-    assert "devicekit-visual-regression" in slugs   # from the bundled copy
+    assert "devicekit-webhook-notify" in slugs   # from the bundled copy
     assert reg.source_label() == "bundled"
 
 
@@ -88,7 +88,7 @@ def test_remote_failure_no_cache_falls_back_to_bundled(monkeypatch):
     monkeypatch.setattr(reg, "_fetch_remote", boom)
     entries = reg.list_extensions(force=True)
     assert reg.source_label() == "bundled"
-    assert any(e["slug"] == "devicekit-visual-regression" for e in entries)
+    assert any(e["slug"] == "devicekit-webhook-notify" for e in entries)
 
 
 def test_normalize_strips_unknown_fields(monkeypatch):

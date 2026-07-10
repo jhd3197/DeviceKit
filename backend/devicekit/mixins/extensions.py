@@ -99,6 +99,13 @@ class ExtensionsMixin:
                 return None
             return e.to_dict()["config"]  # secrets already masked
 
+    def get_extension_config_raw(self, slug):
+        """Unmasked config for in-process use by the extension itself (via the SDK). Never
+        served over the API — that path masks secrets."""
+        with session_scope() as s:
+            e = s.get(InstalledExtension, slug)
+            return dict(e.config or {}) if e else {}
+
     def update_extension_config(self, slug, updates):
         with session_scope() as s:
             e = s.get(InstalledExtension, slug)
@@ -359,8 +366,13 @@ class ExtensionsMixin:
         logger.info(f"Installed extension '{slug}' v{manifest['version']} ({source})")
         return self.get_extension(slug)
 
+    @staticmethod
+    def _pkg_name(slug):
+        """Import-safe package name for a slug (dashes aren't valid in Python imports)."""
+        return slug.replace("-", "_")
+
     def _ext_dir(self, slug):
-        return os.path.join(_EXTENSIONS_PKG_DIR, slug)
+        return os.path.join(_EXTENSIONS_PKG_DIR, self._pkg_name(slug))
 
     def _extract(self, buf, prefix, slug, manifest):
         """Extract the archive's ``backend/`` subtree to ``devicekit/extensions/<slug>/``
@@ -420,7 +432,7 @@ class ExtensionsMixin:
         entry_point = manifest.get("entry_point")
         if entry_point:
             module_name, _, attr = entry_point.partition(":")
-            full = f"devicekit.extensions.{slug}.{module_name}"
+            full = f"devicekit.extensions.{self._pkg_name(slug)}.{module_name}"
             mod = importlib.import_module(full)
             bp = getattr(mod, attr)
             self._register_ext_blueprint(bp, url_prefix, slug)
@@ -481,7 +493,7 @@ class ExtensionsMixin:
     def _import_ext_ref(self, slug, ref):
         """Resolve a ``module:attr`` manifest reference under ``devicekit.extensions.<slug>``."""
         module_name, _, attr = ref.partition(":")
-        mod = importlib.import_module(f"devicekit.extensions.{slug}.{module_name}")
+        mod = importlib.import_module(f"devicekit.extensions.{self._pkg_name(slug)}.{module_name}")
         return getattr(mod, attr)
 
     def _register_ext_blueprint(self, bp, url_prefix, slug):
@@ -540,7 +552,7 @@ class ExtensionsMixin:
         try:
             import inspect
             module_name, _, func_name = ref.partition(":")
-            full = f"devicekit.extensions.{slug}.{module_name}"
+            full = f"devicekit.extensions.{self._pkg_name(slug)}.{module_name}"
             mod = importlib.import_module(full)
             func = getattr(mod, func_name)
             # Forward only kwargs the hook declares (so on_install(client) and

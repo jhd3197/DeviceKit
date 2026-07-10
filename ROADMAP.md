@@ -365,17 +365,17 @@ See [docs/plans/05-jobs-and-queue.md](docs/plans/05-jobs-and-queue.md).
 - [ ] Move automation runs and the schedule checker onto jobs; keep SSE progress events
 - [ ] Jobs API + a recent/failed jobs panel in the UI
 
-### Phase 26: Extension Platform — Backend
+### Phase 26: Extension Platform — Backend ✅
 **Goal**: Installable extensions contributing step types, FQL fields, AI tools, routes, jobs, and tables.
 See [docs/plans/03-extension-platform-backend.md](docs/plans/03-extension-platform-backend.md).
 
-- [ ] `extension.json` manifest spec + validator + `InstalledExtension` rows
-- [ ] Install pipeline: preview/consent → pinned sha256 → Zip-Slip-safe extract → hot-load blueprint
-- [ ] Status guard (disabled extension routes return 503 without restart) + boot loader + self-heal
-- [ ] `devicekit_sdk` façade with declaration-based permission gate; `ext_<slug>_*` table namespacing with keep-vs-purge uninstall
-- [ ] Step-type dispatch registry (retire the `_execute_step` elif chain) + FQL field + Prompture tool registration
-- [ ] `devicekit-extensions` registry repo (index.json + schema + validators + CI), fetch with offline fallback chain
-- [ ] First builtin extracted from core (visual regression) + scaffolding CLI + author docs
+- [x] `extension.json` manifest spec + validator + `InstalledExtension` rows
+- [x] Install pipeline: preview/consent → pinned sha256 → Zip-Slip-safe extract → hot-load blueprint
+- [x] Status guard (disabled extension routes return 503 without restart) + boot loader + self-heal
+- [x] `devicekit_sdk` façade with declaration-based permission gate; `ext_<slug>_*` table namespacing with keep-vs-purge uninstall
+- [x] Step-type dispatch registry (retire the `_execute_step` elif chain) + FQL field + Prompture tool registration
+- [x] `devicekit-extensions` registry repo (index.json + schema + validators + CI), fetch with offline fallback chain
+- [x] First builtin (`devicekit-webhook-notify`, self-contained) + scaffolding CLI + author docs — full core visual-regression extraction deferred as a follow-up
 
 ### Phase 27: Extension Platform — Frontend & Marketplace
 **Goal**: Extensions contribute nav, routes, and widgets declaratively; users browse/install from a marketplace view.
