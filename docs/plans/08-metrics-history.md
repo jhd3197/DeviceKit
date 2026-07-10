@@ -1,6 +1,6 @@
 # Plan 08 — Metrics History & Fleet Monitoring
 
-**Status:** proposed
+**Status:** 🚧 in progress (phase 1 ✅, backend for 2 & 4 ✅; frontend 2/3 + phase-4 UI remaining)
 **Inspired by:** ServerKit's `backend/app/services/metrics_history_service.py`
 (rollups + retention tiers), `metric_alert.py`, and `frontend/src/pages/FleetMonitor.jsx`
 **Depends on:** 01 (metrics tables), 05 (collection as a scheduled job)
@@ -64,10 +64,20 @@ history queryable is where this plan compounds with DeviceKit's differentiators.
 
 ## Phases
 
-1. Tables + heartbeat-ingest sampling + period query endpoint.
-2. Rollup + prune scheduled jobs; sparklines in Dashboard/NodeDetail.
-3. Fleet monitor chart view + DeviceCompare historical mode.
-4. Threshold alert rules → notification bus; FQL derived fields.
+1. ✅ Tables + heartbeat-ingest sampling + period query endpoint.
+   - `models/metrics.py` (raw/hourly/daily tiers) + `models/metric_alert.py`; Alembic
+     `a8d1c07f80001`. `MetricsHistoryMixin` (`mixins/metrics_history.py`) composed before
+     `ApiAppMixin`; `record_metrics_sample` called from `/agent-device/state`. Endpoints in
+     `routes/metrics.py`: `GET /devices/<id>/metrics`, `/devices/<id>/metrics/sparkline`,
+     `/fleet/metrics`, `/fleet/metrics/sparklines`, `/metrics/catalog`.
+2. 🚧 Rollup + prune scheduled jobs (✅ `metrics.rollup`/`metrics.prune` job kinds +
+   schedules, idempotent `rollup_metrics`/`prune_metrics`); sparklines in Dashboard/NodeDetail
+   (frontend remaining).
+3. ⏳ Fleet monitor chart view + DeviceCompare historical mode.
+4. 🚧 Threshold alert rules → notification bus (✅ `MetricAlertRule` + CRUD + ingest eval +
+   cooldown, seeded battery<20 rule, `/metrics/alert-rules`); FQL derived fields (✅
+   `storage.free_gb`, `battery.trend_24h`, `metrics.cpu_load_1h_avg`). Rules-management UI
+   remaining.
 
 ## Definition of done
 

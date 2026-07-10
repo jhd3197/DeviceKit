@@ -128,6 +128,14 @@ def seed_default_events():
              "{device_name} battery critical ({level}%)", severity="critical", category="device",
              body="Battery level is {level}%.",
              deep_link="/devices/{device_id}")
+    register("device.battery.low",
+             "{device_name} battery low ({value}%)", severity="warning", category="device",
+             body="Battery level is {value}%.",
+             deep_link="/devices/{device_id}")
+    register("device.metric.threshold",
+             "{device_name}: {metric} {op} {threshold}", severity="warning", category="device",
+             body="{metric} is {value} (threshold {op} {threshold}).",
+             deep_link="/devices/{device_id}")
     register("device.storage.low",
              "{device_name} storage low ({free_pct}% free)", severity="warning", category="device",
              body="Only {free_mb} MB remaining.",

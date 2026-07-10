@@ -113,6 +113,11 @@ def make_blueprint(client, limiter):
         if device_id and device_id in client._agent_device_states:
             recovered = client.touch_agent_heartbeat(device_id, state=data, online=True)
             client.broadcast('device_state', {'device_id': device_id, 'state': data})
+
+            # Persist a metrics-history sample from the heartbeat state (plan 08). Cheap, no
+            # new polling; threshold alert rules are evaluated inside. Never raises.
+            client.record_metrics_sample(device_id, data)
+
             if recovered:
                 client.notify_event(
                     'device.online',

@@ -461,6 +461,32 @@ export const api = {
     ).toString()
     return request(`/device-commands${qs ? `?${qs}` : ''}`)
   },
+
+  // Metrics History (plan 08)
+  getMetricsCatalog: () => request('/metrics/catalog'),
+  getDeviceMetrics: (id, metric = 'battery_pct', period = '24h') =>
+    request(`/devices/${id}/metrics?metric=${encodeURIComponent(metric)}&period=${period}`),
+  getDeviceSparkline: (id, metric = 'battery_pct', period = '24h') =>
+    request(`/devices/${id}/metrics/sparkline?metric=${encodeURIComponent(metric)}&period=${period}`),
+  getFleetMetrics: (metric = 'battery_pct', deviceIds = null, period = '24h') => {
+    const params = new URLSearchParams({ metric, period })
+    if (deviceIds && deviceIds.length) params.set('devices', deviceIds.join(','))
+    return request(`/fleet/metrics?${params}`)
+  },
+  getFleetSparklines: (metric = 'battery_pct', deviceIds = null, period = '24h') => {
+    const params = new URLSearchParams({ metric, period })
+    if (deviceIds && deviceIds.length) params.set('devices', deviceIds.join(','))
+    return request(`/fleet/metrics/sparklines?${params}`)
+  },
+  getMetricAlertRules: (deviceId) =>
+    request(`/metrics/alert-rules${deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''}`),
+  getMetricAlertRuleOps: () => request('/metrics/alert-rules/ops'),
+  createMetricAlertRule: (data) =>
+    request('/metrics/alert-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updateMetricAlertRule: (id, data) =>
+    request(`/metrics/alert-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMetricAlertRule: (id) =>
+    request(`/metrics/alert-rules/${id}`, { method: 'DELETE' }),
 }
 
 export function subscribeToEvents(handlers = {}) {

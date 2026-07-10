@@ -30,6 +30,7 @@ from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.jobs import JobsMixin
 from devicekit.mixins.notifications import NotificationsMixin
+from devicekit.mixins.metrics_history import MetricsHistoryMixin
 
 
 class Client(
@@ -54,6 +55,7 @@ class Client(
     ExtensionsMixin,
     JobsMixin,
     NotificationsMixin,
+    MetricsHistoryMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -93,6 +95,13 @@ class Client(
             self.init_notifications()
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Notification bus init skipped: {e}")
+
+        # Metrics history: register rollup/prune job kinds + schedules, seed default alert
+        # rules, and register derived FQL fields (after jobs + notifications so both are live).
+        try:
+            self.init_metrics()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Metrics history init skipped: {e}")
 
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS
