@@ -3,7 +3,9 @@
 Persists the ``_agent_device_states`` registry that used to live only in an ``api_app()``
 closure, so devices that registered via the on-device agent survive a restart. The live
 event ring buffer and heartbeat-driven online flag remain ephemeral. Coordinates with
-plan 07 (Agent Device Platform).
+plan 07 (Agent Security & Fleet Registry): carries the per-device HMAC ``secret`` issued at
+enrollment (plus pending-secret columns for zero-downtime key rotation), the advertised
+``capabilities`` map, and the last source IP for anomaly logging.
 """
 from sqlalchemy import Column, String, Float, Boolean, JSON
 
@@ -21,6 +23,17 @@ class AgentDevice(Base):
     last_heartbeat = Column(Float, nullable=True)
     online = Column(Boolean, default=True)
 
+    # --- plan 07: HMAC auth + key rotation ---
+    secret = Column(String, nullable=True)              # active per-device HMAC secret
+    secret_pending = Column(String, nullable=True)      # staged next secret during rotation
+    secret_rotated_at = Column(Float, nullable=True)    # when rotation was started
+
+    # --- plan 07: capability advertisement ---
+    capabilities = Column(JSON, default=dict)           # {screen_record: true, android_api: 34, ...}
+
+    # --- plan 07: anomaly logging ---
+    last_ip = Column(String, nullable=True)
+
     def to_dict(self):
         return {
             "device_id": self.device_id,
@@ -29,4 +42,8 @@ class AgentDevice(Base):
             "last_heartbeat": self.last_heartbeat,
             "state": self.state or {},
             "online": bool(self.online),
+            "capabilities": self.capabilities or {},
+            "enrolled": bool(self.secret),
+            "rotating_key": bool(self.secret_pending),
+            "last_ip": self.last_ip,
         }

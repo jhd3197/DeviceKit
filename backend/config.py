@@ -33,6 +33,19 @@ DEVICE_IDS = [d.strip() for d in os.getenv("DEVICE_IDS", "").split(",") if d.str
 API_KEY = os.getenv("API_KEY", "")  # Empty = auth disabled (dev mode)
 AGENT_TOKENS = [t.strip() for t in os.getenv("AGENT_TOKENS", "").split(",") if t.strip()]
 
+# Agent security & fleet registry (plan 07)
+# Heartbeat reaper: a device with no heartbeat for this many seconds is marked offline
+# (ServerKit uses 90s; the old inline sweep used an aggressive 15s).
+AGENT_HEARTBEAT_TIMEOUT = float(os.getenv("AGENT_HEARTBEAT_TIMEOUT", "90"))
+# HMAC replay guard: reject a signed request whose timestamp is outside this window.
+AGENT_HMAC_WINDOW = float(os.getenv("AGENT_HMAC_WINDOW", "60"))
+# When true, only enrolled devices (with an issued secret) may register/report — the open
+# `/agent-device/register` path is rejected. Off by default so dev + existing agents keep
+# working; turn on once agents ship the pairing/HMAC path.
+AGENT_ENROLLMENT_REQUIRED = os.getenv("AGENT_ENROLLMENT_REQUIRED", "false").lower() in ("true", "1", "yes")
+# Default per-command dispatch timeout (seconds) for synchronous agent commands.
+AGENT_COMMAND_TIMEOUT = float(os.getenv("AGENT_COMMAND_TIMEOUT", "30"))
+
 # AI Agent (Prompture)
 PROMPTURE_DEFAULT_MODEL = os.environ.get("PROMPTURE_DEFAULT_MODEL", "claude/claude-sonnet-4-20250514")
 

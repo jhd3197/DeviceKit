@@ -401,8 +401,8 @@ See [docs/plans/06-notification-bus.md](docs/plans/06-notification-bus.md).
 **Goal**: Authenticated agents, principled offline detection, audited commands, capability-based targeting.
 See [docs/plans/07-agent-security-and-fleet-registry.md](docs/plans/07-agent-security-and-fleet-registry.md).
 
-- [ ] Registry extraction from `api_app.py` closures + `AgentDevice`/`DeviceCommand` persistence
-- [ ] Heartbeat reaper with reconnect-race fixes (identity re-check under lock; fail in-flight commands on reconnect)
+- [x] Registry extraction from `api_app.py` closures + `AgentDevice`/`DeviceCommand` persistence
+- [x] Heartbeat reaper with reconnect-race fixes (identity re-check under lock; fail in-flight commands on reconnect)
 - [ ] HMAC request signing + nonce replay guard + timestamp window (closes the deferred Phase 14 items; requires APK update)
 - [ ] Pairing-code enrollment flow (agent shows code, dashboard claims) + key rotation
 - [ ] Capability map → FQL fields, `require_capability` step type, capability-filtered device pickers

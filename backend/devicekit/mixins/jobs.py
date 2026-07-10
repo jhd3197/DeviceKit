@@ -101,6 +101,8 @@ class JobsMixin:
             self.register_job_kind("automation.schedule.tick", self._job_schedule_tick)
         self.register_job_kind("bundle.retention.prune", self._job_prune_bundles)
         self.register_job_kind("jobs.retention.prune", self._job_prune_jobs)
+        if hasattr(self, "reap_stale_agents"):
+            self.register_job_kind("agent.heartbeat.reap", self._job_reap_agents)
 
     def _ensure_default_schedules(self):
         # Automation schedule checker — replaces the old per-mixin daemon thread. Ticks every
@@ -119,10 +121,20 @@ class JobsMixin:
             "jobs.retention.prune", "jobs.retention.prune",
             interval_seconds=86400, startup_delay_seconds=3600,
             owner_type="system", owner_id="core")
+        # Heartbeat reaper — marks silent agent devices offline (plan 07). Ticks every 30s.
+        if hasattr(self, "reap_stale_agents"):
+            ScheduledJobService.ensure(
+                "agent.heartbeat.reap", "agent.heartbeat.reap",
+                interval_seconds=30, startup_delay_seconds=30,
+                owner_type="system", owner_id="core")
 
     # ------------------------------------------------------------------
     # Generic housekeeping handlers
     # ------------------------------------------------------------------
+    def _job_reap_agents(self, job):
+        evicted = self.reap_stale_agents()
+        return {"evicted": evicted, "count": len(evicted)}
+
     def _job_prune_bundles(self, job):
         if not hasattr(self, "cleanup_old_bundles"):
             return {"removed": 0, "skipped": "no debug-bundle mixin"}

@@ -1,6 +1,6 @@
 # Plan 07 — Agent Security & Fleet Registry Hardening
 
-**Status:** proposed
+**Status:** 🚧 in progress (phase 1 ✅)
 **Inspired by:** ServerKit's `backend/app/services/agent_registry.py` (1,035 lines — the
 richest single code reference), `agent_gateway.py`, `pairing_service.py`,
 `docs/FLEET_CONTRACT.md`
@@ -89,13 +89,29 @@ leaves room to add a push channel later without reworking callers.
 
 ## Phases
 
-1. Registry extraction to a mixin + `AgentDevice`/`DeviceCommand` persistence +
+1. ✅ Registry extraction to a mixin + `AgentDevice`/`DeviceCommand` persistence +
    heartbeat reaper with the two race fixes.
+   - `AgentDeviceMixin` hardened with an `RLock`-guarded registry, reconnect-aware
+     `register_agent_device` (fails old in-flight commands with `AGENT_RECONNECTED`),
+     `reap_stale_agents` (offline exactly once; freshness re-validated under lock so a
+     quick reconnect never flaps), and synchronous `send_command`-style dispatch over the
+     poll transport backed by a `DeviceCommand` audit row (pending→running→completed/
+     failed/timeout). Reaper runs as an `agent.heartbeat.reap` scheduled job (30s).
+     New endpoints: `/agent-device/command-result`, `/agent-device/<id>/dispatch`,
+     `/agent-device/<id>/command-history`, `/device-commands`. Migration
+     `a71c07a10001` (device_commands). Tests: `tests/test_agent_registry.py` (6).
 2. HMAC auth + nonce/timestamp guard + per-device secrets (agent APK update — token
    storage + signing in the Kotlin `AgentHttpServer` client path).
 3. Pairing flow (backend + APK pairing screen + dashboard claim UI).
 4. Capability map formalization + FQL fields + `require_capability` step type +
    key rotation.
+
+> **Assumption (logged):** auth stays *opt-in* for dev/back-compat. The full HMAC guard
+> (`verify_agent_request`) + per-device secrets ship in phase 1's mixin but are only
+> enforced for enrolled devices, or globally when `AGENT_ENROLLMENT_REQUIRED=true`. This
+> satisfies the "unenrolled agent cannot register" DoD without breaking the auth-disabled
+> dev flow or the current APK. The reaper offline window moved 15s→90s (config
+> `AGENT_HEARTBEAT_TIMEOUT`), matching ServerKit.
 
 ## Definition of done
 

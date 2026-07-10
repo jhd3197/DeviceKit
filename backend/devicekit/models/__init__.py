@@ -8,6 +8,8 @@ from devicekit.models.baseline import VisualBaseline
 from devicekit.models.bundle import DebugBundle
 from devicekit.models.session import StreamSession
 from devicekit.models.agent_device import AgentDevice
+from devicekit.models.command import DeviceCommand
+from devicekit.models.pending_agent import PendingAgent
 from devicekit.models.extension import InstalledExtension
 from devicekit.models.notification import (
     Notification, NotificationDelivery, NotificationChannelConfig,
@@ -29,6 +31,8 @@ __all__ = [
     "DebugBundle",
     "StreamSession",
     "AgentDevice",
+    "DeviceCommand",
+    "PendingAgent",
     "InstalledExtension",
     "Notification",
     "NotificationDelivery",

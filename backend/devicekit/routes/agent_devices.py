@@ -1,4 +1,12 @@
-"""On-device DeviceKitAgent APK endpoints (register, heartbeat, state, events)."""
+"""On-device DeviceKitAgent APK endpoints (register, heartbeat, state, events, commands).
+
+Plan 07 routes agent registration through the reconnect-aware registry
+(``client.register_agent_device``), drains a real server->agent command queue, accepts
+command results back from the agent, and exposes the persisted ``DeviceCommand`` audit
+trail. HMAC verification (also plan 07) is applied by ``_require_agent_auth`` when the
+device is enrolled; unenrolled/legacy agents keep working unless
+``AGENT_ENROLLMENT_REQUIRED`` is set.
+"""
 import time
 import logging
 
@@ -18,8 +26,43 @@ def _device_name(client, device_id):
         return device_id
 
 
+def _client_ip():
+    fwd = request.headers.get('X-Forwarded-For', '')
+    if fwd:
+        return fwd.split(',')[0].strip()
+    return request.remote_addr
+
+
 def make_blueprint(client, limiter):
     bp = Blueprint('agent_devices', __name__)
+
+    def _require_agent_auth(device_id):
+        """Verify the HMAC signature for an enrolled device. Returns an error response
+        tuple to short-circuit, or ``None`` to proceed.
+
+        The signature is verified *before* the nonce is consumed (ServerKit's subtle fix):
+        an attacker who replays a valid nonce with a bad signature can't burn a legitimate
+        nonce. Unenrolled devices pass through unless enrollment is globally required.
+        """
+        try:
+            from config import AGENT_ENROLLMENT_REQUIRED
+        except Exception:
+            AGENT_ENROLLMENT_REQUIRED = False
+
+        creds = client.get_agent_secret(device_id) if device_id else None
+        enrolled = bool(creds and creds.get('secret'))
+        if not enrolled:
+            if AGENT_ENROLLMENT_REQUIRED:
+                return jsonify({'error': 'device not enrolled'}), 403
+            return None  # legacy/dev path
+
+        ts = request.headers.get('X-Agent-Timestamp', '')
+        nonce = request.headers.get('X-Agent-Nonce', '')
+        sig = request.headers.get('X-Agent-Signature', '')
+        ok, err = client.verify_agent_request(device_id, ts, nonce, sig, ip=_client_ip())
+        if not ok:
+            return jsonify({'error': err}), 401
+        return None
 
     @bp.route('/agent-device/register', methods=['POST'])
     def agent_device_register():
@@ -27,41 +70,54 @@ def make_blueprint(client, limiter):
         model = data.get('model', 'unknown')
         manufacturer = data.get('manufacturer', 'unknown')
         device_id = f"{manufacturer}_{model}".replace(' ', '_')
-        now = time.time()
-        client._agent_device_states[device_id] = {
-            'device_id': device_id,
-            'info': data,
-            'registered_at': now,
-            'last_heartbeat': now,
-            'state': {},
-            'online': True,
-        }
-        # Index by serial number for ADB cross-reference
         serial = data.get('serial')
-        if serial:
-            client._agent_device_serial_index[serial] = device_id
-        client.save_agent_device(
-            device_id, info=data, serial=serial, registered_at=now,
-            last_heartbeat=now, state={}, online=True,
-        )
-        logger.info(f"Agent device registered: {device_id} (serial={serial})")
+        capabilities = data.get('capabilities') or {}
+
+        try:
+            from config import AGENT_ENROLLMENT_REQUIRED
+        except Exception:
+            AGENT_ENROLLMENT_REQUIRED = False
+        if AGENT_ENROLLMENT_REQUIRED:
+            creds = client.get_agent_secret(device_id)
+            if not (creds and creds.get('secret')):
+                return jsonify({'error': 'device not enrolled; pair first'}), 403
+            auth_err = _require_agent_auth(device_id)
+            if auth_err:
+                return auth_err
+
+        result = client.register_agent_device(
+            device_id, info=data, serial=serial, ip=_client_ip(),
+            capabilities=capabilities)
+        logger.info(f"Agent device registered: {device_id} (serial={serial}, "
+                    f"reconnected={result['reconnected']})")
         client.log_activity('agent_device_register', device_id, data)
         client.broadcast('device_connected', {'device_id': device_id, 'info': data})
-        client.broadcast('device_new', {'device_id': device_id, 'info': data})
-        return jsonify({'device_id': device_id, 'status': 'registered'})
+        if not result['reconnected']:
+            client.broadcast('device_new', {'device_id': device_id, 'info': data})
+        elif result['was_offline']:
+            client.broadcast('device_reconnected', {'device_id': device_id})
+            client.notify_event(
+                'device.online',
+                data={'device_id': device_id, 'device_name': _device_name(client, device_id)},
+                subject_type='device', subject_id=device_id)
+        return jsonify({'device_id': device_id, 'status': 'registered',
+                        'reconnected': result['reconnected']})
 
     @bp.route('/agent-device/state', methods=['POST'])
     def agent_device_state():
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
+        auth_err = _require_agent_auth(device_id)
+        if auth_err:
+            return auth_err
         if device_id and device_id in client._agent_device_states:
-            now = time.time()
-            client._agent_device_states[device_id]['state'] = data
-            client._agent_device_states[device_id]['last_heartbeat'] = now
-            client.update_agent_device_fields(
-                device_id, state=data, last_heartbeat=now, online=True,
-            )
+            recovered = client.touch_agent_heartbeat(device_id, state=data, online=True)
             client.broadcast('device_state', {'device_id': device_id, 'state': data})
+            if recovered:
+                client.notify_event(
+                    'device.online',
+                    data={'device_id': device_id, 'device_name': _device_name(client, device_id)},
+                    subject_type='device', subject_id=device_id)
 
             # Auto-generate alerts from agent metrics
             metrics = data.get('metrics', {})
@@ -132,12 +188,18 @@ def make_blueprint(client, limiter):
     def agent_device_heartbeat():
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
+        auth_err = _require_agent_auth(device_id)
+        if auth_err:
+            return auth_err
         if device_id and device_id in client._agent_device_states:
+            recovered = client.touch_agent_heartbeat(device_id, online=True)
             now = time.time()
-            client._agent_device_states[device_id]['last_heartbeat'] = now
-            client._agent_device_states[device_id]['online'] = True
-            client.update_agent_device_fields(device_id, last_heartbeat=now, online=True)
             client.broadcast('device_heartbeat', {'device_id': device_id, 'timestamp': now})
+            if recovered:
+                client.notify_event(
+                    'device.online',
+                    data={'device_id': device_id, 'device_name': _device_name(client, device_id)},
+                    subject_type='device', subject_id=device_id)
         return jsonify({'status': 'ok'})
 
     @bp.route('/agent-device/event', methods=['POST'])
@@ -155,8 +217,64 @@ def make_blueprint(client, limiter):
 
     @bp.route('/agent-device/<device_id>/commands')
     def agent_device_commands(device_id):
-        # Placeholder for command queue from server to on-device agent
-        return jsonify({'commands': []})
+        """Agent poll: drain the server->agent command queue for this device."""
+        auth_err = _require_agent_auth(device_id)
+        if auth_err:
+            return auth_err
+        commands = client.drain_outbound_commands(device_id)
+        return jsonify({'commands': commands})
+
+    @bp.route('/agent-device/command-result', methods=['POST'])
+    def agent_device_command_result():
+        """Agent posts the result of a dispatched command back to the waiting caller."""
+        data = request.get_json(silent=True) or {}
+        device_id = data.get('device_id')
+        auth_err = _require_agent_auth(device_id)
+        if auth_err:
+            return auth_err
+        command_id = data.get('command_id') or data.get('id')
+        if not command_id:
+            return jsonify({'error': 'command_id required'}), 400
+        ok = client.resolve_device_command(
+            command_id, result=data.get('result'), error=data.get('error'))
+        if not ok:
+            return jsonify({'error': 'unknown command'}), 404
+        return jsonify({'status': 'ok'})
+
+    @bp.route('/agent-device/<device_id>/dispatch', methods=['POST'])
+    def agent_device_dispatch(device_id):
+        """Operator-side: dispatch a command to a device and block for the result. Persisted
+        as a DeviceCommand row regardless of outcome (audit trail)."""
+        data = request.get_json(silent=True) or {}
+        command = data.get('command')
+        if not command:
+            return jsonify({'error': 'command required'}), 400
+        row = client.send_device_command(
+            device_id, command, args=data.get('args') or {},
+            timeout=data.get('timeout'), source=data.get('source', 'api'))
+        code = 200 if row and row['status'] == 'completed' else 202
+        return jsonify(row), code
+
+    @bp.route('/agent-device/<device_id>/command-history')
+    def agent_device_command_history(device_id):
+        limit = int(request.args.get('limit', 100))
+        return jsonify({
+            'commands': client.list_device_commands(device_id=device_id, limit=limit),
+            'count': client.count_device_commands(device_id=device_id),
+        })
+
+    @bp.route('/device-commands')
+    def device_commands_all():
+        """Fleet-wide device-action history."""
+        limit = int(request.args.get('limit', 100))
+        offset = int(request.args.get('offset', 0))
+        status = request.args.get('status')
+        device_id = request.args.get('device_id')
+        return jsonify({
+            'commands': client.list_device_commands(
+                device_id=device_id, status=status, limit=limit, offset=offset),
+            'count': client.count_device_commands(device_id=device_id, status=status),
+        })
 
     @bp.route('/agent-device/<device_id>/metrics')
     def agent_device_metrics(device_id):
@@ -195,19 +313,9 @@ def make_blueprint(client, limiter):
 
     @bp.route('/agent-device/status')
     def agent_device_status():
-        # Mark stale devices as offline (no heartbeat in 15s)
-        now = time.time()
-        for d in client._agent_device_states.values():
-            if now - (d.get('last_heartbeat') or 0) > 15:
-                if d.get('online', False):
-                    d['online'] = False
-                    client.update_agent_device_fields(d.get('device_id'), online=False)
-                    client.broadcast('device_disconnected', {'device_id': d.get('device_id')})
-                    client.notify_event(
-                        'device.offline',
-                        data={'device_id': d.get('device_id'),
-                              'device_name': _device_name(client, d.get('device_id'))},
-                        subject_type='device', subject_id=d.get('device_id'))
+        # The heartbeat reaper owns online->offline transitions (plan 07); run it here too so
+        # a status poll reflects reality even between scheduled ticks. Idempotent + lock-guarded.
+        client.reap_stale_agents()
         return jsonify({'devices': list(client._agent_device_states.values())})
 
     @bp.route('/agent-device/events')
