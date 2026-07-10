@@ -27,6 +27,21 @@ from devicekit.models.notification import Notification, NotificationDelivery
 logger = logging.getLogger(__name__)
 
 
+def _target_hint(target):
+    """A non-secret label for a delivery target, safe to persist/return. For a webhook URL,
+    keep scheme+host and drop the (token-bearing) path/query; for an email, keep it as-is."""
+    if not target:
+        return ""
+    if "://" in target:
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(target)
+            return f"{p.scheme}://{p.netloc}/…"
+        except Exception:
+            return "webhook"
+    return target[:120]
+
+
 class NotificationService:
 
     # ------------------------------------------------------------------
@@ -81,9 +96,48 @@ class NotificationService:
 
     @classmethod
     def _plan_async_channels(cls, notif):
-        """Hook for webhook/email delivery planning. No-op until plan 06.2 registers async
-        channels; kept here so ``send`` has a single, stable shape."""
-        return
+        """For each enabled async channel whose severity threshold the notification meets,
+        write a ``pending`` delivery row and enqueue a ``notification.deliver`` job carrying
+        its id (plan 06.2). Preferences/quiet-hours gating layers in on top (plan 06.3)."""
+        from devicekit.notifications.config import NotificationChannelService, severity_ok
+        from devicekit.notifications.consumer import DELIVER_JOB_KIND
+        from devicekit.jobs.service import JobService
+
+        channels = NotificationChannelService.enabled_channels()
+        if not channels:
+            return
+
+        # Preference gate (plan 06.3) — skip channels the recipient muted for this event.
+        allowed = cls._channel_gate(notif)
+
+        for ch in channels:
+            channel = ch["channel"]
+            config = ch["config"]
+            if not severity_ok(config.get("min_severity"), notif["severity"]):
+                continue
+            if allowed is not None and channel not in allowed:
+                continue
+            target = config.get("url") or config.get("to_addrs") or ""
+            # Store only a non-secret hint of the target for history (host, not the token).
+            target_hint = _target_hint(target)
+            delivery = cls.record_delivery(
+                notif["id"], channel, NotificationDelivery.STATUS_PENDING, target=target_hint)
+            try:
+                job = JobService.enqueue(
+                    DELIVER_JOB_KIND, payload={"delivery_id": delivery["id"]},
+                    owner_type="notification", owner_id=notif["id"], max_attempts=4)
+                cls.mark_delivery(delivery["id"], job_id_set=job["id"])
+            except Exception as e:
+                logger.warning("Could not enqueue %s delivery: %s", channel, e)
+                cls.mark_delivery(
+                    delivery["id"], status=NotificationDelivery.STATUS_FAILED,
+                    error=f"enqueue failed: {e}")
+
+    @classmethod
+    def _channel_gate(cls, notif):
+        """Return the set of channels allowed for this notification by recipient preferences,
+        or ``None`` when preferences do not constrain it (plan 06.3 overrides this)."""
+        return None
 
     # ------------------------------------------------------------------
     # Delivery rows
@@ -101,6 +155,33 @@ class NotificationService:
             )
             s.add(row)
             s.flush()
+            return row.to_dict()
+
+    @classmethod
+    def get_delivery(cls, delivery_id):
+        with session_scope() as s:
+            row = s.get(NotificationDelivery, delivery_id)
+            return row.to_dict() if row else None
+
+    @classmethod
+    def mark_delivery(cls, delivery_id, status=None, error=None, sent_at=None,
+                      target=None, job_id_set=None, inc_attempts=False):
+        with session_scope() as s:
+            row = s.get(NotificationDelivery, delivery_id)
+            if not row:
+                return None
+            if status is not None:
+                row.status = status
+            if error is not None:
+                row.error = error
+            if sent_at is not None:
+                row.sent_at = sent_at
+            if target is not None:
+                row.target = target
+            if job_id_set is not None:
+                row.job_id = job_id_set
+            if inc_attempts:
+                row.attempts = (row.attempts or 0) + 1
             return row.to_dict()
 
     @classmethod

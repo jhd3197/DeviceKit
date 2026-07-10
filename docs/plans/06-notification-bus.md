@@ -1,6 +1,6 @@
 # Plan 06 — Notification Bus & Notification Center
 
-**Status:** 🚧 in progress — Phase 1 ✅ shipped (catalog + models + producer + in-app SSE + bell/history UI)
+**Status:** 🚧 in progress — Phases 1–2 ✅ shipped (catalog + in-app bell; webhook channel + queue-driven delivery)
 **Inspired by:** ServerKit's `backend/app/notifications/` (event catalog, per-channel
 delivery, digests) and `NotificationsContext` / `NotificationBell` on the frontend
 **Depends on:** 01 (delivery rows), 05 (async channel delivery rides the queue)
@@ -75,7 +75,19 @@ happens to be open.
    for extension teardown). Frontend: `store/notifications.js` (single-SSE singleton),
    `NotificationBell` in the sidebar (unread badge, optimistic mark-read, deep links),
    `/notifications` history view. Tests: `test_notifications.py` (14).
-2. Webhook channel + delivery rows + retry via queue (plan 05).
+2. ✅ Webhook channel + delivery rows + retry via queue (plan 05).
+   Shipped: `channels/webhook.py` (Slack/Discord/generic render + transmit), `crypto.py`
+   (Fernet at-rest secret encryption keyed on `DEVICEKIT_SECRET_KEY`, dev fallback),
+   `config.py` (`NotificationChannelService`: per-channel enable/config, secret masking +
+   mask-resubmit preservation, severity-threshold gating), `consumer.py`
+   (`notification.deliver` job kind — render+transmit, success→sent, failure→raise so the
+   Queue Bus retries/dead-letters, delivery row mirrors outcome). Producer
+   `_plan_async_channels` writes a pending delivery per enabled channel and enqueues one
+   delivery job (target persisted as a non-secret host hint). Channel API
+   (`GET/PUT /notifications/channels[/<channel>]`, `POST .../test`). Migration
+   `d4e5f6a7b8c9`. Frontend: `NotificationChannels` config panel (schema-driven, masked
+   secrets, Test button) behind the Notifications "Channels" toggle. Tests:
+   `test_notification_channels.py` (11).
 3. Preferences (per-event mute, quiet hours) + email channel + digests.
 
 ## Definition of done

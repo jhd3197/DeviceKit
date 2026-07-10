@@ -28,9 +28,11 @@ class NotificationsMixin:
         if self._notifications_ready:
             return
         catalog.seed_default_events()
-        # Retention prune rides the unified job system when it is available.
+        # Retention prune + async delivery ride the unified job system when it is available.
         try:
             if hasattr(self, "register_job_kind"):
+                from devicekit.notifications.consumer import DELIVER_JOB_KIND, deliver
+                self.register_job_kind(DELIVER_JOB_KIND, deliver)
                 self.register_job_kind(
                     "notifications.retention.prune", self._job_prune_notifications)
             if hasattr(self, "ensure_scheduled_job"):
@@ -106,3 +108,44 @@ class NotificationsMixin:
 
     def clear_notifications(self, recipient="default"):
         return NotificationService.clear_all(recipient=recipient)
+
+    # ------------------------------------------------------------------
+    # Channel configuration (plan 06.2/06.3)
+    # ------------------------------------------------------------------
+    def list_notification_channels(self):
+        from devicekit.notifications.config import NotificationChannelService
+        return NotificationChannelService.list_masked()
+
+    def get_notification_channel(self, channel):
+        from devicekit.notifications.config import NotificationChannelService
+        return NotificationChannelService.get_masked(channel)
+
+    def set_notification_channel(self, channel, enabled=None, config=None):
+        from devicekit.notifications.config import NotificationChannelService
+        return NotificationChannelService.set(channel, enabled=enabled, config=config)
+
+    def test_notification_channel(self, channel):
+        """Synchronously send a sample notification through a channel so the UI can verify
+        config immediately (bypasses the queue). Returns ``{'ok': bool, 'error': str}``."""
+        from devicekit.notifications.config import NotificationChannelService
+        from devicekit.notifications.channels import webhook
+        cfg = NotificationChannelService.get(channel)
+        config = cfg["config"]
+        sample = {
+            "id": "test", "event_key": "notification.test",
+            "title": "DeviceKit test notification",
+            "body": "If you can see this, the channel is configured correctly.",
+            "severity": "info", "category": "test", "deep_link": "", "data": {},
+        }
+        try:
+            if channel == "webhook":
+                webhook.transmit(config.get("url"),
+                                 webhook.render(sample, fmt=config.get("format", "slack")))
+            elif channel == "email":
+                from devicekit.notifications.channels import email
+                email.send(sample, config)
+            else:
+                return {"ok": False, "error": f"Unknown channel {channel}"}
+            return {"ok": True, "error": ""}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}

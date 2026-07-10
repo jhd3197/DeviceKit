@@ -101,3 +101,27 @@ class NotificationDelivery(Base):
             "created_at": self.created_at,
             "sent_at": self.sent_at,
         }
+
+
+class NotificationChannelConfig(Base):
+    """Per-channel delivery configuration (plan 06.2/06.3).
+
+    One row per async channel (``webhook`` / ``email``). ``config`` is a free-form JSON blob
+    whose channel-declared secret keys (webhook URL, SMTP password) are stored *encrypted*
+    (``enc:`` prefixed) — the service layer encrypts on write and decrypts on read, and masks
+    them out of API responses entirely.
+    """
+    __tablename__ = "notification_channels"
+
+    channel = Column(String(30), primary_key=True)   # webhook | email
+    enabled = Column(Boolean, default=False)
+    config = Column(JSON, default=dict)
+    updated_at = Column(Float, default=time.time)
+
+    def to_dict(self):
+        return {
+            "channel": self.channel,
+            "enabled": bool(self.enabled),
+            "config": self.config or {},
+            "updated_at": self.updated_at,
+        }

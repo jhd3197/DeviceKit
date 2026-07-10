@@ -436,6 +436,12 @@ export const api = {
     request('/notifications/read-all', { method: 'PUT' }),
   deleteNotification: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
   clearNotifications: () => request('/notifications', { method: 'DELETE' }),
+  getNotificationChannels: () => request('/notifications/channels'),
+  getNotificationChannel: (channel) => request(`/notifications/channels/${channel}`),
+  updateNotificationChannel: (channel, data) =>
+    request(`/notifications/channels/${channel}`, { method: 'PUT', body: JSON.stringify(data) }),
+  testNotificationChannel: (channel) =>
+    request(`/notifications/channels/${channel}/test`, { method: 'POST' }),
 }
 
 export function subscribeToEvents(handlers = {}) {

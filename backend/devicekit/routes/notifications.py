@@ -77,4 +77,29 @@ def make_blueprint(client, limiter):
         n = client.clear_notifications(recipient=_recipient())
         return jsonify({'status': 'ok', 'deleted': n})
 
+    # ── Delivery channels (webhook / email) ──
+    @bp.route('/notifications/channels')
+    def notifications_channels_list():
+        channels = client.list_notification_channels()
+        return jsonify({'channels': channels, 'count': len(channels)})
+
+    @bp.route('/notifications/channels/<channel>')
+    def notifications_channel_get(channel):
+        return jsonify(client.get_notification_channel(channel))
+
+    @bp.route('/notifications/channels/<channel>', methods=['PUT'])
+    def notifications_channel_update(channel):
+        data = request.get_json(silent=True) or {}
+        try:
+            updated = client.set_notification_channel(
+                channel, enabled=data.get('enabled'), config=data.get('config'))
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        return jsonify(updated)
+
+    @bp.route('/notifications/channels/<channel>/test', methods=['POST'])
+    def notifications_channel_test(channel):
+        result = client.test_notification_channel(channel)
+        return jsonify(result), (200 if result.get('ok') else 400)
+
     return bp
