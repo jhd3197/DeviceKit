@@ -7,8 +7,11 @@ def make_blueprint(client, limiter):
 
     @bp.route('/devices/<device_id>/stream')
     def device_stream(device_id):
-        fps = request.args.get('fps', 10, type=int)
-        quality = request.args.get('quality', 50, type=int)
+        # Fall back to the fleet-wide streaming defaults (Settings > Streaming) when the
+        # viewer doesn't pin fps/quality in the query.
+        def_fps, def_quality = client.streaming_defaults()
+        fps = request.args.get('fps', def_fps, type=int)
+        quality = request.args.get('quality', def_quality, type=int)
         result = client.proxy_device_stream(device_id, fps=fps, quality=quality)
         if result is None:
             return jsonify({'error': 'Stream not available for this device'}), 503
@@ -46,8 +49,9 @@ def make_blueprint(client, limiter):
     @bp.route('/devices/<device_id>/sessions/record', methods=['POST'])
     def device_stream_record_start(device_id):
         data = request.get_json(silent=True) or {}
-        fps = data.get('fps', 10)
-        quality = data.get('quality', 50)
+        def_fps, def_quality = client.streaming_defaults()
+        fps = data.get('fps', def_fps)
+        quality = data.get('quality', def_quality)
         try:
             result = client.start_recording_session(device_id, fps=fps, quality=quality)
             client.log_activity('stream_record_start', device_id, result)

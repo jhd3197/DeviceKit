@@ -327,8 +327,12 @@ class DebugBundleMixin:
     # -----------------------------------------------------------
 
     def cleanup_old_bundles(self, max_age_days=None):
-        """Remove bundles older than max_age_days (default: BUNDLE_RETENTION_DAYS)."""
-        max_age = (max_age_days or BUNDLE_RETENTION_DAYS) * 86400
+        """Remove bundles older than max_age_days. Defaults to the saved retention window
+        (Settings > Debug Bundles), falling back to BUNDLE_RETENTION_DAYS."""
+        if max_age_days is None:
+            getter = getattr(self, "bundle_retention_days", None)
+            max_age_days = getter() if getter else BUNDLE_RETENTION_DAYS
+        max_age = max_age_days * 86400
         cutoff = time.time() - max_age
         with session_scope() as s:
             expired = s.query(DebugBundle).filter(DebugBundle.created_at < cutoff).all()
@@ -352,5 +356,5 @@ class DebugBundleMixin:
             }
 
         if removed:
-            logger.info(f"Retention cleanup: removed {removed} bundles older than {max_age_days or BUNDLE_RETENTION_DAYS} days")
+            logger.info(f"Retention cleanup: removed {removed} bundles older than {max_age_days} days")
         return removed

@@ -206,8 +206,10 @@ class PromptureAgentMixin:
         if device_id in self._agent_threads and self._agent_threads[device_id].is_alive():
             return {"error": "Agent already running"}
 
-        from config import PROMPTURE_DEFAULT_MODEL
-        model = model_name or profile.get("model_name") or PROMPTURE_DEFAULT_MODEL
+        # Effective default: explicit arg > profile > saved AI setting (falls back to
+        # PROMPTURE_DEFAULT_MODEL when unset) — the Settings AI pane can now steer this
+        # without a .env edit.
+        model = model_name or profile.get("model_name") or self.ai_default_model()
 
         # Build tool registry for this device
         tools = build_device_tools(self, device_id)

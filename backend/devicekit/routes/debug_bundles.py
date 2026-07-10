@@ -69,7 +69,10 @@ def make_blueprint(client, limiter):
     def share_debug_bundle(bundle_id):
         """Generate a shareable link for a debug bundle."""
         data = request.get_json(silent=True) or {}
-        hours = int(data.get('expires_hours', 24))
+        # Default lifetime comes from Settings > Debug Bundles (share-token lifetime),
+        # unless the caller pins expires_hours explicitly.
+        default_hours = client.share_token_lifetime_minutes() / 60.0
+        hours = float(data.get('expires_hours', default_hours))
         result = client.generate_share_link(bundle_id, expires_hours=hours)
         if not result:
             return jsonify({'error': 'Bundle not found'}), 404

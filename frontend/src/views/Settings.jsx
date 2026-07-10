@@ -7,17 +7,31 @@
 // one registry so adding a pane is a single entry; they group into labelled sections.
 import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, KeyRound, Info, Loader2 } from 'lucide-react'
+import {
+  Settings as SettingsIcon,
+  KeyRound,
+  Info,
+  Loader2,
+  Sparkles,
+  MonitorPlay,
+  Package,
+} from 'lucide-react'
 
 import { api } from '../api'
 import General from '../components/settings/General'
 import ApiAccess from '../components/settings/ApiAccess'
 import About from '../components/settings/About'
+import AiSettings from '../components/settings/AiSettings'
+import Streaming from '../components/settings/Streaming'
+import Bundles from '../components/settings/Bundles'
 
 // Tab registry. `section` groups items in the nav; `component` receives { settings, save }.
 const TABS = [
   { id: 'general', label: 'General', icon: SettingsIcon, section: 'Workspace', component: General },
   { id: 'api', label: 'API Access', icon: KeyRound, section: 'Workspace', component: ApiAccess },
+  { id: 'ai', label: 'AI', icon: Sparkles, section: 'Devices & AI', component: AiSettings },
+  { id: 'streaming', label: 'Streaming', icon: MonitorPlay, section: 'Devices & AI', component: Streaming },
+  { id: 'bundles', label: 'Debug Bundles', icon: Package, section: 'Devices & AI', component: Bundles },
   { id: 'about', label: 'About', icon: Info, section: 'Workspace', component: About },
 ]
 
