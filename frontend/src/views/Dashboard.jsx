@@ -1,18 +1,20 @@
 import React, { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, Smartphone, X } from 'lucide-react'
+import { ChevronRight, Smartphone, X, Settings } from 'lucide-react'
 import { api } from '../api'
 import ExtensionSlot from '../extensions/ExtensionSlot'
 import useFleetData from '../hooks/useFleetData'
+import useDashboardLayout from '../hooks/useDashboardLayout'
+import DashboardLayoutEditor from '../components/widgets/DashboardLayoutEditor'
 import FleetSummary from '../components/widgets/FleetSummary'
 import FleetHealth from '../components/widgets/FleetHealth'
 import FQLBar from '../components/widgets/FQLBar'
 import DeviceRegistry from '../components/widgets/DeviceRegistry'
 
-// Fleet Overview dashboard. A thin composer over self-contained widgets (plan 11): shared
-// fleet data comes from useFleetData, the FQL bar reports its result set up so the registry
-// can show matches, and each widget owns its own presentation. Layout is fixed here in
-// phase 1; phase 2 makes it toggleable/reorderable via useDashboardLayout.
+// Fleet Overview dashboard — a thin composer over self-contained widgets (plan 11). Shared
+// fleet data comes from useFleetData; the widget set, order, and visibility come from
+// useDashboardLayout (persisted, forward-merged). WIDGET_RENDERERS maps a widget id to its
+// element; the page maps over the visible layout. The gear opens the layout editor.
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
@@ -20,9 +22,22 @@ export default function Dashboard() {
     stats, devices, fleetHealth, fleetAiCost, sparklines, sseConnected,
     loading, error, toasts, dismissToast,
   } = useFleetData()
+  const { widgets, toggleWidget, moveWidget, resetLayout } = useDashboardLayout()
+  const [editing, setEditing] = useState(false)
 
   // Cross-widget link: the FQL bar owns the query, the registry renders its matches.
   const [queryResult, setQueryResult] = useState({ active: false, matches: null })
+
+  // id -> element. A widget id in the layout with no renderer here simply renders nothing,
+  // so the layout survives across releases that add/remove widgets.
+  const WIDGET_RENDERERS = {
+    'fleet-summary': () => <FleetSummary stats={stats} fleetAiCost={fleetAiCost} />,
+    'fleet-health': () => <FleetHealth fleetHealth={fleetHealth} />,
+    'fql-bar': () => <FQLBar initialQuery={initialQuery} onResult={setQueryResult} />,
+    'device-registry': () => (
+      <DeviceRegistry devices={devices} sparklines={sparklines} queryResult={queryResult} />
+    ),
+  }
 
   if (loading) {
     return (
@@ -50,6 +65,28 @@ export default function Dashboard() {
             <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
             {sseConnected ? 'LIVE' : 'RECONNECTING'}
           </div>
+          <div className="relative">
+            <button
+              onClick={() => setEditing(v => !v)}
+              className={`p-1.5 rounded border transition-colors ${
+                editing
+                  ? 'text-white bg-zinc-800 border-zinc-600'
+                  : 'text-zinc-500 hover:text-zinc-200 border-main hover:border-zinc-600'
+              }`}
+              title="Customize layout"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            {editing && (
+              <DashboardLayoutEditor
+                widgets={widgets}
+                toggleWidget={toggleWidget}
+                moveWidget={moveWidget}
+                resetLayout={resetLayout}
+                onClose={() => setEditing(false)}
+              />
+            )}
+          </div>
           <button className="bg-white text-black text-xs font-bold px-4 py-1.5 rounded hover:bg-zinc-200 transition-colors">
             Deploy Update
           </button>
@@ -67,10 +104,13 @@ export default function Dashboard() {
         {/* Extension widgets contributed to the dashboard top (plan 04) */}
         <ExtensionSlot name="dashboard.top" className="grid gap-4 md:grid-cols-2" />
 
-        <FleetSummary stats={stats} fleetAiCost={fleetAiCost} />
-        <FleetHealth fleetHealth={fleetHealth} />
-        <FQLBar initialQuery={initialQuery} onResult={setQueryResult} />
-        <DeviceRegistry devices={devices} sparklines={sparklines} queryResult={queryResult} />
+        {widgets
+          .filter(w => w.visible)
+          .map(w => {
+            const render = WIDGET_RENDERERS[w.id]
+            if (!render) return null
+            return <React.Fragment key={w.id}>{render()}</React.Fragment>
+          })}
       </div>
 
       {/* Auto-onboarding toasts */}
