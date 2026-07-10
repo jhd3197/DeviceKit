@@ -104,10 +104,10 @@ def locked_device():
 Usage in tests:
 
 ```python
-import devicekit
+import droidlink
 
 def test_login_flow(locked_device):
-    d = devicekit.connect(locked_device)
+    d = droidlink.connect(locked_device)
     d.app.launch("com.example.app")
     d(text="Login").click()
     assert d(text="Welcome").exists()
@@ -156,8 +156,8 @@ curl -X POST http://127.0.0.1:5050/devices/DEVICE_ID/unlock \
 
 ```bash
 # Verify installation
-pip show devicekit
+pip show droidlink
 # Check entry point registered
-pip install devicekit
+pip install droidlink
 pytest --co  # should not show "no tests" if plugin loaded
 ```

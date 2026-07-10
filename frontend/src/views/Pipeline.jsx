@@ -138,9 +138,9 @@ export default function Pipeline() {
               <div className="p-6 text-center text-zinc-600 text-xs space-y-3">
                 <Terminal className="w-8 h-8 mx-auto text-zinc-700" />
                 <p className="font-semibold text-zinc-400">No builds yet</p>
-                <p>Run tests with the devicekit pytest plugin:</p>
+                <p>Run tests with the droidlink pytest plugin:</p>
                 <pre className="bg-zinc-900 p-3 rounded text-[10px] text-left text-emerald-500 overflow-x-auto">
-{`pip install devicekit
+{`pip install droidlink
 pytest tests/ \\
   --device=SERIAL \\
   --devicekit-url=http://localhost:5050`}

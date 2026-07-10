@@ -441,11 +441,13 @@ See [docs/plans/13-ai-confirmation-gate.md](docs/plans/13-ai-confirmation-gate.m
 - [ ] Approval cards in the NodeDetail chat; audit trail of every executed tool call
 - [ ] Extension AI tools always gated; supervised self-heal option (pause run, notify, resume on approval)
 
-### Phase 34: devicekit Python Package
-**Goal**: `pip install devicekit` — droidlink renamed and published under the one brand.
+### Phase 34: Python Library Publishing ✅
+**Goal**: Publish the Python client library to PyPI under one clean install name.
 See [docs/plans/14-devicekit-python-package.md](docs/plans/14-devicekit-python-package.md).
 
-- [ ] Rename: `droidlink/` → `devicekit-py/`, package `devicekit`, CLI `devicekit`, pytest entry + `DeviceKitReporter`; update workflow + docs in the same commit
-- [ ] PyPI Trusted Publishing workflow on `py-v*` tags; publish 0.1.x to claim the name (available as of 2026-07-09)
-- [ ] README quickstart for the PyPI page; root README "Python library" section
-- [ ] Document the name-shadowing rule (never install the lib into the backend venv); dependency inversion deferred to its own plan
+**Outcome (2026-07-09)**: PyPI's name-similarity policy blocks the bare name `devicekit` (conflicts with the unrelated `device-kit` project — nobody else can claim it either), so the library kept its original brand.
+
+- [x] Library extracted to its own public repo: [jhd3197/droidlink](https://github.com/jhd3197/droidlink)
+- [x] Published to PyPI as [`droidlink` 0.1.0](https://pypi.org/project/droidlink/) — `pip install droidlink`
+- [x] PyPI Trusted Publishing workflow on `v*` tags (activate by adding the publisher on pypi.org + a `pypi` environment on the repo)
+- [x] PyPI README quickstart; monorepo README/docs/CI now install `droidlink` from PyPI

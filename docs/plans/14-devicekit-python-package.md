@@ -80,17 +80,25 @@ plan if/when wanted.
 
 ## Phases
 
-> **Status (2026-07-09):** Phase 1 ✅ complete — executed early to claim the PyPI name.
-> Wire-protocol strings (`DROIDLINK_DISCOVER`, `DROIDLINK_DEVICE:`, `droidlink_frame`)
-> deliberately kept for deployed-agent compatibility. Phase 3 ✅ (root README +
-> ci-setup updated in the same commit).
+> **RESOLVED (2026-07-09) — outcome differs from the original premise.** PyPI's
+> name-similarity policy rejects the bare name `devicekit` ("too similar to an
+> existing project" — the unrelated `device-kit` microgrid package). The rule applies
+> to everyone, so the name can't be squatted either. Rather than ship a suffixed
+> variant (`devicekit-py`), the library **kept its original `droidlink` brand**:
 >
-> **Decision update (2026-07-09):** superseding the "no separate repo" answer above —
-> the library moved to its own public repo (`github.com/jhd3197/devicekit-py`, local
-> sibling clone) so it can be public and publish to PyPI while DeviceKit stays
-> private. The monorepo no longer contains `devicekit-py/`; its device-tests workflow
-> installs `devicekit` from PyPI. Phase 2 ✅ in that repo: trusted-publishing GitHub
-> Actions workflow on `v*` tags (first 0.1.0 upload done manually to claim the name).
+> - Own public repo: [github.com/jhd3197/droidlink](https://github.com/jhd3197/droidlink)
+>   (local sibling clone) — DeviceKit stays private meanwhile.
+> - Published: [`droidlink` 0.1.0 on PyPI](https://pypi.org/project/droidlink/) —
+>   `pip install droidlink`; CLI `droidlink`; pytest plugin with the original
+>   `DROIDLINK_*` env vars; `--devicekit-url` flags still point at the platform.
+> - Trusted-publishing GitHub Actions workflow on `v*` tags ships in that repo
+>   (first upload was manual to claim the name; add the pending publisher +
+>   `pypi` environment to activate tag-driven releases).
+> - The monorepo no longer contains the library; its device-tests workflow installs
+>   `droidlink` from PyPI.
+>
+> The rename map below is kept for historical context — it was executed and then
+> deliberately reverted when the PyPI block surfaced.
 
 1. Rename: directory, package, pyproject (name/scripts/entry points), imports,
    `DeviceKitReporter` class, CI workflow, docs, README quickstart.

@@ -28,9 +28,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Install devicekit library
+      - name: Install droidlink
         run: |
-          pip install devicekit
+          pip install droidlink
           pip install pytest pytest-junitxml
 
       - name: Verify ADB devices
@@ -63,8 +63,8 @@ jobs:
             --junitxml=test-results/junit.xml \
             -v
         env:
-          DEVICEKIT_DEVICE: ${{ vars.DEVICE_SERIAL || '' }}
-          DEVICEKIT_DEVICE_WIFI: ${{ vars.DEVICE_WIFI || '' }}
+          DROIDLINK_DEVICE: ${{ vars.DEVICE_SERIAL || '' }}
+          DROIDLINK_DEVICE_WIFI: ${{ vars.DEVICE_WIFI || '' }}
 
       - name: Upload test results
         if: always()

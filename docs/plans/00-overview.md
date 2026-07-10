@@ -21,7 +21,7 @@ architecture. ServerKit is also Flask + React, so most backend patterns port nea
 | 11 | [Dashboard widget system](11-dashboard-widgets.md) | Reorderable/toggleable widgets, renderer map, plugin slots | 09 (soft) |
 | 12 | [Settings view & theming](12-settings-and-theming.md) | URL-driven tabs, accent theming, extension settings panels | — |
 | 13 | [AI confirmation gate](13-ai-confirmation-gate.md) | Human-in-the-loop approval for write tools, tool registry filtering | — |
-| 14 | [devicekit Python package](14-devicekit-python-package.md) | Publish droidlink as `pip install devicekit` — one brand, one repo | — |
+| 14 | [Python package publishing](14-devicekit-python-package.md) | ✅ Resolved — published as [`droidlink`](https://pypi.org/project/droidlink/) from its own repo (bare `devicekit` is blocked by PyPI's similarity rule) | — |
 
 ## Executing a plan
 

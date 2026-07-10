@@ -16,7 +16,7 @@ A unified Android device management and test automation platform. Control a flee
 
 Managing Android devices for testing usually means juggling ADB commands across terminals, manually tracking which device is running what, and digging through logs when something breaks. DeviceKit takes a different approach: a single platform that discovers your devices, lets you control them from a web dashboard, and automates the tedious parts.
 
-The entire platform is **four components working together**. A Python/Flask backend manages device state and orchestrates actions. A React frontend provides the dashboard and visual editors. A Kotlin agent app runs on each Android device to report metrics and accept commands. And a Python library (`pip install devicekit`) gives you programmatic access for scripts and CI pipelines.
+The entire platform is **four components working together**. A Python/Flask backend manages device state and orchestrates actions. A React frontend provides the dashboard and visual editors. A Kotlin agent app runs on each Android device to report metrics and accept commands. And a Python library ([`pip install droidlink`](https://pypi.org/project/droidlink/)) gives you programmatic access for scripts and CI pipelines.
 
 You get **AI-powered automation** out of the box. Describe what you want in plain English, and DeviceKit generates executable automation steps. When UI elements move between app versions, self-healing retries find the new location automatically. When tests fail, debug bundles package screenshots, logs, UI hierarchy, and device state into a single download — with optional AI root-cause analysis.
 
@@ -175,7 +175,7 @@ When something breaks, get everything in one package:
 Use DeviceKit in your test pipelines:
 
 ```python
-# pytest with the devicekit plugin
+# pytest with the droidlink plugin
 def test_login_flow(device):
     device.app.start("com.example.app")
     device.input.tap(540, 1200)
@@ -184,7 +184,7 @@ def test_login_flow(device):
     assert screenshot is not None
 ```
 
-- `devicekit` pytest plugin with `device` and `device_pool` fixtures
+- `droidlink` pytest plugin with `device` and `device_pool` fixtures
 - Auto-screenshot on test failure
 - Build lifecycle tracking with per-test results
 - Device locking for parallel test runners
@@ -227,8 +227,8 @@ DeviceKit/
 │       ├── App.jsx     Router + sidebar layout
 │       ├── api.js      API client
 │       └── views/      11 views (Dashboard, NodeDetail, Pipeline, etc.)
-├── devicekit (PyPI)    Python library — separate repo: jhd3197/devicekit-py
-│                       pip install devicekit (CLI + pytest plugin)
+├── droidlink (PyPI)    Python library — separate repo: jhd3197/droidlink
+│                       pip install droidlink (CLI + pytest plugin)
 ├── agent-android/      Kotlin agent app
 │   └── app/            BackgroundAgent service, HTTP server (port 9800),
 │                       UDP discovery (port 9801), accessibility service
@@ -244,13 +244,13 @@ graph LR
     C -->|Agent App| D[Metrics + Actions]
     B -->|DynamoDB| E[Persistence]
     B -->|S3| F[File Storage]
-    G[pytest + devicekit] -->|REST API| B
+    G[pytest + droidlink] -->|REST API| B
 ```
 
 1. **Android agent** runs on each device — serves an HTTP API on port 9800, reports metrics to the backend
 2. **Flask backend** merges ADB-connected and agent-registered devices into a unified fleet
 3. **React frontend** subscribes to SSE events for real-time updates, REST for everything else
-4. **devicekit library** connects directly to devices for scripts and CI — USB via ADB port forwarding, WiFi via auto-discovery
+4. **droidlink library** connects directly to devices for scripts and CI — USB via ADB port forwarding, WiFi via auto-discovery
 5. **pytest plugin** allocates devices, runs tests, and reports results back to the dashboard
 
 ---
