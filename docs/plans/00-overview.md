@@ -49,11 +49,11 @@ Features:            ├──► 06 notifications
                      └──► 08 metrics history
 Frontend:      09 foundations ──► 10 palette, 11 widgets, 12 settings   (parallel track)
 AI:            13 confirmation gate                                      (independent)
-Packaging:     14 python package                                         (independent)
+Packaging:     14 python package ✅ done — droidlink 0.1.0 on PyPI       (independent)
 ```
 
-Plans 09–14 have no hard backend dependencies and can proceed in parallel with the
-foundation work. The extension platform (03/04) is the centerpiece but deliberately
+Plans 09–13 have no hard backend dependencies and can proceed in parallel with the
+foundation work (14 is already done). The extension platform (03/04) is the centerpiece but deliberately
 sits *after* persistence and the blueprint refactor — installed-extension state must
 survive restarts, and extension routes need a blueprint-shaped app to mount into.
 
