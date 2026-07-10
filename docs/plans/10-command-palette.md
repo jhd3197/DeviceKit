@@ -1,6 +1,6 @@
 # Plan 10 — Command Palette
 
-**Status:** 🚧 in progress (phase 1 ✅)
+**Status:** 🚧 in progress (phases 1–2 ✅)
 **Inspired by:** ServerKit's `frontend/src/components/CommandPalette.jsx` (cmdk,
 `Cmd/Ctrl+K`, static pages + live entities + extension entries + fuzzy scoring)
 **Depends on:** 09 (soft — shares hooks/styling), 04 (extension entries, optional)
@@ -49,7 +49,9 @@ double as a query launcher.
 
 1. ✅ Palette + pages + devices + automations (`components/CommandPalette.jsx`, cmdk 1.1.1,
    `Ctrl/Cmd+K`, ported fuzzy scorer, sources fetched on open). Mounted in `App.jsx`.
-2. 🚧 Actions + recents + extension entries.
+2. ✅ Actions + recents + extension entries. Static actions (New Automation, Compare
+   Devices, New Profile, Install Extension); `localStorage` recents (last 6) shown on an
+   empty query; `command_palette` contributions merge in as their own category groups.
 3. 🚧 FQL mode.
 
 ## Definition of done

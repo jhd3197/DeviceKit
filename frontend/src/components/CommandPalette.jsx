@@ -15,9 +15,11 @@ import { Command } from 'cmdk'
 import { useNavigate } from 'react-router-dom'
 import {
   LayoutGrid, Cpu, Terminal, Users, BarChart3, LineChart, ShieldCheck, History,
-  Puzzle, PlayCircle, Workflow, Briefcase, Bell, Settings, Bot, Smartphone, Search,
+  Puzzle, PlayCircle, Workflow, Briefcase, Bell, Settings, Bot, Smartphone, Search, Plus,
 } from 'lucide-react'
 import { api } from '../api'
+import { useContributions } from '../extensions/contributions'
+import ExtensionIcon from '../extensions/ExtensionIcon'
 
 // Static pages — mirrors the sidebar `navSections` in App.jsx. Keep in sync when nav changes.
 const PAGES = [
@@ -37,6 +39,30 @@ const PAGES = [
   { to: '/settings', label: 'SamanLabs Config', icon: Settings, keywords: 'settings config' },
   { to: '/profiles', label: 'Profiles', icon: Bot, keywords: 'ai profiles agent model' },
 ]
+
+// Static actions — verbs, not destinations. Extension `command_palette` entries merge in as
+// their own groups (default "Extensions").
+const ACTIONS = [
+  { id: 'action:new-automation', label: 'New Automation', path: '/automations/new', icon: Plus, keywords: 'create new automation flow' },
+  { id: 'action:compare', label: 'Compare Devices', path: '/fleet/compare', icon: BarChart3, keywords: 'compare diff devices' },
+  { id: 'action:new-profile', label: 'New Profile', path: '/profiles/new', icon: Bot, keywords: 'create new profile ai model' },
+  { id: 'action:install-extension', label: 'Install Extension', path: '/extensions', icon: Puzzle, keywords: 'install extension plugin marketplace' },
+]
+
+// localStorage recents — last N selections, shown when the query is empty.
+const RECENTS_KEY = 'devicekit_palette_recents'
+const RECENTS_MAX = 6
+function loadRecents() {
+  try {
+    const v = JSON.parse(localStorage.getItem(RECENTS_KEY))
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
+  }
+}
+function saveRecents(list) {
+  try { localStorage.setItem(RECENTS_KEY, JSON.stringify(list)) } catch { /* quota / private mode */ }
+}
 
 // --- Fuzzy scorer (ported from ServerKit's small scorer) ----------------------------------
 // substring match (prefix > word-boundary > mid-string) scores highest; a subsequence match is
@@ -78,15 +104,28 @@ function scoreItem(item, query) {
   return best
 }
 
-// Group render order.
-const GROUP_ORDER = ['Pages', 'Devices', 'Automations']
+// Group render order. Known groups get a fixed rank; extension-contributed categories sort
+// after Actions (rank 5) and before the catch-all "Extensions" group.
+const GROUP_RANK = { Recents: 0, Pages: 1, Devices: 2, Automations: 3, Actions: 4 }
+function groupRank(g) {
+  if (g in GROUP_RANK) return GROUP_RANK[g]
+  return g === 'Extensions' ? 6 : 5
+}
+
+// Normalize a contribution's `keywords` (array or string) into a searchable string.
+function keywordString(kw) {
+  if (Array.isArray(kw)) return kw.join(' ')
+  return kw || ''
+}
 
 export default function CommandPalette() {
   const navigate = useNavigate()
+  const { envelope } = useContributions()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [devices, setDevices] = useState([])
   const [automations, setAutomations] = useState([])
+  const [recents, setRecents] = useState(loadRecents)
 
   // Global Ctrl/Cmd+K toggles the palette; Escape closes it. The chord fires regardless of
   // focus so it works from inside any input.
@@ -117,23 +156,30 @@ export default function CommandPalette() {
 
   const close = useCallback(() => setOpen(false), [])
 
-  const run = useCallback((fn) => {
+  // Execute an item: close, run its action (custom `onRun` or navigate to `path`), and record
+  // it in recents when it has a stable `path`.
+  const runItem = useCallback((item) => {
     close()
-    fn()
-  }, [close])
+    if (item.onRun) item.onRun()
+    else if (item.path) navigate(item.path)
+    if (item.path) {
+      setRecents((prev) => {
+        const entry = { id: item.id, label: item.label, sublabel: item.sublabel, group: item.group, path: item.path }
+        const next = [entry, ...prev.filter((r) => r.id !== item.id)].slice(0, RECENTS_MAX)
+        saveRecents(next)
+        return next
+      })
+    }
+  }, [close, navigate])
 
-  // Build the flat item list from every source. Each item carries its own `run` action.
+  const extEntries = envelope.command_palette || []
+
+  // Build the flat item list from every source. Items with a `path` navigate on select and are
+  // eligible for recents; a custom `onRun` overrides.
   const items = useMemo(() => {
     const out = []
     for (const p of PAGES) {
-      out.push({
-        id: `page:${p.to}`,
-        group: 'Pages',
-        label: p.label,
-        keywords: p.keywords,
-        icon: p.icon,
-        onRun: () => navigate(p.to),
-      })
+      out.push({ id: `page:${p.to}`, group: 'Pages', label: p.label, keywords: p.keywords, icon: p.icon, path: p.to })
     }
     for (const d of devices) {
       const id = d.device_id || d.serial
@@ -146,7 +192,7 @@ export default function CommandPalette() {
         keywords: `${id} ${d.model || ''} ${d.manufacturer || ''}`,
         icon: Smartphone,
         online: d.online,
-        onRun: () => navigate(`/node/${id}`),
+        path: `/node/${id}`,
       })
     }
     for (const a of automations) {
@@ -158,18 +204,52 @@ export default function CommandPalette() {
         sublabel: a.description || `${(a.steps || []).length} steps`,
         keywords: `${a.name || ''} ${a.description || ''}`,
         icon: Workflow,
-        onRun: () => navigate(`/automations/${a.id}/edit`),
+        path: `/automations/${a.id}/edit`,
+      })
+    }
+    for (const ac of ACTIONS) {
+      out.push({ id: ac.id, group: 'Actions', label: ac.label, keywords: ac.keywords, icon: ac.icon, path: ac.path })
+    }
+    for (const e of extEntries) {
+      if (!e.path) continue
+      out.push({
+        id: `ext:${e.slug || ''}:${e.path}`,
+        group: e.category || 'Extensions',
+        label: e.label || e.path,
+        keywords: `${e.label || ''} ${keywordString(e.keywords)}`,
+        extIcon: e.icon,
+        icon: e.icon ? null : Puzzle,
+        path: e.path,
       })
     }
     return out
-  }, [devices, automations, navigate])
+  }, [devices, automations, extEntries])
 
-  // Filter + rank against the query, then bucket by group in fixed order.
+  // Recent items (shown only on an empty query). Re-resolve each recent's live icon/action from
+  // the current item list when possible; fall back to plain path navigation for stale entries.
+  const recentItems = useMemo(() => {
+    const byId = new Map(items.map((it) => [it.id, it]))
+    return recents.map((r) => {
+      const live = byId.get(r.id)
+      return {
+        id: `recent:${r.id}`,
+        group: 'Recents',
+        label: r.label,
+        sublabel: r.sublabel,
+        icon: live?.icon || History,
+        extIcon: live?.extIcon,
+        path: r.path,
+      }
+    })
+  }, [recents, items])
+
+  // Filter + rank against the query, then bucket by group in rank order. Recents replace the
+  // full listing while the query is empty.
   const grouped = useMemo(() => {
     const q = query.trim()
     let list
     if (!q) {
-      list = items
+      list = [...recentItems, ...items]
     } else {
       list = items
         .map((it) => ({ it, score: scoreItem(it, q) }))
@@ -182,10 +262,10 @@ export default function CommandPalette() {
       if (!byGroup.has(it.group)) byGroup.set(it.group, [])
       byGroup.get(it.group).push(it)
     }
-    return GROUP_ORDER
-      .filter((g) => byGroup.has(g))
+    return [...byGroup.keys()]
+      .sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b))
       .map((g) => ({ group: g, items: byGroup.get(g) }))
-  }, [items, query])
+  }, [items, recentItems, query])
 
   if (!open) return null
 
@@ -229,10 +309,14 @@ export default function CommandPalette() {
                     <Command.Item
                       key={it.id}
                       value={it.id}
-                      onSelect={() => run(it.onRun)}
+                      onSelect={() => runItem(it)}
                       className="flex items-center gap-3 px-2 py-2 rounded-md text-sm text-zinc-300 cursor-pointer aria-selected:bg-zinc-800 aria-selected:text-white"
                     >
-                      {Icon ? <Icon className="w-4 h-4 shrink-0 text-zinc-400" /> : null}
+                      {Icon ? (
+                        <Icon className="w-4 h-4 shrink-0 text-zinc-400" />
+                      ) : it.extIcon ? (
+                        <ExtensionIcon svg={it.extIcon} className="w-4 h-4 shrink-0 text-zinc-400" />
+                      ) : null}
                       <span className="flex-1 min-w-0 truncate">{it.label}</span>
                       {it.group === 'Devices' && (
                         <span
