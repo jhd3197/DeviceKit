@@ -154,14 +154,236 @@ STEP_TYPES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Step dispatch registry
+# ---------------------------------------------------------------------------
+# Every step type carries an ``execute(client, config, device_id) -> output`` callable so
+# core and extension steps run through one path (``_execute_step``) — no ``elif`` chain to
+# edit when an extension contributes a step type. Executors are plain module functions
+# attached to the metadata entries below; ``get_step_types`` strips the callable before
+# serializing the metadata for the AutomationEditor.
+
+def _exec_tap(client, config, device_id):
+    x = int(config["x"])
+    y = int(config["y"])
+    client.click(x, y, device_id)
+    return f"Tapped ({x}, {y})"
+
+
+def _exec_tap_by_text(client, config, device_id):
+    text = config["text"]
+    client.click_by_text(text, device_id)
+    return f"Tapped element with text '{text}'"
+
+
+def _exec_tap_by_resource_id(client, config, device_id):
+    rid = config["resource_id"]
+    client.click_by_resource_id(rid, device_id)
+    return f"Tapped element '{rid}'"
+
+
+def _exec_swipe(client, config, device_id):
+    direction = config.get("direction", "up")
+    duration = int(config.get("duration", 500))
+    d = client.get_device(device_id)
+    info = d.info
+    w = info.get("displayWidth", 1080)
+    h = info.get("displayHeight", 1920)
+    cx, cy = w // 2, h // 2
+    swipe_map = {
+        "up": (cx, h * 3 // 4, cx, h // 4),
+        "down": (cx, h // 4, cx, h * 3 // 4),
+        "left": (w * 3 // 4, cy, w // 4, cy),
+        "right": (w // 4, cy, w * 3 // 4, cy),
+    }
+    coords = swipe_map.get(direction, swipe_map["up"])
+    d.swipe(*coords, duration=duration / 1000)
+    return f"Swiped {direction}"
+
+
+def _exec_type_text(client, config, device_id):
+    text = config["text"]
+    d = client.get_device(device_id)
+    d.send_keys(text)
+    return f"Typed '{text}'"
+
+
+def _exec_press_key(client, config, device_id):
+    key = config["key"]
+    client.press_action(key, device_id)
+    return f"Pressed '{key}'"
+
+
+def _exec_open_app(client, config, device_id):
+    package = config["package"]
+    d = client.get_device(device_id)
+    d.app_start(package)
+    return f"Opened {package}"
+
+
+def _exec_close_app(client, config, device_id):
+    package = config["package"]
+    client.run_adb_command(f"shell am force-stop {package}", device=device_id)
+    return f"Closed {package}"
+
+
+def _exec_open_url(client, config, device_id):
+    url = config["url"]
+    client.run_adb_command([
+        "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url
+    ], device=device_id)
+    return f"Opened URL {url}"
+
+
+def _exec_wait(client, config, device_id):
+    delay = int(config.get("delay", 1000))
+    time.sleep(delay / 1000)
+    return f"Waited {delay}ms"
+
+
+def _exec_wait_for_element(client, config, device_id):
+    by = config.get("by", "text")
+    value = config["value"]
+    timeout = int(config.get("timeout", 10000))
+    timeout_secs = timeout / 1000
+    if by == "text":
+        found = client.exists_by_text(value, device_id, timeout=timeout_secs)
+    else:
+        found = client.exists_by_resource_id(value, device_id, timeout=timeout_secs)
+    if not found:
+        raise Exception(f"Element not found by {by}='{value}' within {timeout}ms")
+    return f"Found element {by}='{value}'"
+
+
+def _exec_screenshot(client, config, device_id):
+    data = client.take_screenshot(device_id)
+    if data:
+        return f"Screenshot captured ({len(data)} bytes)"
+    raise Exception("Screenshot failed")
+
+
+def _exec_assert_element(client, config, device_id):
+    by = config.get("by", "text")
+    value = config["value"]
+    timeout = int(config.get("timeout", 5000))
+    timeout_secs = timeout / 1000
+    if by == "text":
+        found = client.exists_by_text(value, device_id, timeout=timeout_secs)
+    else:
+        found = client.exists_by_resource_id(value, device_id, timeout=timeout_secs)
+    if not found:
+        raise AssertionError(f"Assertion failed: element {by}='{value}' not found")
+    return f"Assertion passed: {by}='{value}' exists"
+
+
+def _exec_adb_shell(client, config, device_id):
+    command = config["command"]
+    output = client.run_adb_command(f"shell {command}", device=device_id)
+    return output or "(no output)"
+
+
+def _exec_file_operation(client, config, device_id):
+    operation = config.get("operation", "push")
+    local_path = config.get("local_path", "")
+    remote_path = config["remote_path"]
+    if operation == "push":
+        if not local_path:
+            raise ValueError("local_path is required for push operation")
+        output = client.run_adb_command(f"push {local_path} {remote_path}", device=device_id)
+        return output or f"Pushed {local_path} to {remote_path}"
+    elif operation == "pull":
+        if not local_path:
+            raise ValueError("local_path is required for pull operation")
+        output = client.run_adb_command(f"pull {remote_path} {local_path}", device=device_id)
+        return output or f"Pulled {remote_path} to {local_path}"
+    elif operation == "delete":
+        output = client.run_adb_command(f"shell rm -f {remote_path}", device=device_id)
+        return output or f"Deleted {remote_path}"
+    else:
+        raise ValueError(f"Unknown file operation: {operation}")
+
+
+def _exec_screenshot_assert(client, config, device_id):
+    baseline_id = config.get("baseline_id", "")
+    threshold = float(config.get("threshold", 95))
+    use_ai = config.get("use_ai", "on") == "on"
+    screenshot_data = client.take_screenshot(device_id)
+    if not screenshot_data:
+        raise Exception("Failed to capture screenshot for visual assertion")
+    result = client.compare_screenshot(
+        screenshot_data, baseline_id=baseline_id,
+        threshold=threshold, use_ai=use_ai, device_id=device_id,
+    )
+    if result.get("passed"):
+        return f"Visual assertion passed (SSIM={result.get('ssim', 0):.1f}%, verdict={result.get('verdict', 'pass')})"
+    else:
+        msg = f"Visual assertion failed (SSIM={result.get('ssim', 0):.1f}%, threshold={threshold}%"
+        if result.get("ai_analysis"):
+            msg += f", AI: {result['ai_analysis'][:200]}"
+        msg += ")"
+        raise AssertionError(msg)
+
+
+_CORE_EXECUTORS = {
+    "tap": _exec_tap,
+    "tap_by_text": _exec_tap_by_text,
+    "tap_by_resource_id": _exec_tap_by_resource_id,
+    "swipe": _exec_swipe,
+    "type_text": _exec_type_text,
+    "press_key": _exec_press_key,
+    "open_app": _exec_open_app,
+    "close_app": _exec_close_app,
+    "open_url": _exec_open_url,
+    "wait": _exec_wait,
+    "wait_for_element": _exec_wait_for_element,
+    "screenshot": _exec_screenshot,
+    "assert_element": _exec_assert_element,
+    "adb_shell": _exec_adb_shell,
+    "file_operation": _exec_file_operation,
+    "screenshot_assert": _exec_screenshot_assert,
+}
+
+# Attach each executor to its metadata entry, making STEP_TYPES the dispatch registry.
+for _type_name, _executor in _CORE_EXECUTORS.items():
+    STEP_TYPES[_type_name]["execute"] = _executor
+
+
 class AutomationMixin:
     _active_runs = {}  # run_id -> cancel_event (ephemeral: live cancel handles)
     _recording_sessions = {}  # session_id -> {device_id, actions, started_at}
     _scheduler_thread = None
     _scheduler_stop_event = None
+    _ext_step_types = {}  # type_name -> spec (contributed by extensions; overlays STEP_TYPES)
+
+    # ---------------------------------------------------------------
+    # Step-type dispatch registry
+    # ---------------------------------------------------------------
+    def step_type_registry(self):
+        """Merged view of core + extension step types (entries include ``execute``)."""
+        if self._ext_step_types:
+            return {**STEP_TYPES, **self._ext_step_types}
+        return STEP_TYPES
 
     def get_step_types(self):
-        return STEP_TYPES
+        """Metadata for the AutomationEditor — the ``execute`` callable is stripped so the
+        registry serializes cleanly to JSON."""
+        out = {}
+        for name, spec in self.step_type_registry().items():
+            out[name] = {k: v for k, v in spec.items() if k != "execute"}
+        return out
+
+    def register_step_type(self, type_name, spec):
+        """Register (or replace) an extension-contributed step type. ``spec`` is the same
+        metadata shape as ``STEP_TYPES`` entries plus a required ``execute`` callable
+        ``execute(client, config, device_id) -> output``."""
+        if "execute" not in spec or not callable(spec["execute"]):
+            raise ValueError(f"Step type '{type_name}' must provide an 'execute' callable")
+        self._ext_step_types[type_name] = spec
+        logger.info(f"Registered extension step type '{type_name}'")
+
+    def unregister_step_type(self, type_name):
+        """Remove an extension-contributed step type (used on disable/uninstall)."""
+        self._ext_step_types.pop(type_name, None)
 
     # ---------------------------------------------------------------
     # Automation CRUD
@@ -399,153 +621,13 @@ class AutomationMixin:
         step_type = step.get("type")
         config = step.get("config", {})
 
-        if step_type == "tap":
-            x = int(config["x"])
-            y = int(config["y"])
-            self.click(x, y, device_id)
-            return f"Tapped ({x}, {y})"
-
-        elif step_type == "tap_by_text":
-            text = config["text"]
-            self.click_by_text(text, device_id)
-            return f"Tapped element with text '{text}'"
-
-        elif step_type == "tap_by_resource_id":
-            rid = config["resource_id"]
-            self.click_by_resource_id(rid, device_id)
-            return f"Tapped element '{rid}'"
-
-        elif step_type == "swipe":
-            direction = config.get("direction", "up")
-            duration = int(config.get("duration", 500))
-            d = self.get_device(device_id)
-            info = d.info
-            w = info.get("displayWidth", 1080)
-            h = info.get("displayHeight", 1920)
-            cx, cy = w // 2, h // 2
-            swipe_map = {
-                "up": (cx, h * 3 // 4, cx, h // 4),
-                "down": (cx, h // 4, cx, h * 3 // 4),
-                "left": (w * 3 // 4, cy, w // 4, cy),
-                "right": (w // 4, cy, w * 3 // 4, cy),
-            }
-            coords = swipe_map.get(direction, swipe_map["up"])
-            d.swipe(*coords, duration=duration / 1000)
-            return f"Swiped {direction}"
-
-        elif step_type == "type_text":
-            text = config["text"]
-            d = self.get_device(device_id)
-            d.send_keys(text)
-            return f"Typed '{text}'"
-
-        elif step_type == "press_key":
-            key = config["key"]
-            self.press_action(key, device_id)
-            return f"Pressed '{key}'"
-
-        elif step_type == "open_app":
-            package = config["package"]
-            d = self.get_device(device_id)
-            d.app_start(package)
-            return f"Opened {package}"
-
-        elif step_type == "close_app":
-            package = config["package"]
-            self.run_adb_command(f"shell am force-stop {package}", device=device_id)
-            return f"Closed {package}"
-
-        elif step_type == "open_url":
-            url = config["url"]
-            self.run_adb_command([
-                "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url
-            ], device=device_id)
-            return f"Opened URL {url}"
-
-        elif step_type == "wait":
-            delay = int(config.get("delay", 1000))
-            time.sleep(delay / 1000)
-            return f"Waited {delay}ms"
-
-        elif step_type == "wait_for_element":
-            by = config.get("by", "text")
-            value = config["value"]
-            timeout = int(config.get("timeout", 10000))
-            timeout_secs = timeout / 1000
-            if by == "text":
-                found = self.exists_by_text(value, device_id, timeout=timeout_secs)
-            else:
-                found = self.exists_by_resource_id(value, device_id, timeout=timeout_secs)
-            if not found:
-                raise Exception(f"Element not found by {by}='{value}' within {timeout}ms")
-            return f"Found element {by}='{value}'"
-
-        elif step_type == "screenshot":
-            data = self.take_screenshot(device_id)
-            if data:
-                return f"Screenshot captured ({len(data)} bytes)"
-            raise Exception("Screenshot failed")
-
-        elif step_type == "assert_element":
-            by = config.get("by", "text")
-            value = config["value"]
-            timeout = int(config.get("timeout", 5000))
-            timeout_secs = timeout / 1000
-            if by == "text":
-                found = self.exists_by_text(value, device_id, timeout=timeout_secs)
-            else:
-                found = self.exists_by_resource_id(value, device_id, timeout=timeout_secs)
-            if not found:
-                raise AssertionError(f"Assertion failed: element {by}='{value}' not found")
-            return f"Assertion passed: {by}='{value}' exists"
-
-        elif step_type == "adb_shell":
-            command = config["command"]
-            output = self.run_adb_command(f"shell {command}", device=device_id)
-            return output or "(no output)"
-
-        elif step_type == "file_operation":
-            operation = config.get("operation", "push")
-            local_path = config.get("local_path", "")
-            remote_path = config["remote_path"]
-            if operation == "push":
-                if not local_path:
-                    raise ValueError("local_path is required for push operation")
-                output = self.run_adb_command(f"push {local_path} {remote_path}", device=device_id)
-                return output or f"Pushed {local_path} to {remote_path}"
-            elif operation == "pull":
-                if not local_path:
-                    raise ValueError("local_path is required for pull operation")
-                output = self.run_adb_command(f"pull {remote_path} {local_path}", device=device_id)
-                return output or f"Pulled {remote_path} to {local_path}"
-            elif operation == "delete":
-                output = self.run_adb_command(f"shell rm -f {remote_path}", device=device_id)
-                return output or f"Deleted {remote_path}"
-            else:
-                raise ValueError(f"Unknown file operation: {operation}")
-
-        elif step_type == "screenshot_assert":
-            baseline_id = config.get("baseline_id", "")
-            threshold = float(config.get("threshold", 95))
-            use_ai = config.get("use_ai", "on") == "on"
-            screenshot_data = self.take_screenshot(device_id)
-            if not screenshot_data:
-                raise Exception("Failed to capture screenshot for visual assertion")
-            result = self.compare_screenshot(
-                screenshot_data, baseline_id=baseline_id,
-                threshold=threshold, use_ai=use_ai, device_id=device_id,
-            )
-            if result.get("passed"):
-                return f"Visual assertion passed (SSIM={result.get('ssim', 0):.1f}%, verdict={result.get('verdict', 'pass')})"
-            else:
-                msg = f"Visual assertion failed (SSIM={result.get('ssim', 0):.1f}%, threshold={threshold}%"
-                if result.get("ai_analysis"):
-                    msg += f", AI: {result['ai_analysis'][:200]}"
-                msg += ")"
-                raise AssertionError(msg)
-
-        else:
+        spec = self.step_type_registry().get(step_type)
+        if spec is None:
             raise ValueError(f"Unknown step type: {step_type}")
+        executor = spec.get("execute")
+        if executor is None or not callable(executor):
+            raise ValueError(f"Step type '{step_type}' has no executor")
+        return executor(self, config, device_id)
 
     # ---------------------------------------------------------------
     # Run management
