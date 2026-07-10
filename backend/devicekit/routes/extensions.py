@@ -25,6 +25,25 @@ def make_blueprint(client, limiter):
     def extensions_manifest_spec():
         return jsonify(manifest_spec())
 
+    @bp.route('/extensions/registry')
+    def extensions_registry():
+        force = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
+        try:
+            return jsonify(client.get_extension_registry(force=force))
+        except Exception as e:
+            logger.error(f"Registry browse failed: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @bp.route('/extensions/updates')
+    def extensions_updates():
+        force = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
+        try:
+            updates = client.check_extension_updates(force=force)
+            return jsonify({'updates': updates, 'count': len(updates)})
+        except Exception as e:
+            logger.error(f"Update check failed: {e}")
+            return jsonify({'error': str(e)}), 500
+
     @bp.route('/extensions/preview', methods=['POST'])
     def extensions_preview():
         data = request.get_json(silent=True) or {}
@@ -44,14 +63,17 @@ def make_blueprint(client, limiter):
     @bp.route('/extensions/install', methods=['POST'])
     def extensions_install():
         data = request.get_json(silent=True) or {}
+        slug = data.get('slug')
         url = data.get('url')
         path = data.get('path')
         force = bool(data.get('force', False))
         sha256 = data.get('sha256')
-        if not url and not path:
-            return jsonify({'error': 'url or path is required'}), 400
+        if not slug and not url and not path:
+            return jsonify({'error': 'slug, url, or path is required'}), 400
         try:
-            if url:
+            if slug:
+                ext = client.install_extension_from_registry(slug, force=force)
+            elif url:
                 ext = client.install_extension_from_url(
                     url, expected_sha256=sha256, force=force)
             else:
@@ -107,6 +129,17 @@ def make_blueprint(client, limiter):
         if client.uninstall_extension(slug, purge=purge):
             return '', 204
         return jsonify({'error': 'Extension not found'}), 404
+
+    @bp.route('/extensions/<slug>/update', methods=['POST'])
+    def extensions_update(slug):
+        try:
+            ext = client.update_extension(slug)
+            return jsonify(ext)
+        except (ValueError, ManifestError) as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            logger.error(f"Extension update failed: {e}")
+            return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/<slug>/enable', methods=['POST'])
     def extensions_enable(slug):

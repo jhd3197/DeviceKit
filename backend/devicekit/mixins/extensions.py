@@ -168,6 +168,73 @@ class ExtensionsMixin:
         return self._install_from_buffer(buf, source="builtin", source_url=slug, force=force)
 
     # ------------------------------------------------------------------
+    # Registry (marketplace) — browse / install / updates
+    # ------------------------------------------------------------------
+    def get_extension_registry(self, force=False):
+        """Registry entries enriched with each extension's local install state."""
+        from devicekit import extension_registry
+        entries = extension_registry.list_extensions(force=force)
+        installed = {e["slug"]: e for e in self.list_extensions()}
+        catalog = []
+        for entry in entries:
+            local = installed.get(entry["slug"])
+            catalog.append({
+                **entry,
+                "installed": local is not None,
+                "installed_version": local["version"] if local else None,
+                "status": local["status"] if local else None,
+            })
+        return {
+            "extensions": catalog,
+            "count": len(catalog),
+            "source": extension_registry.source_label(),
+        }
+
+    def install_extension_from_registry(self, slug, *, force=False):
+        """Install a registry entry: bundled entries come from ``builtin-extensions/``,
+        others download from the entry's pinned ``source`` + ``sha256``."""
+        from devicekit import extension_registry
+        entry = extension_registry.get_entry(slug)
+        if not entry:
+            raise ValueError(f"Extension '{slug}' not found in registry")
+        assert_devicekit_compatible({
+            "name": entry["slug"], "display_name": entry.get("display_name", entry["slug"]),
+            "version": entry["version"],
+            "min_devicekit_version": entry.get("min_devicekit_version"),
+            "max_devicekit_version": entry.get("max_devicekit_version"),
+        })
+        if entry.get("bundled"):
+            return self.install_builtin_extension(slug, force=force or True)
+        if not entry.get("source"):
+            raise ValueError(f"Registry entry '{slug}' has no source URL")
+        return self.install_extension_from_url(
+            entry["source"], expected_sha256=entry.get("sha256"),
+            force=force, source="registry")
+
+    def check_extension_updates(self, force=False):
+        """Compare installed versions against the registry."""
+        from devicekit import extension_registry
+        from devicekit.extension_manifest import _parse_version
+        available = {e["slug"]: e for e in extension_registry.list_extensions(force=force)}
+        updates = []
+        for ext in self.list_extensions():
+            entry = available.get(ext["slug"])
+            if not entry:
+                continue
+            has_update = _parse_version(entry["version"]) > _parse_version(ext["version"])
+            updates.append({
+                "slug": ext["slug"],
+                "installed_version": ext["version"],
+                "available_version": entry["version"],
+                "has_update": has_update,
+            })
+        return [u for u in updates if u["has_update"]]
+
+    def update_extension(self, slug, *, force=True):
+        """Reinstall an extension at the registry's current version (pinned checksum)."""
+        return self.install_extension_from_registry(slug, force=force)
+
+    # ------------------------------------------------------------------
     # Source resolution
     # ------------------------------------------------------------------
     def _resolve_source(self, *, url=None, path=None, zip_bytes=None):
