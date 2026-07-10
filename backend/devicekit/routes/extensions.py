@@ -9,6 +9,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from devicekit.extension_manifest import manifest_spec, ManifestError
+from devicekit.mixins.extensions import SDK_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,17 @@ def make_blueprint(client, limiter):
     @bp.route('/extensions/manifest-spec')
     def extensions_manifest_spec():
         return jsonify(manifest_spec())
+
+    @bp.route('/extensions/contributions')
+    def extensions_contributions():
+        """Merged declarative UI contributions of every active extension (plan 04). The
+        React app fetches this once at boot and re-fetches after install/enable/disable to
+        render nav items, routes, widgets, palette entries, and page titles dynamically."""
+        return jsonify(client.get_contributions_envelope())
+
+    @bp.route('/extensions/sdk-version')
+    def extensions_sdk_version():
+        return jsonify({'sdk_version': SDK_VERSION})
 
     @bp.route('/extensions/registry')
     def extensions_registry():

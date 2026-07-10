@@ -34,6 +34,16 @@ from devicekit.extension_manifest import (
 
 logger = logging.getLogger(__name__)
 
+# Frontend SDK contract version. Extensions import shared UI/primitives from the
+# ``devicekit-sdk`` Vite alias (plan 04); this version is the compatibility contract and is
+# mirrored in ``frontend/src/extensions/sdk/index.js`` (asserted equal by
+# ``tests/test_sdk_version.py``). Bump only on a breaking change to the SDK surface.
+SDK_VERSION = "1.0.0"
+
+# Contribution kinds merged into the frontend envelope (plan 04). Order mirrors the plan's
+# rendering table; ``page_titles`` is a dict (path -> title) rather than a list.
+_LIST_CONTRIB_KINDS = ("nav", "routes", "widgets", "command_palette")
+
 # devicekit/extensions/ — where backend halves are extracted.
 _EXTENSIONS_PKG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "extensions")
 _EXTENSIONS_PKG_DIR = os.path.normpath(_EXTENSIONS_PKG_DIR)
@@ -91,6 +101,30 @@ class ExtensionsMixin:
         with session_scope() as s:
             e = s.get(InstalledExtension, slug)
             return e.to_dict() if e else None
+
+    def get_contributions_envelope(self):
+        """Merge every **active** extension's manifest ``contributions`` block into one
+        envelope the React app renders (plan 04). Each entry is tagged with its ``slug`` so
+        the frontend resolves the component from the right extension module and scopes a
+        per-extension error boundary. Core-vs-extension id collisions are resolved on the
+        frontend (core wins); here we only merge extensions. ``page_titles`` is a flat
+        ``path -> title`` map; later extensions win a path collision (deterministic by the
+        DB's slug order)."""
+        envelope = {k: [] for k in _LIST_CONTRIB_KINDS}
+        envelope["page_titles"] = {}
+        envelope["sdk_version"] = SDK_VERSION
+        for ext in self.list_extensions():
+            if ext.get("status") != STATUS_ACTIVE:
+                continue
+            slug = ext["slug"]
+            contribs = (ext.get("manifest") or {}).get("contributions") or {}
+            for kind in _LIST_CONTRIB_KINDS:
+                for entry in contribs.get(kind) or []:
+                    if isinstance(entry, dict):
+                        envelope[kind].append({**entry, "slug": slug})
+            for path, title in (contribs.get("page_titles") or {}).items():
+                envelope["page_titles"][path] = title
+        return envelope
 
     def get_extension_config(self, slug):
         with session_scope() as s:
