@@ -1,6 +1,6 @@
 # Plan 06 — Notification Bus & Notification Center
 
-**Status:** 🚧 in progress — Phases 1–2 ✅ shipped (catalog + in-app bell; webhook channel + queue-driven delivery)
+**Status:** ✅ complete — all 3 phases shipped (catalog + in-app bell; webhook + queue delivery; preferences + email + digests)
 **Inspired by:** ServerKit's `backend/app/notifications/` (event catalog, per-channel
 delivery, digests) and `NotificationsContext` / `NotificationBell` on the frontend
 **Depends on:** 01 (delivery rows), 05 (async channel delivery rides the queue)
@@ -88,7 +88,33 @@ happens to be open.
    `d4e5f6a7b8c9`. Frontend: `NotificationChannels` config panel (schema-driven, masked
    secrets, Test button) behind the Notifications "Channels" toggle. Tests:
    `test_notification_channels.py` (11).
-3. Preferences (per-event mute, quiet hours) + email channel + digests.
+3. ✅ Preferences (per-event mute, quiet hours) + email channel + digests.
+   Shipped: `channels/email.py` (SMTP via stdlib, encrypted creds, retries on the delivery
+   job); `preferences.py` (`PreferenceService`: full/per-channel mutes, quiet-hours window
+   with critical break-through, digest membership; `flush_digests` batches pending markers
+   into one summary per recipient/channel). Producer wired: full mute drops the event,
+   in-app mute keeps history, quiet hours suppress async (in-app kept), digested events drop
+   a marker instead of pushing. Models `NotificationPreference` + `NotificationRecipientSettings`;
+   `notification.digest.flush` job + 5-min schedule. Preferences API
+   (`GET/PUT /notifications/preferences`, `PUT .../mute`, `POST /notifications/digests/flush`).
+   Migration `e5f6a7b8c9d0`. Frontend: `NotificationPreferences` panel (quiet hours, digest
+   config + event picker, per-event mute list) behind the Notifications "Preferences" toggle;
+   `NotificationChannels` now also surfaces the email channel. Tests:
+   `test_notification_preferences.py` (12).
+
+## Deviations / notes
+
+- **Device-offline producer** rides the existing stale-heartbeat sweep in
+  `GET /agent-device/status` (15s threshold) rather than the dedicated heartbeat reaper,
+  which is Plan 07 (Phase 29) — the notification fires today and will move to the reaper when
+  it lands.
+- **`regression.detected`** is seeded in the catalog and firable via the SDK/producer, but no
+  core call site was wired (visual-regression verdicts live deep inside `screenshot_assert`
+  step execution); wire it opportunistically with the Plan 07 reaper work.
+- **Digest cadence** is a fixed 5-min global flush; `digest_window_minutes` is retained as a
+  per-recipient hint for a future finer-grained scheduler.
+- **`DEVICEKIT_SECRET_KEY`** gates channel-secret encryption; unset in dev uses an insecure
+  deterministic key (logged once). Set it in any real deployment.
 
 ## Definition of done
 

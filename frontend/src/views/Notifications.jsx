@@ -18,10 +18,12 @@ import {
   RefreshCw,
   ExternalLink,
   Settings2,
+  SlidersHorizontal,
 } from 'lucide-react'
 
 import { api } from '../api'
 import NotificationChannels from '../components/NotificationChannels'
+import NotificationPreferences from '../components/NotificationPreferences'
 import {
   useNotifications,
   markRead,
@@ -70,6 +72,7 @@ export default function Notifications() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [showChannels, setShowChannels] = useState(false)
+  const [showPrefs, setShowPrefs] = useState(false)
   const navigate = useNavigate()
 
   const fetchItems = useCallback(async () => {
@@ -123,6 +126,16 @@ export default function Notifications() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowPrefs((v) => !v)}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border ${
+              showPrefs
+                ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                : 'border-main text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Preferences
+          </button>
+          <button
             onClick={() => setShowChannels((v) => !v)}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border ${
               showChannels
@@ -153,6 +166,16 @@ export default function Notifications() {
           </button>
         </div>
       </div>
+
+      {/* Preferences */}
+      {showPrefs && (
+        <div className="border border-main rounded-lg p-4 bg-zinc-900/40 space-y-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+            Preferences
+          </p>
+          <NotificationPreferences />
+        </div>
+      )}
 
       {/* Delivery channels config */}
       {showChannels && (

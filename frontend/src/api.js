@@ -442,6 +442,11 @@ export const api = {
     request(`/notifications/channels/${channel}`, { method: 'PUT', body: JSON.stringify(data) }),
   testNotificationChannel: (channel) =>
     request(`/notifications/channels/${channel}/test`, { method: 'POST' }),
+  getNotificationPreferences: () => request('/notifications/preferences'),
+  updateNotificationPreferences: (data) =>
+    request('/notifications/preferences', { method: 'PUT', body: JSON.stringify(data) }),
+  setNotificationMute: (data) =>
+    request('/notifications/preferences/mute', { method: 'PUT', body: JSON.stringify(data) }),
 }
 
 export function subscribeToEvents(handlers = {}) {

@@ -102,4 +102,34 @@ def make_blueprint(client, limiter):
         result = client.test_notification_channel(channel)
         return jsonify(result), (200 if result.get('ok') else 400)
 
+    # ── Preferences (quiet hours, digest, per-event mutes) ──
+    @bp.route('/notifications/preferences')
+    def notifications_prefs_get():
+        recipient = _recipient()
+        return jsonify({
+            'settings': client.get_notification_settings(recipient=recipient),
+            'mutes': client.list_notification_mutes(recipient=recipient),
+        })
+
+    @bp.route('/notifications/preferences', methods=['PUT'])
+    def notifications_prefs_update():
+        recipient = _recipient()
+        data = request.get_json(silent=True) or {}
+        return jsonify(client.update_notification_settings(recipient=recipient, **data))
+
+    @bp.route('/notifications/preferences/mute', methods=['PUT'])
+    def notifications_prefs_mute():
+        recipient = _recipient()
+        data = request.get_json(silent=True) or {}
+        event_key = data.get('event_key')
+        if not event_key:
+            return jsonify({'error': 'event_key is required'}), 400
+        return jsonify(client.set_notification_mute(
+            recipient, event_key, channel=data.get('channel'),
+            muted=bool(data.get('muted', True))))
+
+    @bp.route('/notifications/digests/flush', methods=['POST'])
+    def notifications_digest_flush():
+        return jsonify(client.flush_notification_digests())
+
     return bp

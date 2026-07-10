@@ -51,9 +51,19 @@ class NotificationService:
     def send(cls, event_key, data=None, recipient="default", subject_type=None,
              subject_id=None, severity=None, emit=None):
         """Create a notification for ``event_key`` and deliver it. Returns the notification
-        dict (with its in-app delivery already sent). Never raises for a delivery problem —
-        the notification is persisted regardless so history is complete."""
+        dict (with its in-app delivery already sent), or ``None`` if the recipient has the
+        event fully muted. Never raises for a delivery problem — the notification is persisted
+        regardless so history is complete."""
+        from devicekit.notifications.preferences import PreferenceService
         data = data or {}
+
+        # A full mute drops the event entirely (in-app included) — no row, no delivery.
+        try:
+            if PreferenceService.is_event_muted(recipient, event_key):
+                return None
+        except Exception:
+            pass
+
         entry = catalog.get(event_key)
         notif = {
             "event_key": event_key,
@@ -80,42 +90,69 @@ class NotificationService:
             s.flush()
             notif = row.to_dict()
 
-        # In-app channel: immediate, rides SSE.
+        # Per-channel mutes (the in-app channel is mutable too).
         try:
-            inapp.deliver(notif, emit)
-        except Exception as e:  # observability must never sink a notification
-            logger.warning("In-app delivery failed for %s: %s", notif["id"], e)
+            muted = PreferenceService.muted_channels(recipient, event_key)
+        except Exception:
+            muted = set()
 
-        # Async channels (webhook/email) are layered in by plans 06.2/06.3.
+        # In-app channel: immediate, rides SSE (unless muted for this event).
+        if "inapp" not in muted:
+            try:
+                inapp.deliver(notif, emit)
+            except Exception as e:  # observability must never sink a notification
+                logger.warning("In-app delivery failed for %s: %s", notif["id"], e)
+
+        # Async channels (webhook/email) — respecting mutes, quiet hours, and digest batching.
         try:
-            cls._plan_async_channels(notif)
+            cls._plan_async_channels(notif, muted=muted)
         except Exception as e:
             logger.warning("Async delivery planning failed for %s: %s", notif["id"], e)
 
         return notif
 
     @classmethod
-    def _plan_async_channels(cls, notif):
+    def _plan_async_channels(cls, notif, muted=None):
         """For each enabled async channel whose severity threshold the notification meets,
         write a ``pending`` delivery row and enqueue a ``notification.deliver`` job carrying
-        its id (plan 06.2). Preferences/quiet-hours gating layers in on top (plan 06.3)."""
+        its id (plan 06.2), respecting per-channel mutes, quiet hours, and digest batching
+        (plan 06.3)."""
         from devicekit.notifications.config import NotificationChannelService, severity_ok
+        from devicekit.notifications.preferences import PreferenceService, DIGEST_CHANNEL
         from devicekit.notifications.consumer import DELIVER_JOB_KIND
         from devicekit.jobs.service import JobService
 
+        muted = muted or set()
         channels = NotificationChannelService.enabled_channels()
         if not channels:
             return
 
-        # Preference gate (plan 06.3) — skip channels the recipient muted for this event.
-        allowed = cls._channel_gate(notif)
+        recipient = notif["recipient"]
+        severity = notif["severity"]
+
+        # Digest: don't push now — drop a marker the flush job batches (plan 06.3).
+        try:
+            if PreferenceService.is_digested(recipient, notif["event_key"]):
+                cls.record_delivery(notif["id"], DIGEST_CHANNEL,
+                                    NotificationDelivery.STATUS_PENDING)
+                return
+        except Exception:
+            pass
+
+        # Quiet hours suppress async delivery (in-app already recorded) unless this severity
+        # is allowed to break through.
+        try:
+            if not PreferenceService.quiet_allows(recipient, severity):
+                return
+        except Exception:
+            pass
 
         for ch in channels:
             channel = ch["channel"]
             config = ch["config"]
-            if not severity_ok(config.get("min_severity"), notif["severity"]):
+            if channel in muted:
                 continue
-            if allowed is not None and channel not in allowed:
+            if not severity_ok(config.get("min_severity"), severity):
                 continue
             target = config.get("url") or config.get("to_addrs") or ""
             # Store only a non-secret hint of the target for history (host, not the token).
@@ -132,12 +169,6 @@ class NotificationService:
                 cls.mark_delivery(
                     delivery["id"], status=NotificationDelivery.STATUS_FAILED,
                     error=f"enqueue failed: {e}")
-
-    @classmethod
-    def _channel_gate(cls, notif):
-        """Return the set of channels allowed for this notification by recipient preferences,
-        or ``None`` when preferences do not constrain it (plan 06.3 overrides this)."""
-        return None
 
     # ------------------------------------------------------------------
     # Delivery rows

@@ -35,10 +35,17 @@ class NotificationsMixin:
                 self.register_job_kind(DELIVER_JOB_KIND, deliver)
                 self.register_job_kind(
                     "notifications.retention.prune", self._job_prune_notifications)
+                self.register_job_kind(
+                    "notification.digest.flush", self._job_flush_digests)
             if hasattr(self, "ensure_scheduled_job"):
                 self.ensure_scheduled_job(
                     "notifications.retention.prune", "notifications.retention.prune",
                     interval_seconds=86400, startup_delay_seconds=3600,
+                    owner_type="system", owner_id="core")
+                # Digest flush ticks every 5 min; the flush batches whatever markers are due.
+                self.ensure_scheduled_job(
+                    "notification.digest.flush", "notification.digest.flush",
+                    interval_seconds=300, startup_delay_seconds=300,
                     owner_type="system", owner_id="core")
         except Exception as e:
             logger.warning("Notification housekeeping not scheduled: %s", e)
@@ -50,6 +57,10 @@ class NotificationsMixin:
         payload = job.get("payload", {}) if isinstance(job, dict) else {}
         days = int(payload.get("retention_days", 30))
         return {"pruned": NotificationService.prune(retention_days=days)}
+
+    def _job_flush_digests(self, job):
+        from devicekit.notifications.preferences import flush_digests
+        return flush_digests()
 
     # ------------------------------------------------------------------
     # Producer
@@ -123,6 +134,29 @@ class NotificationsMixin:
     def set_notification_channel(self, channel, enabled=None, config=None):
         from devicekit.notifications.config import NotificationChannelService
         return NotificationChannelService.set(channel, enabled=enabled, config=config)
+
+    # ------------------------------------------------------------------
+    # Preferences (plan 06.3)
+    # ------------------------------------------------------------------
+    def get_notification_settings(self, recipient="default"):
+        from devicekit.notifications.preferences import PreferenceService
+        return PreferenceService.get_settings(recipient=recipient)
+
+    def update_notification_settings(self, recipient="default", **fields):
+        from devicekit.notifications.preferences import PreferenceService
+        return PreferenceService.set_settings(recipient=recipient, **fields)
+
+    def list_notification_mutes(self, recipient="default"):
+        from devicekit.notifications.preferences import PreferenceService
+        return PreferenceService.list_prefs(recipient=recipient)
+
+    def set_notification_mute(self, recipient, event_key, channel=None, muted=True):
+        from devicekit.notifications.preferences import PreferenceService
+        return PreferenceService.set_pref(recipient, event_key, channel=channel, muted=muted)
+
+    def flush_notification_digests(self):
+        from devicekit.notifications.preferences import flush_digests
+        return flush_digests()
 
     def test_notification_channel(self, channel):
         """Synchronously send a sample notification through a channel so the UI can verify

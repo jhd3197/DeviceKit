@@ -387,14 +387,15 @@ See [docs/plans/04-extension-platform-frontend.md](docs/plans/04-extension-platf
 - [x] Marketplace view (`Extensions.jsx`): browse (builtin + registry, cover-art fallback, category/permission filters), consent chips, install from registry/URL/upload, installed management, schema-driven config forms (secret masking), keep-vs-purge uninstall
 - [x] `devicekit-sdk` Vite alias with versioned surface (api, subscribeToEvents, StreamCanvas, useMjpegStream, router helpers); `scripts/sync-builtin-frontends.mjs` + `--check` CI drift gate (`.github/workflows/frontend-ci.yml`); first builtin frontend (webhook-notify) + EXTENSIONS.md author section
 
-### Phase 28: Notification Bus
+### Phase 28: Notification Bus ✅
 **Goal**: Fleet events reach operators — in-app, webhook, and email — with preferences and history.
 See [docs/plans/06-notification-bus.md](docs/plans/06-notification-bus.md).
 
 - [x] Event catalog (`device.offline`, `automation.run.failed`, `automation.run.healed`, `regression.detected`, `device.battery.critical`, …) — `notifications/catalog.py`, 10 seeded events, extensible via `register()` / SDK
-- [x] Producer (`notify_event`) + persisted `Notification`/`NotificationDelivery` rows; in-app channel over existing SSE (`notification` event). Queue-driven async channel consumers land in Phase 28.2
+- [x] Producer (`notify_event`) + persisted `Notification`/`NotificationDelivery` rows; in-app channel over existing SSE (`notification` event); queue-driven `notification.deliver` consumer for async channels
 - [x] Bell dropdown with unread badge + optimistic mark-read; `/notifications` history view (single-SSE store)
-- [ ] Webhook (Slack/Discord-compatible) channel, then email; per-event preferences + quiet hours
+- [x] Webhook (Slack/Discord-compatible) channel + email (SMTP, encrypted creds); per-event/per-channel mutes, quiet hours (critical break-through), and digest batching. Migrations `c3d4e5f6a7b8` / `d4e5f6a7b8c9` / `e5f6a7b8c9d0`; SDK `notify` seam live; 37 tests
+- Deviations: `device.offline` uses the existing stale-heartbeat sweep (dedicated reaper is Plan 07); `regression.detected` is catalog-seeded but not core-wired yet; digest flush is a fixed 5-min cadence
 
 ### Phase 29: Agent Security & Fleet Registry
 **Goal**: Authenticated agents, principled offline detection, audited commands, capability-based targeting.

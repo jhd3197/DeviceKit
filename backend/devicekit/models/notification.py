@@ -17,7 +17,7 @@ Timestamps are epoch seconds (``time.time()``) to match the rest of the DeviceKi
 import time
 import uuid
 
-from sqlalchemy import Column, String, Float, Text, Boolean, Integer, JSON, Index
+from sqlalchemy import Column, String, Float, Text, Boolean, Integer, JSON, Index, UniqueConstraint
 
 from devicekit.db import Base
 
@@ -123,5 +123,69 @@ class NotificationChannelConfig(Base):
             "channel": self.channel,
             "enabled": bool(self.enabled),
             "config": self.config or {},
+            "updated_at": self.updated_at,
+        }
+
+
+class NotificationPreference(Base):
+    """A per-recipient mute rule (plan 06.3).
+
+    ``channel is None`` mutes the event across *every* channel (including in-app — the
+    notification is dropped entirely). A specific ``channel`` mutes just that transport for
+    the event, so an operator can keep the in-app entry but silence Slack, for example.
+    """
+    __tablename__ = "notification_preferences"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    recipient = Column(String(80), default="default", index=True)
+    event_key = Column(String(100), nullable=False, index=True)
+    channel = Column(String(30), nullable=True)   # None = all channels
+    muted = Column(Boolean, default=True)
+    updated_at = Column(Float, default=time.time)
+
+    __table_args__ = (
+        UniqueConstraint("recipient", "event_key", "channel", name="uix_notif_pref"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "recipient": self.recipient,
+            "event_key": self.event_key,
+            "channel": self.channel,
+            "muted": bool(self.muted),
+        }
+
+
+class NotificationRecipientSettings(Base):
+    """Recipient-level notification settings: quiet hours + digest batching (plan 06.3).
+
+    Quiet hours suppress *async* delivery (webhook/email) during a daily window — the in-app
+    entry is still recorded — with an optional break-through for ``critical``. Digest batching
+    collects listed noisy events and flushes them as one summary on an interval instead of a
+    push per event.
+    """
+    __tablename__ = "notification_recipient_settings"
+
+    recipient = Column(String(80), primary_key=True)
+    quiet_hours_enabled = Column(Boolean, default=False)
+    quiet_start = Column(Integer, default=22)          # hour 0-23 (local server time)
+    quiet_end = Column(Integer, default=7)
+    quiet_allow_critical = Column(Boolean, default=True)
+    digest_enabled = Column(Boolean, default=False)
+    digest_window_minutes = Column(Integer, default=15)
+    digest_events = Column(JSON, default=list)         # event_keys to batch
+    updated_at = Column(Float, default=time.time)
+
+    def to_dict(self):
+        return {
+            "recipient": self.recipient,
+            "quiet_hours_enabled": bool(self.quiet_hours_enabled),
+            "quiet_start": self.quiet_start,
+            "quiet_end": self.quiet_end,
+            "quiet_allow_critical": bool(self.quiet_allow_critical),
+            "digest_enabled": bool(self.digest_enabled),
+            "digest_window_minutes": self.digest_window_minutes,
+            "digest_events": self.digest_events or [],
             "updated_at": self.updated_at,
         }
