@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Plus, ChevronRight } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
+import MetricChart, { seriesColor } from '../components/ds/MetricChart'
+
+// Historical overlay config (plan 08).
+const CMP_METRICS = [
+  { key: 'battery_pct', label: 'Battery', unit: '%', yMin: 0, yMax: 100 },
+  { key: 'cpu_load', label: 'CPU', unit: '%', yMin: 0, yMax: 100 },
+  { key: 'battery_temp', label: 'Temp', unit: '°C' },
+  { key: 'storage_free', label: 'Storage Free', unit: ' MB' },
+]
+const CMP_PERIODS = ['1h', '6h', '24h', '7d', '30d']
 
 export default function DeviceCompare() {
   const [allDevices, setAllDevices] = useState([])
@@ -8,6 +18,11 @@ export default function DeviceCompare() {
   const [compareData, setCompareData] = useState([])
   const [pickValue, setPickValue] = useState('')
   const metricsHistories = useRef({}) // device_id -> [{time, cpu, mem, battery}]
+
+  // Persisted historical overlay (plan 08).
+  const [histMetric, setHistMetric] = useState('battery_pct')
+  const [histPeriod, setHistPeriod] = useState('24h')
+  const [histSeries, setHistSeries] = useState([])
 
   useEffect(() => {
     api.getDevices().then((res) => setAllDevices(res.devices || [])).catch(() => {})
@@ -41,6 +56,25 @@ export default function DeviceCompare() {
   }, [selectedIds])
 
   useEffect(() => { fetchComparison() }, [fetchComparison])
+
+  // Load persisted historical series for the overlay chart whenever the selection / metric
+  // / period changes (plan 08). Distinct from the live poll above.
+  useEffect(() => {
+    if (selectedIds.length === 0) { setHistSeries([]); return }
+    let cancelled = false
+    api.getFleetMetrics(histMetric, selectedIds, histPeriod)
+      .then((res) => {
+        if (cancelled) return
+        setHistSeries((res.series || []).map((s, i) => ({
+          id: s.device_id,
+          label: allDevices.find((d) => d.device_id === s.device_id)?.model || s.device_id,
+          color: seriesColor(i),
+          points: s.points || [],
+        })))
+      })
+      .catch(() => { if (!cancelled) setHistSeries([]) })
+    return () => { cancelled = true }
+  }, [selectedIds, histMetric, histPeriod, allDevices])
 
   // SSE for real-time updates
   useEffect(() => {
@@ -132,6 +166,60 @@ export default function DeviceCompare() {
             {selectedIds.length}/4 devices
           </span>
         </div>
+
+        {selectedIds.length > 0 && (
+          <div className="bg-card border border-main rounded-xl p-5 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="text-sm font-semibold">Historical Trends</h3>
+              <div className="flex items-center gap-1.5">
+                {CMP_METRICS.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => setHistMetric(m.key)}
+                    className={`text-[11px] px-2.5 py-1 rounded border transition-colors ${
+                      histMetric === m.key
+                        ? 'bg-zinc-800 border-zinc-600 text-white'
+                        : 'border-main text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1 ml-auto">
+                {CMP_PERIODS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setHistPeriod(p)}
+                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors mono ${
+                      histPeriod === p
+                        ? 'bg-emerald-950 border-emerald-800 text-emerald-400'
+                        : 'border-main text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const m = CMP_METRICS.find((x) => x.key === histMetric) || {}
+              const fmt = m.unit === ' MB'
+                ? (v) => `${(v / 1024).toFixed(1)}G`
+                : (v) => `${Math.round(v)}${m.unit || ''}`
+              return (
+                <MetricChart
+                  series={histSeries}
+                  unit={m.unit}
+                  yMin={m.yMin}
+                  yMax={m.yMax}
+                  valueFormat={fmt}
+                  height={240}
+                />
+              )
+            })()}
+          </div>
+        )}
 
         {selectedIds.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-zinc-600 text-sm">

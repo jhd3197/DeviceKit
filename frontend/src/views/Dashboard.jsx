@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, AlertCircle, Smartphone, X, Search, Play, Save, BookmarkPlus, Download, Zap, ChevronDown, Trash2 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 import ExtensionSlot from '../extensions/ExtensionSlot'
+import Sparkline from '../components/ds/Sparkline'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const [fleetHealth, setFleetHealth] = useState(null)
   const [toasts, setToasts] = useState([])
   const [fleetAiCost, setFleetAiCost] = useState(0)
+  const [sparklines, setSparklines] = useState({}) // device_id -> [battery %] over 24h (plan 08)
 
   // Fleet Query state
   const [queryExpr, setQueryExpr] = useState('')
@@ -161,6 +163,18 @@ export default function Dashboard() {
 
   // Initial fetch
   useEffect(() => { fetchData() }, [fetchData])
+
+  // Battery sparklines for the fleet (24h) — one cheap batch call, refreshed periodically.
+  useEffect(() => {
+    const loadSparks = () => {
+      api.getFleetSparklines('battery_pct', null, '24h')
+        .then((r) => setSparklines(r.sparklines || {}))
+        .catch(() => {})
+    }
+    loadSparks()
+    const tid = setInterval(loadSparks, 60000)
+    return () => clearInterval(tid)
+  }, [])
 
   // SSE subscription for real-time updates
   useEffect(() => {
@@ -559,6 +573,7 @@ export default function Dashboard() {
                 <th className="p-4 border-b border-main">Node Identifier</th>
                 <th className="p-4 border-b border-main">Status</th>
                 <th className="p-4 border-b border-main">Device Model</th>
+                <th className="p-4 border-b border-main">Battery 24h</th>
                 <th className="p-4 border-b border-main text-right">Resource Load</th>
                 <th className="p-4 border-b border-main text-right">Actions</th>
               </tr>
@@ -593,6 +608,14 @@ export default function Dashboard() {
                           SDK {d.sdkInt || d.sdk}
                         </span>
                       )}
+                    </td>
+                    <td className="p-4 border-b border-main">
+                      <Sparkline
+                        values={sparklines[d.device_id] || []}
+                        color={battery != null && battery < 20 ? '#ef4444' : '#10b981'}
+                        width={88}
+                        height={22}
+                      />
                     </td>
                     <td className="p-4 border-b border-main text-right">
                       <div className="inline-flex items-center gap-4">
@@ -637,7 +660,7 @@ export default function Dashboard() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-600 text-xs">
+                  <td colSpan={6} className="p-8 text-center text-zinc-600 text-xs">
                     {devices.length === 0
                       ? 'No devices connected. Connect an Android device via USB.'
                       : 'No devices match filter.'}

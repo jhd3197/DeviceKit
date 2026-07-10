@@ -315,18 +315,19 @@ See [prompture_integration.md](./prompture_integration.md) for full technical de
 **Goal**: Use historical device metrics to predict failures before they happen and surface proactive alerts on the dashboard.
 
 > Design doc: [docs/plans/08-metrics-history.md](docs/plans/08-metrics-history.md). Note: the plan supersedes the DynamoDB choice below in favor of the Phase 23 SQLite persistence layer, and this phase builds on Phases 23 + 25.
+> **Data foundation shipped (plan 08 ✅):** tiered SQLite metrics history, heartbeat-ingest sampling, rollup/prune jobs, period query APIs, sparklines/charts, threshold alert rules, and metrics FQL fields. The predictive layer below (degradation, fill-rate, thermal, health score, predictions) still needs building on top.
 
-- [ ] `MetricsHistoryMixin`: persist device metrics (CPU, RAM, battery, temperature, storage) to DynamoDB at configurable intervals (default 5min)
-- [ ] `GET /devices/<id>/metrics/history?hours=24` endpoint: return time-series metrics data for charting
+- [x] `MetricsHistoryMixin`: persist device metrics (CPU, RAM, battery, temperature, storage) — *plan 08: tiered SQLite (raw/hourly/daily) sampled on each agent heartbeat, not DynamoDB @5min*
+- [x] `GET /devices/<id>/metrics` endpoint (`?metric=&period=1h|24h|7d|30d`): time-series metrics for charting — *plan 08 (period-based, replaces `?hours=`)*
 - [ ] Battery degradation tracking: compare charge capacity over time, detect batteries holding less charge than baseline
 - [ ] Storage fill rate: linear projection of when device will run out of storage based on recent consumption trend
 - [ ] Thermal throttling detection: flag devices with sustained temperature above threshold, correlate with CPU performance drops
-- [ ] Predictive alerts: new alert types — `battery_degraded`, `storage_fill_predicted`, `thermal_pattern`, `device_unreliable` (frequent disconnects)
+- [~] Predictive alerts — *plan 08 shipped the generic threshold-rule engine → notification bus (`MetricAlertRule`, cooldown-debounced); the predictive alert types (`battery_degraded`, `storage_fill_predicted`, `thermal_pattern`, `device_unreliable`) still need their detectors*
 - [ ] Health score: composite 0-100 score per device based on battery health, storage headroom, thermal history, uptime stability
 - [ ] `GET /fleet/health/predictions` endpoint: list all devices with active predictions and estimated time-to-issue
 - [ ] Frontend Dashboard: "Predictions" card showing devices at risk with estimated timeline ("Device X: storage full in ~3 days")
-- [ ] Frontend NodeDetail: metrics history charts (24h/7d/30d) for CPU, RAM, battery, temperature, storage
-- [ ] Fleet-wide trends: `GET /fleet/metrics/trends` — aggregate metrics across fleet over time (avg battery health declining, storage usage growing)
+- [x] Frontend NodeDetail: metrics history charts (24h/7d/30d) for CPU, RAM, battery, temperature, storage — *plan 08 (also FleetMonitor + DeviceCompare overlay + Dashboard sparklines)*
+- [~] Fleet-wide trends: `GET /fleet/metrics` — aggregate/aligned multi-device metrics over time — *plan 08 (per-device aligned series; fleet-average aggregation still open)*
 - [ ] Anomaly detection: flag devices deviating significantly from fleet averages (e.g., one device running 30% hotter than peers)
 
 ---

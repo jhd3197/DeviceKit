@@ -39,6 +39,16 @@ import {
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 import StreamCanvas from '../components/StreamCanvas'
+import MetricChart, { seriesColor } from '../components/ds/MetricChart'
+
+// Historical metric selector config (plan 08) — device-scoped view.
+const HIST_METRICS = [
+  { key: 'battery_pct', label: 'Battery', unit: '%', yMin: 0, yMax: 100 },
+  { key: 'cpu_load', label: 'CPU', unit: '%', yMin: 0, yMax: 100 },
+  { key: 'battery_temp', label: 'Temp', unit: '°C' },
+  { key: 'storage_free', label: 'Storage Free', unit: ' MB' },
+]
+const HIST_PERIODS = ['1h', '6h', '24h', '7d', '30d']
 
 const REFRESH_INTERVAL = 30000
 
@@ -102,6 +112,12 @@ export default function NodeDetail() {
 
   // Metrics history for step charts (max 60 entries = ~5 min at 5s intervals)
   const metricsHistory = useRef([])
+
+  // Persisted metrics history (plan 08) — device-scoped period chart.
+  const [histMetric, setHistMetric] = useState('battery_pct')
+  const [histPeriod, setHistPeriod] = useState('24h')
+  const [histSeries, setHistSeries] = useState([])
+  const [histTier, setHistTier] = useState('')
 
   const fetchData = useCallback(async () => {
     if (!deviceId) return
@@ -178,6 +194,20 @@ export default function NodeDetail() {
     })
     return () => es.close()
   }, [deviceId])
+
+  // Load persisted metrics history whenever the device / metric / period changes (plan 08).
+  useEffect(() => {
+    if (!deviceId) return
+    let cancelled = false
+    api.getDeviceMetrics(deviceId, histMetric, histPeriod)
+      .then((res) => {
+        if (cancelled) return
+        setHistTier(res.tier || '')
+        setHistSeries([{ id: deviceId, label: histMetric, color: seriesColor(0), points: res.points || [] }])
+      })
+      .catch(() => { if (!cancelled) setHistSeries([]) })
+    return () => { cancelled = true }
+  }, [deviceId, histMetric, histPeriod])
 
   // Fetch stream sessions
   const fetchStreamSessions = useCallback(async () => {
@@ -880,6 +910,62 @@ export default function NodeDetail() {
                     <DiagRow label="Uptime" value={uptimeStr} />
                   </div>
                 </div>
+              </div>
+
+              {/* Metrics History (plan 08) */}
+              <div className="bg-card-alt border border-main rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                    Metrics History
+                    {histTier && <span className="ml-2 text-zinc-600 normal-case font-normal">· {histTier} tier</span>}
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    {HIST_PERIODS.map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setHistPeriod(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded border transition-colors mono ${
+                          histPeriod === p
+                            ? 'bg-emerald-950 border-emerald-800 text-emerald-400'
+                            : 'border-main text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mb-3">
+                  {HIST_METRICS.map((m) => (
+                    <button
+                      key={m.key}
+                      onClick={() => setHistMetric(m.key)}
+                      className={`text-[11px] px-2.5 py-1 rounded border transition-colors ${
+                        histMetric === m.key
+                          ? 'bg-zinc-800 border-zinc-600 text-white'
+                          : 'border-main text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                {(() => {
+                  const m = HIST_METRICS.find((x) => x.key === histMetric) || {}
+                  const fmt = m.unit === ' MB'
+                    ? (v) => `${(v / 1024).toFixed(1)}G`
+                    : (v) => `${Math.round(v)}${m.unit || ''}`
+                  return (
+                    <MetricChart
+                      series={histSeries}
+                      unit={m.unit}
+                      yMin={m.yMin}
+                      yMax={m.yMax}
+                      valueFormat={fmt}
+                      height={200}
+                    />
+                  )
+                })()}
               </div>
 
               {/* Node Properties */}

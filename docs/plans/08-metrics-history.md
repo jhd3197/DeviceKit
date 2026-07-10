@@ -1,6 +1,7 @@
 # Plan 08 — Metrics History & Fleet Monitoring
 
-**Status:** 🚧 in progress (phase 1 ✅, backend for 2 & 4 ✅; frontend 2/3 + phase-4 UI remaining)
+**Status:** ✅ complete (all 4 phases shipped; verified end-to-end via Flask test client +
+14 unit tests). Predictive layer (Phase 22) still builds on these tables later — out of scope.
 **Inspired by:** ServerKit's `backend/app/services/metrics_history_service.py`
 (rollups + retention tiers), `metric_alert.py`, and `frontend/src/pages/FleetMonitor.jsx`
 **Depends on:** 01 (metrics tables), 05 (collection as a scheduled job)
@@ -70,14 +71,25 @@ history queryable is where this plan compounds with DeviceKit's differentiators.
      `ApiAppMixin`; `record_metrics_sample` called from `/agent-device/state`. Endpoints in
      `routes/metrics.py`: `GET /devices/<id>/metrics`, `/devices/<id>/metrics/sparkline`,
      `/fleet/metrics`, `/fleet/metrics/sparklines`, `/metrics/catalog`.
-2. 🚧 Rollup + prune scheduled jobs (✅ `metrics.rollup`/`metrics.prune` job kinds +
-   schedules, idempotent `rollup_metrics`/`prune_metrics`); sparklines in Dashboard/NodeDetail
-   (frontend remaining).
-3. ⏳ Fleet monitor chart view + DeviceCompare historical mode.
-4. 🚧 Threshold alert rules → notification bus (✅ `MetricAlertRule` + CRUD + ingest eval +
-   cooldown, seeded battery<20 rule, `/metrics/alert-rules`); FQL derived fields (✅
-   `storage.free_gb`, `battery.trend_24h`, `metrics.cpu_load_1h_avg`). Rules-management UI
-   remaining.
+2. ✅ Rollup + prune scheduled jobs (`metrics.rollup`/`metrics.prune` job kinds + schedules,
+   idempotent `rollup_metrics`/`prune_metrics`); `components/ds/Sparkline.jsx` + `MetricChart.jsx`;
+   battery-24h sparkline column in `Dashboard.jsx`; period metric chart in `NodeDetail.jsx`.
+3. ✅ `FleetMonitor.jsx` (metric + period selectors, multi-device overlay, `/fleet/monitor`
+   route + nav); `DeviceCompare.jsx` gains a historical trends overlay chart.
+4. ✅ Threshold alert rules → notification bus (`MetricAlertRule` + CRUD + ingest eval +
+   cooldown, seeded battery<20 → `device.battery.low`, `/metrics/alert-rules`, management UI in
+   FleetMonitor); FQL derived fields (`storage.free_gb`, `battery.trend_24h`,
+   `metrics.cpu_load_1h_avg`).
+
+## Verification
+
+- 14 unit tests (`backend/tests/test_metrics_history.py`) — ingest, tier selection, rollup,
+  prune, alert fire/cooldown, FQL fields. Full suite 160 passing.
+- End-to-end via Flask test client: register → 4 heartbeat states → raw query → rollup job →
+  7d hourly-tier query → seeded rule fires `device.battery.low` → FQL `battery.trend_24h < 0`
+  matches. Frontend `npm run build` clean.
+- Not verified on physical hardware: no live agent posts real heartbeats in this session; the
+  ingest path is exercised through the same `/agent-device/state` route the APK calls.
 
 ## Definition of done
 
