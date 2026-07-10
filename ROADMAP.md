@@ -426,14 +426,14 @@ See [docs/plans/10-command-palette.md](docs/plans/10-command-palette.md) and [do
 - [ ] Dashboard carved into widgets with a renderer map; toggle/reorder/reset persisted in localStorage with forward-compatible merge
 - [ ] Extension entries (palette) + extension widgets (`dashboard.top` slot) — palette `command_palette` entries done (plan 10); widgets pending (plan 11)
 
-### Phase 32: Settings & Theming
+### Phase 32: Settings & Theming ✅
 **Goal**: A real `/settings` (the sidebar link currently 404s) and runtime accent theming.
 See [docs/plans/12-settings-and-theming.md](docs/plans/12-settings-and-theming.md).
 
-- [ ] Settings shell at `/settings/:tab` with URL-driven tabs; General / API / About panes
-- [ ] AI (Prompture provider/model), Streaming, and Debug-Bundle panes backed by a settings table
-- [ ] Notification preferences pane (with Phase 28) + extension settings slot (with Phase 27)
-- [ ] Accent color ramp via CSS variables mapped into Tailwind; persisted preference
+- [x] Settings shell at `/settings/:tab` with URL-driven tabs; General / API / About panes
+- [x] AI (Prompture provider/model), Streaming, and Debug-Bundle panes backed by a settings table
+- [x] Notification preferences pane (reuses Phase 28 editors) + extension settings slot (`settings.panels`)
+- [x] Accent color ramp via CSS variables mapped into Tailwind; persisted preference (localStorage + settings row)
 
 ### Phase 33: AI Confirmation Gate
 **Goal**: A human between the LLM and the hardware — write tools require approval.

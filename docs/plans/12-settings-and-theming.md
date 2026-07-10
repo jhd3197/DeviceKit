@@ -1,6 +1,6 @@
 # Plan 12 — Settings View & Theming
 
-**Status:** proposed
+**Status:** ✅ shipped (all 3 phases)
 **Inspired by:** ServerKit's `pages/Settings.jsx` (URL-driven tabs, grouped nav,
 extension settings slot) and `contexts/ThemeContext.jsx` (accent ramp derivation,
 white-label)
@@ -60,12 +60,53 @@ DeviceKit is Tailwind with a hard-coded emerald accent. Port the accent-ramp ide
 
 ## Phases
 
-1. Settings shell + route + General/API/About panes (kills the dead link).
-2. AI + Streaming + Bundles panes with backend settings persistence.
-3. Appearance (accent ramp) + extension panels slot.
+1. ✅ Settings shell + route + General/API/About panes (kills the dead link).
+2. ✅ AI + Streaming + Bundles panes with backend settings persistence.
+3. ✅ Appearance (accent ramp) + Notifications pane + extension panels slot.
 
 ## Definition of done
 
-`/settings` renders; every pane is URL-addressable; AI provider config no longer
+✅ `/settings` renders; every pane is URL-addressable; AI provider config no longer
 requires editing `.env`; changing the accent recolors the app instantly and survives
 reload.
+
+## What shipped
+
+**Backend** — durable `settings` table (`models/setting.py`, Alembic
+`f6a7b8c9d0e1`), `SettingsMixin` (namespaced key/value store with declared
+`SETTINGS_DEFAULTS`, secret redaction, typed accessors), `GET/PUT /settings`
+blueprint. Behavior now honors settings: `start_agent` → `ai_default_model()`,
+streaming routes → `streaming_defaults()`, bundle prune → `bundle_retention_days()`,
+share links → `share_token_lifetime_minutes()`. Provider API keys persist and are
+pushed into `os.environ` on boot + save, so Prompture picks them up with no `.env`
+edit or restart.
+
+**Frontend** — `views/Settings.jsx` shell with URL-driven tabs (`/settings/:tab`),
+grouped nav, and a one-entry tab registry. Panes in `components/settings/`: General,
+API Access, AI (default model + per-feature overrides + provider keys), Streaming,
+Debug Bundles, Notifications (reuses the plan-06 channel/preference editors),
+Appearance, About. `<ExtensionSlot name="settings.panels" />` mounts in an Extensions
+tab that only appears when an extension contributes. Dead sidebar link fixed
+(`SamanLabs Config` → `Settings`).
+
+**Theming** — accent CSS variables (`--accent`/`-hover`/`-dim`/`-bg`) in `index.css`
+mapped into Tailwind's `accent` color; `theme.js` derives a 4-stop ramp from one hex
+via HSL shifts and writes the vars on `<html>` for an instant, no-reload recolor;
+choice persists to `localStorage` (first-paint) + the settings row (cross-browser).
+Accent picker in Appearance with presets + live preview.
+
+### Deviations / assumptions
+
+- **Accent scope:** DeviceKit's ~130 `emerald` usages are overwhelmingly *semantic*
+  (online / pass / success), so a blanket `emerald → accent` swap would corrupt status
+  colors. Only genuinely-interactive brand chrome was moved onto the ramp
+  (`.tab-active` indicator, `.active-glow`) plus all new Settings UI. New UI should
+  prefer `accent` utilities; converting more semantic-vs-brand cases is follow-up.
+- **API Access pane** edits the browser-local `X-API-Key` (there is no server key-
+  rotation endpoint yet); scoped/rotatable keys are noted as future backend work.
+- **Light mode** intentionally not built (plan said optional/later) — the ramp
+  mechanism is in place for it and white-labeling to build on.
+- **About pane** shows version + SDK version + live backend health; agent-APK
+  download / registry URL are placeholders pending an agent-distribution backend.
+- The pre-existing in-memory `/config` blueprint is left untouched for back-comp;
+  `/settings` is the new durable store.
