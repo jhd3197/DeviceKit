@@ -222,3 +222,218 @@ def reprovision(slug, device_id, *, package, apk_b64=None, apk_bytes=None,
     return provision(slug, device_id, package=package, apk_b64=apk_b64, apk_bytes=apk_bytes,
                      expected_sha256=expected_sha256, expected_version=expected_version,
                      serial=serial)
+
+
+# --------------------------------------------------------------------------- version adapters (Part 2)
+class VersionAdapter:
+    """A named flow's implementation bound to a version range: an **ordered list of step
+    callables**. Two adapters for the same flow may differ in selectors, step count, *and* order —
+    because a new app version can add a whole step (a per-connect consent dialog), not just move a
+    selector (plan 18). Each step is ``step(ctx) -> str`` and raises to fail loud."""
+
+    def __init__(self, version_range, steps, name=None):
+        self.version_range = version_range
+        self.steps = list(steps or [])
+        self.name = name
+
+    def matches(self, version):
+        return range_satisfies(version, self.version_range)
+
+    def __repr__(self):
+        return f"VersionAdapter({self.name or self.version_range!r}, {len(self.steps)} steps)"
+
+
+def resolve_adapter(adapters, version):
+    """Return the first adapter whose range matches ``version``; raise :class:`NoAdapterError` on no
+    match. There is deliberately **no fallback** — a blind tap on a version the extension hasn't
+    been taught is the exact failure this framework exists to prevent."""
+    for a in adapters or []:
+        if a.matches(version):
+            return a
+    ranges = ", ".join(a.version_range for a in (adapters or [])) or "(no adapters)"
+    raise NoAdapterError(
+        f"no adapter matches app version {version} (defined ranges: {ranges})")
+
+
+class StepContext:
+    """Handle passed to every adapter step: the resolved device, its installed version, the
+    permission-gated control seam, and small UI helpers so adapters read like the plan
+    (``open_app``, ``tap``, ``wait_for``). ``vars`` is a run-scoped bag one step can stash into for
+    a later one."""
+
+    def __init__(self, driver, device_id, version, variables=None):
+        self.driver = driver
+        self.slug = driver.slug
+        self.package = driver.package
+        self.device_id = device_id
+        self.version = version
+        self.control = devicekit_sdk.device_control(driver.slug, device_id)
+        self.log = devicekit_sdk.logger(driver.slug)
+        self.vars = variables if variables is not None else {}
+
+    @property
+    def _host(self):
+        return devicekit_sdk.get_host()
+
+    def open_app(self, package=None):
+        return self._host.get_device(self.device_id).app_start(package or self.package)
+
+    def tap_text(self, text):
+        return self._host.click_by_text(text, self.device_id)
+
+    def exists(self, text, timeout=5.0):
+        return bool(self._host.exists_by_text(text, self.device_id, timeout=timeout))
+
+    def shell(self, command):
+        return self.control.shell(command)
+
+    def sleep(self, seconds):
+        time.sleep(seconds)
+
+
+# ---- step helpers: an adapter's steps are an ordered list of these ----------------------
+def open_app(package=None):
+    """Launch the target app (or ``package`` if the flow drives a companion app)."""
+    def step(ctx):
+        ctx.open_app(package)
+        return f"opened {package or ctx.package}"
+    step.__name__ = "open_app"
+    return step
+
+
+def tap(text):
+    """Tap the on-screen element whose text is ``text`` (fails if absent)."""
+    def step(ctx):
+        ctx.tap_text(text)
+        return f"tapped '{text}'"
+    step.__name__ = f"tap({text!r})"
+    return step
+
+
+def tap_if_present(text, timeout=2.0):
+    """Tap ``text`` only if it is on screen — the "a new version added an optional consent dialog"
+    primitive. A no-op (not a failure) when absent, so one adapter can tolerate a dialog that only
+    some builds show."""
+    def step(ctx):
+        if ctx.exists(text, timeout=timeout):
+            ctx.tap_text(text)
+            return f"tapped optional '{text}'"
+        return f"'{text}' not present — skipped"
+    step.__name__ = f"tap_if_present({text!r})"
+    return step
+
+
+def wait_for(text, timeout=15.0):
+    """Block until ``text`` appears, or fail loud after ``timeout`` — how ``wait_connected`` is
+    expressed (wait for the app's connected-state label)."""
+    def step(ctx):
+        if not ctx.exists(text, timeout=timeout):
+            raise AppDriverError(f"waited {timeout}s for '{text}' — not found")
+        return f"found '{text}'"
+    step.__name__ = f"wait_for({text!r})"
+    return step
+
+
+def assert_absent(text, timeout=3.0):
+    """Fail if ``text`` is present — e.g. assert the "Connected" label is gone after disconnect."""
+    def step(ctx):
+        if ctx.exists(text, timeout=timeout):
+            raise AppDriverError(f"'{text}' is still present")
+        return f"'{text}' absent as expected"
+    step.__name__ = f"assert_absent({text!r})"
+    return step
+
+
+def press(key):
+    """Press a hardware/nav key (``back``, ``home``, …) via the gated control seam."""
+    def step(ctx):
+        ctx.control.press(key)
+        return f"pressed {key}"
+    step.__name__ = f"press({key!r})"
+    return step
+
+
+def sleep(seconds):
+    """Fixed pause (use ``wait_for`` instead where a target is known)."""
+    def step(ctx):
+        ctx.sleep(seconds)
+        return f"slept {seconds}s"
+    step.__name__ = f"sleep({seconds})"
+    return step
+
+
+def shell(command):
+    """Run an adb shell command on the device (gated ``adb``)."""
+    def step(ctx):
+        return ctx.shell(command) or f"ran: {command}"
+    step.__name__ = "shell"
+    return step
+
+
+class AppDriver:
+    """Drives a third-party app through version drift. Construct it from the flows' adapters and,
+    optionally, the extension's declared ``supported_versions`` and a per-device ceiling resolver
+    (plan 18 Part 3). :meth:`run` resolves the right adapter **per device per call** and fails loud
+    on every unsupported outcome — it never taps a version it wasn't taught."""
+
+    def __init__(self, slug, package, adapters, supported_versions=None, ceiling_for=None):
+        self.slug = slug
+        self.package = package
+        self.adapters = adapters or {}          # flow name -> [VersionAdapter]
+        self.supported_versions = supported_versions
+        self._ceiling_for = ceiling_for         # callable(device_id) -> ceiling str | None
+
+    def flows(self):
+        return list(self.adapters.keys())
+
+    def installed_version(self, device_id):
+        return installed_version(self.slug, device_id, self.package)
+
+    def ceiling_for(self, device_id):
+        try:
+            return self._ceiling_for(device_id) if self._ceiling_for else None
+        except Exception:
+            return None
+
+    def resolve(self, flow, version):
+        adapters = self.adapters.get(flow)
+        if not adapters:
+            raise NoAdapterError(f"driver has no flow '{flow}' (flows: {self.flows()})")
+        return resolve_adapter(adapters, version)
+
+    def check_version(self, device_id, *, ceiling=None):
+        """Read the installed version and run the three-gate funnel, returning the version string.
+        Each unsupported outcome raises its own :class:`AppDriverError` subclass so callers can
+        message them distinctly — *app-not-installed*, *outside supported range*, *over policy
+        ceiling* — before any adapter runs. Order is a funnel: is the app even in scope for this
+        extension → is it within this device's policy → (later) does a flow adapter match."""
+        version = self.installed_version(device_id)
+        if version is None:
+            raise AppNotInstalled(
+                f"{self.package} is not installed on {device_id} — provision it first")
+        if self.supported_versions and not range_satisfies(version, self.supported_versions):
+            raise AppVersionUnsupported(
+                f"{self.package} {version} on {device_id} is outside supported "
+                f"{self.supported_versions} — this extension has no adapters for it")
+        ceiling = ceiling if ceiling is not None else self.ceiling_for(device_id)
+        if exceeds_ceiling(version, ceiling):
+            raise VersionPolicyError(
+                f"{self.package} {version} on {device_id} exceeds the device ceiling "
+                f"{ceiling} — refusing by policy (reprovision to the pinned build to remediate)")
+        return version
+
+    def run(self, flow, device_id, *, ceiling=None, variables=None):
+        """Resolve the adapter for this device's installed version and run its steps in order.
+        Returns ``{flow, device_id, version, adapter, steps, vars}``. Raises a specific
+        :class:`AppDriverError` on any unsupported outcome — the caller alerts, it never taps."""
+        version = self.check_version(device_id, ceiling=ceiling)
+        adapter = self.resolve(flow, version)          # raises NoAdapterError on no match
+        ctx = StepContext(self, device_id, version, variables=variables)
+        results = []
+        for step in adapter.steps:
+            results.append(step(ctx))
+        return {
+            "flow": flow, "device_id": device_id, "version": version,
+            "adapter": adapter.name or adapter.version_range,
+            "steps": results, "vars": ctx.vars,
+        }

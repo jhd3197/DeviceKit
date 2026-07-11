@@ -31,12 +31,17 @@ class _Host(ExtensionsMixin, AutomationMixin, FleetQueryMixin):
 
     def __init__(self):
         self.install_ok = True
-        self.installed = {}         # package -> versionName the device reports after install
+        self.installed = {}         # package -> versionName (applies to any device unless overridden)
+        self.versions = {}          # (device_id, package) -> versionName (per-device override)
         self.adb_calls = []
         self.uninstalled = []
         self.taps = []              # (device_id, text) for click_by_text
         self.present = set()        # (device_id, text) that exists_by_text should find
         self.opened = []            # (device_id, package) for app_start
+
+    def set_installed(self, device_id, version, package=PKG):
+        """Simulate a specific build on one device (mixed-version fleet tests)."""
+        self.versions[(device_id, package)] = version
 
     def broadcast(self, *a, **k):
         pass
@@ -60,7 +65,7 @@ class _Host(ExtensionsMixin, AutomationMixin, FleetQueryMixin):
         self.adb_calls.append((args, device))
         if isinstance(args, list) and "dumpsys" in args and "package" in args:
             pkg = args[-1]
-            v = self.installed.get(pkg)
+            v = self.versions.get((device, pkg), self.installed.get(pkg))
             return f"  Package [{pkg}]\n    versionName={v}\n" if v else ""
         if isinstance(args, list) and args and args[0] == "uninstall":
             self.uninstalled.append(args[-1])
@@ -141,3 +146,114 @@ def test_installed_version_reads_dumpsys(fresh_db):
 def test_provisioned_table_is_namespaced(fresh_db):
     _make_host()
     assert appdriver.provisioned_table(SLUG).name == "ext_test_driver_provisioned"
+
+
+# --------------------------------------------------------------- version adapters (Part 2)
+from devicekit_sdk.appdriver import (  # noqa: E402
+    VersionAdapter, AppDriver, open_app, tap, tap_if_present, wait_for,
+)
+
+
+def _driver(ceiling_for=None):
+    """connect flow with two adapters — 13.x adds a per-connect consent dialog (extra step)."""
+    adapters = {
+        "connect": [
+            VersionAdapter(">=12.0.0 <13.0.0",
+                           [open_app(), tap("Connect"), wait_for("Connected")], name="12.x"),
+            VersionAdapter(">=13.0.0 <14.0.0",
+                           [open_app(), tap("Connect"), tap_if_present("Allow"), wait_for("Connected")],
+                           name="13.x"),
+        ],
+        "disconnect": [
+            VersionAdapter(">=12.0.0 <14.0.0", [open_app(), tap("Disconnect")], name="all"),
+        ],
+    }
+    return AppDriver(SLUG, PKG, adapters, supported_versions=">=12.0.0 <14.0.0",
+                     ceiling_for=ceiling_for)
+
+
+def test_adapter_resolution_by_version(fresh_db):
+    _make_host()
+    d = _driver()
+    assert d.resolve("connect", "12.4.0").name == "12.x"
+    assert d.resolve("connect", "13.2.0").name == "13.x"
+
+
+def test_adapter_gap_has_no_match(fresh_db):
+    _make_host()
+    # Adapters for 12.0–12.5 and 13.x leave a gap at 12.7 — resolve must fail loud, not snap to a
+    # neighbouring range.
+    d = AppDriver(SLUG, PKG, {"connect": [
+        VersionAdapter(">=12.0.0 <12.5.0", [tap("Connect")], name="early-12"),
+        VersionAdapter(">=13.0.0 <14.0.0", [tap("Connect")], name="13.x"),
+    ]})
+    assert d.resolve("connect", "12.2.0").name == "early-12"
+    with pytest.raises(appdriver.NoAdapterError):
+        d.resolve("connect", "12.7.0")
+
+
+def test_no_adapter_fails_loud_not_a_tap(fresh_db):
+    host = _make_host()
+    host.installed[PKG] = "13.5.0"
+    # A driver whose connect flow only has a 12.x adapter has nothing for 13.5.
+    d = AppDriver(SLUG, PKG, {"connect": [
+        VersionAdapter(">=12.0.0 <13.0.0", [open_app(), tap("Connect")], name="12.x")]},
+        supported_versions=">=12.0.0 <14.0.0")
+    with pytest.raises(appdriver.NoAdapterError) as ei:
+        d.run("connect", "dev-A")
+    assert "13.5.0" in str(ei.value)
+    assert host.taps == []          # never tapped a version it wasn't taught
+
+
+def test_mixed_version_fleet_each_device_its_own_adapter(fresh_db):
+    """The headline claim: one driver, two phones on different versions, each Just Works."""
+    host = _make_host()
+    host.set_installed("phone-A", "12.4.0")
+    host.set_installed("phone-B", "13.2.0")
+    host.present |= {("phone-A", "Connected"), ("phone-B", "Connected"), ("phone-B", "Allow")}
+    d = _driver()
+
+    ra = d.run("connect", "phone-A")
+    rb = d.run("connect", "phone-B")
+    assert ra["adapter"] == "12.x" and rb["adapter"] == "13.x"
+    # phone-B ran the extra consent step; phone-A never saw "Allow".
+    assert ("phone-B", "Allow") in host.taps
+    assert ("phone-A", "Allow") not in host.taps
+    assert ("phone-A", "Connect") in host.taps and ("phone-B", "Connect") in host.taps
+
+
+def test_tap_if_present_skips_when_absent(fresh_db):
+    host = _make_host()
+    host.set_installed("phone-B", "13.2.0")
+    host.present |= {("phone-B", "Connected")}          # "Allow" dialog NOT shown this time
+    d = _driver()
+    r = d.run("connect", "phone-B")
+    assert r["adapter"] == "13.x"
+    assert ("phone-B", "Allow") not in host.taps        # optional step no-oped, run still succeeded
+    assert ("phone-B", "Connect") in host.taps
+
+
+def test_app_not_installed_is_distinct(fresh_db):
+    _make_host()                                        # no version set for the package
+    d = _driver()
+    with pytest.raises(appdriver.AppNotInstalled):
+        d.run("connect", "dev-A")
+
+
+def test_version_outside_supported_range_is_distinct(fresh_db):
+    host = _make_host()
+    host.installed[PKG] = "14.2.0"                      # above the extension's declared support
+    d = _driver()
+    with pytest.raises(appdriver.AppVersionUnsupported) as ei:
+        d.run("connect", "dev-A")
+    assert "14.2.0" in str(ei.value)
+    assert host.taps == []
+
+
+def test_wait_for_timeout_fails_loud(fresh_db):
+    host = _make_host()
+    host.set_installed("dev-A", "12.4.0")               # "Connected" never appears
+    d = _driver()
+    with pytest.raises(appdriver.AppDriverError) as ei:
+        d.run("connect", "dev-A")
+    assert "Connected" in str(ei.value)
