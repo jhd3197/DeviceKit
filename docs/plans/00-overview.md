@@ -24,6 +24,8 @@ architecture. ServerKit is also Flask + React, so most backend patterns port nea
 | 14 | [Python package publishing](14-devicekit-python-package.md) | ✅ Resolved — published as [`droidlink`](https://pypi.org/project/droidlink/) from its own repo (bare `devicekit` is blocked by PyPI's similarity rule) | — |
 | 15 | [Extension pack one](15-extension-pack-one.md) | ServerKit's "validate the platform with real builtin plugins" — browser (CDP), file explorer (builtin frontend), notification capture (jobs + bus) | 03, 04, 13 |
 | 16 | [Documentation suite](16-documentation-suite.md) | ServerKit's docs *system* — architecture doc, fleet contract, SDK/manifest reference, ADRs, optional docs site | soft: 15 (worked examples) |
+| 17 | [Extension dependencies + SERP](17-extension-dependencies-and-serp.md) | `requires_extensions` + `sdk.extension()` seam so plugins compose; `devicekit-serp` searches via `devicekit-browser` | 15 |
+| 18 | [App-driver extensions](18-app-driver-extensions.md) | `device_requirements` (pin + provision a 3rd-party APK) + version-keyed adapters for UI drift + device version policy; `devicekit-vpn` example | 15, 13 |
 
 ## Executing a plan
 
@@ -53,6 +55,8 @@ Frontend:      09 foundations ──► 10 palette, 11 widgets, 12 settings   (p
 AI:            13 confirmation gate                                      (independent)
 Packaging:     14 python package ✅ done — droidlink 0.1.0 on PyPI       (independent)
 Extensions:    03/04 ──► 15 extension pack one (browser, explorer, notification capture)
+                            ├──► 17 ext dependencies + serp (compose plugins)
+                            └──► 18 app-driver extensions (provision + version drift)
 Docs:          15 ──► 16 documentation suite (architecture, fleet contract, SDK ref, ADRs)
 ```
 
