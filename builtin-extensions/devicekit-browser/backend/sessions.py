@@ -48,10 +48,20 @@ def cdp_timeout():
 
 
 def _resolve_serial(device_id):
-    dev = devicekit_sdk.devices.get(device_id)
-    if not dev:
-        raise CDPError(f"device '{device_id}' is not connected over adb (browser needs adb)")
-    return dev.get("serial") or dev.get("device_id") or device_id
+    """Validate the device is adb-reachable and return its adb serial. For adb devices the
+    serial IS the device_id. Uses the lightweight ``adb devices`` list (never ``get_device``,
+    which returns a uiautomator2 connection object and would force a u2 handshake)."""
+    host = devicekit_sdk.get_host()
+    if host is not None and hasattr(host, "get_connected_devices"):
+        try:
+            if device_id in (host.get_connected_devices() or []):
+                return device_id
+        except Exception:
+            pass
+    for d in devicekit_sdk.devices.list():
+        if d.get("device_id") == device_id or d.get("serial") == device_id:
+            return d.get("serial") or d.get("device_id") or device_id
+    raise CDPError(f"device '{device_id}' is not connected over adb (browser needs adb)")
 
 
 def _alloc_port(s, device_id):
