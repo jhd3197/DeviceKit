@@ -502,7 +502,7 @@ See [docs/plans/20-identity-rbac-and-secrets.md](docs/plans/20-identity-rbac-and
 - [ ] Opt-in narrow-only `scope_query` retrofit (no workspace context = unchanged behavior)
 - [x] `User` + login/session + global role + per-feature read/write matrix; `AuthMixin` → principal resolver
 - [x] Hashed, scoped, multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single global key
-- [ ] User-attributed `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog`
+- [x] User-attributed `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog`
 - [ ] `Workspace` + `WorkspaceMember` scoping devices (born-in-workspace) + automations; capability fold + `ResourceGrant`
 - [ ] Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection
 - [ ] (optional) invitations + TOTP + lockout + require-2FA-with-grace policy

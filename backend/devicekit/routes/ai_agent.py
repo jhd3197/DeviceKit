@@ -1,5 +1,5 @@
 """AI agent control routes (Prompture-backed autonomous agent)."""
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 
 
 def make_blueprint(client, limiter):
@@ -97,13 +97,18 @@ def make_blueprint(client, limiter):
         if not action_id:
             return jsonify({'error': 'action_id is required'}), 400
         approve = bool(data.get('approve', False))
-        approver = request.headers.get('X-API-Key', '')[:8] or 'api'
+        # Attribute the gate decision to the resolved principal (plan 20 part 3), falling back
+        # to the API-key prefix for a legacy/keyed caller.
+        principal = getattr(g, 'principal', None)
+        approver = (getattr(principal, 'username', None)
+                    or request.headers.get('X-API-Key', '')[:8] or 'api')
         result = client.confirm_action(action_id, approve, approver=approver,
                                        device_id=device_id)
         if 'error' in result:
             return jsonify(result), 404
         client.log_activity('agent_confirm', device_id,
-                            {'action_id': action_id, 'approve': approve})
+                            {'action_id': action_id, 'approve': approve},
+                            user_id=getattr(principal, 'user_id', None))
         return jsonify(result)
 
     @bp.route('/devices/<device_id>/agent/mode', methods=['GET'])

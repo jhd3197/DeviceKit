@@ -21,6 +21,7 @@ from devicekit.models.notification import (
     NotificationPreference, NotificationRecipientSettings)
 from devicekit.models.user import User, UserSession
 from devicekit.models.api_key import ApiKey
+from devicekit.models.audit_log import AuditLog
 
 # Queue Bus + Jobs live in their own packages (plan 05) but must register on the shared
 # ``Base`` here so ``create_all`` and Alembic's autogenerate see every table.
@@ -55,6 +56,7 @@ __all__ = [
     "User",
     "UserSession",
     "ApiKey",
+    "AuditLog",
     "QueueGroup",
     "Queue",
     "QueueMessage",

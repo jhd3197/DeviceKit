@@ -121,7 +121,7 @@ passkeys are heavier (L) — defer until there are real teams.
 |---|---|---|---|
 | 1 | `User` + login/session + global role + per-feature matrix; `AuthMixin` → principal resolver (solo mode unchanged) | identity substrate exists | ✅ |
 | 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope | ✅ |
-| 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ⏳ |
+| 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ✅ |
 | 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ⏳ |
 | 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ⏳ |
 | 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security | ⏳ |
@@ -152,6 +152,17 @@ role matrix. The `X-Agent-Token` axis is untouched (orthogonal). Legacy global `
 (deprecated, back-compat). Migration `d1e2f3a4b001`. Verified: 11 new tests, clean single migration head.
 *Assumption:* key management is admin-only (creator recorded via `created_by`); self-service per-user key
 scoping deferred (not required until plan 21).
+
+### Phase 3 — shipped (backend)
+
+Delivered: `services/audit.py` (recursive sensitive-key redaction, proxy-aware `X-Forwarded-For`/`X-Real-IP`
+client IP, UA), `models/audit_log.py` (`AuditLog` — attributed, with `username`/`principal_kind` snapshots),
+`mixins/audit.py` (`record_audit` one write path, `audit_request` folding the after-request hook,
+`get_audit_logs` filters, `purge_audit` retention), `routes/audit.py` (`GET /audit`, admin-only). The
+api_app after-request hook now calls `audit_request` → durable attributed row (redacted) **and** the
+in-memory `/activities` feed (now carrying `user_id`). `log_activity` grew a `user_id` param; the AI-gate
+`confirm` route attributes the approver to the resolved principal's username instead of an API-key prefix.
+Migration `e2f3a4b5c001`. Verified: 7 new tests + full suite 334 green.
 
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.

@@ -60,13 +60,9 @@ class ApiAppMixin:
 
         @app.after_request
         def audit_log(response):
-            if request.method in ('POST', 'PUT', 'DELETE') and response.status_code < 500:
-                client.log_activity(
-                    action=f"{request.method} {request.path}",
-                    details={'status': response.status_code},
-                    source_ip=request.remote_addr,
-                    authenticated=bool(request.headers.get('X-API-Key') or request.headers.get('X-Agent-Token')),
-                )
+            # Durable, user-attributed audit (plan 20 part 3) + the in-memory activity feed.
+            # Reads the principal the gate attached to ``g``.
+            client.audit_request(request, response, getattr(g, 'principal', None))
             return response
 
         # Mount every route group. URLs are identical to the pre-refactor closures.
