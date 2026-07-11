@@ -102,7 +102,7 @@ the `build-agent-apk` skill).
 
   Without it the agent sits in "Connecting…" / standalone mode. See
   [Fleet Contract](FLEET_CONTRACT.md) for the exact registration flow and
-  [Architecture](ARCHITECTURE.md#connection-flow) for why.
+  [Architecture](ARCHITECTURE.md#the-connection-flow) for why.
 
 Either way, confirm the device is there:
 

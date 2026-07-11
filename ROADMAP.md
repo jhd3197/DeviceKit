@@ -26,29 +26,12 @@
        └─────────────┴───────────────┴─────────────────┘
 ```
 
-### Connection Flow
-
-1. **Agent app** starts BackgroundAgent service on the phone
-2. Agent tries to register with backend at `POST /agent-device/register`
-3. If backend is reachable, agent sends heartbeats (5s) and state reports (2s)
-4. If backend is NOT reachable, agent runs in **standalone mode** — the embedded HTTP server (port 9800) still works for direct droidlink control
-5. **droidlink** (Python) connects directly to the agent's HTTP server:
-   - USB: `adb forward tcp:9800 tcp:9800` then `http://127.0.0.1:9800`
-   - WiFi: `http://<device-ip>:9800` (auto-discovered via UDP 9801)
-6. **Backend** merges ADB-connected devices + agent-registered devices into a unified `/devices` list
-7. **Frontend** subscribes to backend SSE stream (`/events/stream`) for real-time device state, with REST fallback for initial load
-
-### Why "Connecting..." stays forever
-
-The agent shows "Connecting..." when `BackgroundAgent.isRunning == true` but `DeviceState.isConnected == false`. This means the agent service is running but cannot reach the backend server at the configured URL (default `http://127.0.0.1:5050`).
-
-**To connect**: The backend Flask server (`python backend/app.py`) must be running on port 5050. If testing locally with a USB-connected phone, ADB reverse-forward is needed:
-```bash
-adb reverse tcp:5050 tcp:5050
-```
-This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
-
-**Without backend**: The agent works standalone. droidlink can control the device directly via port 9800 without needing the backend at all.
+> **The architecture and connection flow now live in the docs suite.** This diagram is a
+> quick orientation; for the full picture read **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+> (the four components + data flow) and **[docs/FLEET_CONTRACT.md](docs/FLEET_CONTRACT.md)** (the
+> agent ↔ backend protocol: register/heartbeat/state/commands, HMAC, pairing, capabilities). The
+> "why the agent stays on Connecting…" note is in
+> [ARCHITECTURE.md](docs/ARCHITECTURE.md#why-the-agent-stays-on-connecting).
 
 ---
 
@@ -471,7 +454,7 @@ See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
 See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md).
 
 - [x] Docs index (`docs/README.md`) + getting-started walkthrough + fixed root README docs table
-- [ ] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
+- [x] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
 - [ ] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
 - [ ] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
 - [ ] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
