@@ -1,0 +1,39 @@
+{
+  "name": "devicekit-notification-capture",
+  "display_name": "Notification Capture",
+  "version": "1.0.0",
+  "category": "monitoring",
+  "description": "Reads each capable device's notification feed on a schedule, records it to an extension-owned table (deduped, filtered, retained), forwards matches onto the notification bus, and unlocks the wait_for_notification automation step — the primitive that reads OTP/2FA codes so 'log into app X' becomes a five-step automation.",
+  "author": "Juan Denis",
+  "permissions": ["device.control", "network"],
+  "min_devicekit_version": "1.0.0",
+
+  "entry_point": "routes:bp",
+  "url_prefix": "/ext/devicekit-notification-capture",
+  "models": "models:register",
+  "step_types": "steps:register",
+  "ai_tools": "tools:register",
+  "lifecycle": { "install": "lifecycle:on_install", "uninstall": "lifecycle:on_uninstall" },
+
+  "jobs": [
+    { "kind": "devicekit_notification_capture.poll", "handler": "capture:poll" }
+  ],
+  "schedules": [
+    {
+      "name": "devicekit-notification-capture-poll",
+      "kind": "devicekit_notification_capture.poll",
+      "interval_seconds": 60,
+      "startup_delay_seconds": 20,
+      "max_attempts": 1
+    }
+  ],
+
+  "config_schema": {
+    "package_allowlist": { "type": "string", "label": "Package allowlist (comma-separated; empty = all)", "secret": false },
+    "regex_filter": { "type": "string", "label": "Regex filter (title+text; empty = all)", "secret": false },
+    "retention_days": { "type": "number", "label": "Retention (days)", "secret": false },
+    "forward_to_bus": { "type": "boolean", "label": "Forward matches to notification bus", "secret": false }
+  },
+
+  "automation_templates": ["automations/otp-login.json"]
+}

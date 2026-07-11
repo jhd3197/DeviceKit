@@ -1,6 +1,6 @@
 # Plan 15 — Extension Pack One: Browser, File Explorer, Notification Capture
 
-**Status:** 🚧 in progress — Phase 1 ✅, Phase 2 ✅, Phase 3 ✅ (`devicekit-explorer` backend verbs + builtin Files tab/page)
+**Status:** 🚧 in progress — Phases 1–4 ✅ (browser, explorer, notification-capture shipped); Phase 5 (registry + docs) remaining
 **Inspired by:** ServerKit validated its plugin platform by shipping real builtin plugins
 against it; DeviceKit's platform (plans 03/04) shipped with exactly one —
 `devicekit-webhook-notify`. This plan builds the first *device-facing* extensions and, in
@@ -187,7 +187,7 @@ composing through the bus, not importing each other.
 | 1 ✅ | `automation_templates` wiring + scaffolder `--full` mode (`scripts/new_extension.py`) | reserved manifest seam becomes real |
 | 2 ✅ | `devicekit-browser`: CDP session core → device API → pool routing (round-robin, FQL membership, sticky sessions) → AI tools + step types | wire-protocol extension; gated write tools; fleet-level dispatch |
 | 3 ✅ | `devicekit-explorer`: backend verbs → frontend Files tab/page | builtin frontend path end-to-end |
-| 4 | `devicekit-notification-capture`: poller → tables → `wait_for_notification` → bus forwarding | jobs/schedules + extension tables + bus composition |
+| 4 ✅ | `devicekit-notification-capture`: poller → tables → `wait_for_notification` → bus forwarding | jobs/schedules + extension tables + bus composition |
 | 5 | registry entries, EXTENSIONS.md updates, template automations | marketplace shows a real catalog |
 
 **Phase 1 notes (as shipped).** `automation_templates` is now seeded at activation
@@ -242,6 +242,26 @@ lands. Synced via `scripts/sync-builtin-frontends.mjs` (`--check` clean); `npm r
 passes; `tests/test_explorer_extension.py` (4 tests). Live file ops need an online agent
 (same agent endpoints core's working file routes use); verified structurally (503 path +
 contribution publish + AI-tool binding).
+
+**Phase 4 notes (as shipped).** `devicekit-notification-capture` is the first real external
+user of plan-05 jobs/schedules and the plan-06 bus. It ships: an `ext_..._events` table; a
+poll job (`capture:poll`) on a 60s owned schedule that reads each capable device's agent
+`/notifications` feed, filters (package allowlist + regex), dedupes (sha1 key), records, prunes
+by retention, and — when `forward_to_bus` is on — emits the `notification.captured` catalog
+event onto the bus; the `wait_for_notification` step type; two read AI tools
+(`recent_notifications`, `wait_for_notification`); a blueprint to read the feed / trigger a
+poll; and the OTP-login automation template. `wait_for_notification` is the headline: it
+snapshots the current feed as a baseline and blocks for a *newly arrived* match — deliberately
+**not** timestamp-based, because the phone clock runs ~10h off the host, so only a
+new-since-baseline test is reliable; its first capture group flows into `{{otp}}` via the
+phase-2 `store_as` mechanism. "Capable" tolerates the agent reporting `capabilities` as a list
+or a map (real agents send a list). Two acknowledged coarsenesses, both matching the plan: the
+scheduled poll is 60s (fine for a capture log; the OTP step polls the agent directly at ~1.5s
+for latency), and bus delivery to a channel still requires an operator to enable a built-in
+webhook/email channel — the `devicekit-webhook-notify` *extension* is a separate delivery path,
+not a bus subscriber. Proof: `tests/test_notification_capture_extension.py` (5 tests: contrib
++ schedule + catalog + OTP template, poll dedup, OTP extraction via capture AND the step type,
+bus forward, uninstall purge). Live capture needs an online agent with notification access.
 
 Phases 2–4 are independent of each other (parallelizable after phase 1); phase 5 last.
 

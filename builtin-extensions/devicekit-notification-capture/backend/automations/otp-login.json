@@ -1,0 +1,14 @@
+{
+  "name": "App login with OTP (skeleton)",
+  "description": "Log into an app, then read the 2FA code from the SMS notification and submit it. Fill in the app package, the login field labels/coordinates, the SMS package, and the OTP regex. The wait_for_notification step stores the first capture group as {{otp}}. Seeded by devicekit-notification-capture.",
+  "steps": [
+    { "type": "open_app", "config": { "package": "com.example.app" } },
+    { "type": "tap_by_text", "config": { "text": "Log in" } },
+    { "type": "type_text", "config": { "text": "my-username" } },
+    { "type": "press_key", "config": { "key": "enter" } },
+    { "type": "wait_for_notification", "config": { "package": "com.google.android.apps.messaging", "pattern": "(\\d{6})", "timeout": 90, "store_as": "otp" } },
+    { "type": "type_text", "config": { "text": "{{otp}}" } },
+    { "type": "press_key", "config": { "key": "enter" } }
+  ],
+  "tags": ["notification-capture", "otp"]
+}
