@@ -1,3 +1,8 @@
+> **Historical design doc — superseded.** This is the original Phase-16 design. For how the AI
+> layer actually works today (the confirmation gate, session modes, NL automation, self-healing,
+> per-device models), read **[docs/ai-agent.md](docs/ai-agent.md)**. This file is kept for design
+> history; where it disagrees with the shipped system, the shipped system is right.
+
 # Phase 16: Prompture Integration — Technical Design
 
 ## Overview

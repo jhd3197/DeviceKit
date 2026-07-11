@@ -198,7 +198,9 @@
 - [ ] Streaming responses via `ask_stream()` for live "thinking" feedback on frontend (deferred)
 - [ ] Conversation export/import for persistence across backend restarts (deferred)
 
-See [prompture_integration.md](./prompture_integration.md) for full technical design.
+See [docs/ai-agent.md](docs/ai-agent.md) for the shipped AI layer (the confirmation gate, session
+modes, NL automation, and self-healing added since); [prompture_integration.md](./prompture_integration.md)
+is the original design doc.
 
 ---
 
@@ -456,7 +458,7 @@ See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md)
 - [x] Docs index (`docs/README.md`) + getting-started walkthrough + fixed root README docs table
 - [x] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
 - [x] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
-- [ ] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
+- [x] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
 - [ ] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
 
 ### Phase 37: Extension Dependencies + SERP
