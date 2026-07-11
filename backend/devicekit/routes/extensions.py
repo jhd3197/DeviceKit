@@ -138,9 +138,14 @@ def make_blueprint(client, limiter):
     @bp.route('/extensions/<slug>', methods=['DELETE'])
     def extensions_uninstall(slug):
         purge = request.args.get('purge', '').lower() in ('1', 'true', 'yes')
-        if client.uninstall_extension(slug, purge=purge):
-            return '', 204
-        return jsonify({'error': 'Extension not found'}), 404
+        force = request.args.get('force', '').lower() in ('1', 'true', 'yes')
+        try:
+            if client.uninstall_extension(slug, purge=purge, force=force):
+                return '', 204
+            return jsonify({'error': 'Extension not found'}), 404
+        except ValueError as e:
+            # Blocked by the dependency graph (an active dependent still requires it).
+            return jsonify({'error': str(e)}), 409
 
     @bp.route('/extensions/<slug>/update', methods=['POST'])
     def extensions_update(slug):

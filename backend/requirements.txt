@@ -13,3 +13,4 @@ flask-limiter==3.8.0
 SQLAlchemy==2.0.23
 alembic==1.14.1
 croniter==3.0.3
+websocket-client==1.9.0

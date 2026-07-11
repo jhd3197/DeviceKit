@@ -26,29 +26,12 @@
        └─────────────┴───────────────┴─────────────────┘
 ```
 
-### Connection Flow
-
-1. **Agent app** starts BackgroundAgent service on the phone
-2. Agent tries to register with backend at `POST /agent-device/register`
-3. If backend is reachable, agent sends heartbeats (5s) and state reports (2s)
-4. If backend is NOT reachable, agent runs in **standalone mode** — the embedded HTTP server (port 9800) still works for direct droidlink control
-5. **droidlink** (Python) connects directly to the agent's HTTP server:
-   - USB: `adb forward tcp:9800 tcp:9800` then `http://127.0.0.1:9800`
-   - WiFi: `http://<device-ip>:9800` (auto-discovered via UDP 9801)
-6. **Backend** merges ADB-connected devices + agent-registered devices into a unified `/devices` list
-7. **Frontend** subscribes to backend SSE stream (`/events/stream`) for real-time device state, with REST fallback for initial load
-
-### Why "Connecting..." stays forever
-
-The agent shows "Connecting..." when `BackgroundAgent.isRunning == true` but `DeviceState.isConnected == false`. This means the agent service is running but cannot reach the backend server at the configured URL (default `http://127.0.0.1:5050`).
-
-**To connect**: The backend Flask server (`python backend/app.py`) must be running on port 5050. If testing locally with a USB-connected phone, ADB reverse-forward is needed:
-```bash
-adb reverse tcp:5050 tcp:5050
-```
-This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
-
-**Without backend**: The agent works standalone. droidlink can control the device directly via port 9800 without needing the backend at all.
+> **The architecture and connection flow now live in the docs suite.** This diagram is a
+> quick orientation; for the full picture read **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+> (the four components + data flow) and **[docs/FLEET_CONTRACT.md](docs/FLEET_CONTRACT.md)** (the
+> agent ↔ backend protocol: register/heartbeat/state/commands, HMAC, pairing, capabilities). The
+> "why the agent stays on Connecting…" note is in
+> [ARCHITECTURE.md](docs/ARCHITECTURE.md#why-the-agent-stays-on-connecting).
 
 ---
 
@@ -215,7 +198,9 @@ This makes the phone's `127.0.0.1:5050` route to the computer's port 5050.
 - [ ] Streaming responses via `ask_stream()` for live "thinking" feedback on frontend (deferred)
 - [ ] Conversation export/import for persistence across backend restarts (deferred)
 
-See [prompture_integration.md](./prompture_integration.md) for full technical design.
+See [docs/ai-agent.md](docs/ai-agent.md) for the shipped AI layer (the confirmation gate, session
+modes, NL automation, and self-healing added since); [prompture_integration.md](./prompture_integration.md)
+is the original design doc.
 
 ---
 
@@ -454,3 +439,52 @@ See [docs/plans/14-devicekit-python-package.md](docs/plans/14-devicekit-python-p
 - [x] Published to PyPI as [`droidlink` 0.1.0](https://pypi.org/project/droidlink/) — `pip install droidlink`
 - [x] PyPI Trusted Publishing workflow on `v*` tags (activate by adding the publisher on pypi.org + a `pypi` environment on the repo)
 - [x] PyPI README quickstart; monorepo README/docs/CI now install `droidlink` from PyPI
+
+### Phase 35: Extension Pack One
+**Goal**: The first device-facing extensions — prove every contribution point the platform claims with things a fleet actually wants.
+See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
+
+- [x] Wire `automation_templates` manifest key (validated since plan 03, connected to nothing) + scaffold the three extensions
+- [x] `devicekit-browser`: CDP-over-adb driver for device Chrome (goto/content/evaluate/screenshot API, gated AI tools, browser step types)
+- [x] `devicekit-browser` pool routing: round-robin fetch across selected devices (explicit list / FQL / all), busy-skip + failover, sticky sessions for multi-step flows
+- [x] `devicekit-explorer`: dashboard file manager — backend delete/mkdir/rename/preview verbs + builtin frontend Files tab/page (first real builtin-frontend user)
+- [x] `devicekit-notification-capture`: poll agent notification listener → capture table → `wait_for_notification` step type (OTP extraction) → plan-06 bus forwarding
+- [x] Registry entries with real sha256s + EXTENSIONS.md device-scoped API convention + stale jobs/notify doc fix
+
+### Phase 36: Documentation Suite ✅
+**Goal**: A navigable docs *system* like ServerKit's — orientation, reference, and decision records, not scattered markdown.
+See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md).
+
+- [x] Docs index (`docs/README.md`) + getting-started walkthrough + fixed root README docs table
+- [x] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
+- [x] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
+- [x] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
+- [x] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
+
+### Phase 37: Extension Dependencies + SERP ✅
+**Goal**: Extensions compose — one plugin calls another's surface instead of reimplementing it.
+See [docs/plans/17-extension-dependencies-and-serp.md](docs/plans/17-extension-dependencies-and-serp.md).
+
+- [x] `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement
+- [x] `sdk.extension(slug)` in-process dispatch seam + `ExtensionUnavailable` + lifecycle graph (block/warn uninstall, disable degradation)
+- [x] `devicekit-serp`: per-engine adapters → `search()` over `devicekit-browser` pool fetch → AI tool + `serp_search` step type
+- [x] Registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section
+
+### Phase 38: App-Driver Extensions ✅
+**Goal**: Install an extension, have it provision a third-party app, and drive it through UI drift across a fleet.
+See [docs/plans/18-app-driver-extensions.md](docs/plans/18-app-driver-extensions.md).
+
+- [x] `device_requirements` manifest key + consent-card surfacing + `provision()` (pinned APK push/install/verify + `ext_*_provisioned` table) — reusable `devicekit_sdk.appdriver` framework
+- [x] Version-adapter framework: version-ranged flows (add/remove/reorder steps, not just selectors), per-device resolution, fail-loud on no match (three distinct unsupported outcomes)
+- [x] Device version policy: `max_app_version` ceiling (global + per-device), over-ceiling refusal (`VersionPolicyError`), optional gated `reprovision` (downgrade to pinned build)
+- [x] `devicekit-vpn`: version-keyed adapters + allowed-countries gate + gated connect/disconnect/status/provision tools + device-side verify-egress automation template
+- [x] Registry entry (bundled, real sha256) + EXTENSIONS docs "app-driver extensions" section (guide + manifest-reference + sdk-reference)
+
+### Phase 39: AI Consolidation + Prompture Hub
+**Goal**: One AI path (Prompture, no direct provider SDKs) and an optional self-hosted `prompture-hub` backend that keeps provider keys out of DeviceKit.
+See [docs/plans/19-ai-consolidation-and-prompture-hub.md](docs/plans/19-ai-consolidation-and-prompture-hub.md).
+
+- [ ] Retire `agent.py` legacy `_ask_openai`/`_ask_anthropic` + `AI_PROVIDER`; drop direct `openai`/`anthropic` deps (all AI via Prompture)
+- [ ] `ai.backend` = direct|hub setting + hub OpenAI-compat driver wiring (base_url `/v1`, masked `ph_` key); `direct` stays default
+- [ ] Hub health probe (`/health`, `/v1/models`) + `/ai/hub/health` route + model picker from hub + setup links (`pip install prompture-hub`, dashboard)
+- [ ] Per-extension scoped hub keys via `/admin/*` (allowed-model whitelist + daily spend cap at consent) routed through `sdk.ai(slug)` — contains untrusted extension LLM use

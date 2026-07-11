@@ -20,6 +20,13 @@ from devicekit_sdk.permissions import PermissionDenied
 
 require_permission = permissions.require
 
+
+class ExtensionUnavailable(RuntimeError):
+    """Raised when a sibling extension addressed via :func:`extension` is not installed or not
+    active. A dependent should catch this and degrade gracefully — the sibling may be disabled
+    at runtime (its routes 503, its API raises this) even though install-time deps were met."""
+
+
 # The live host (Client composite). Set once at boot by ExtensionsMixin.init_extensions().
 _host = None
 # Slug currently being activated — lets register_* attribute contributions for teardown.
@@ -134,6 +141,43 @@ class _DeviceControl:
         require_permission(self._slug, "adb")
         return _host.run_adb_command(f"shell {command}", device=self._device_id)
 
+    def install_apk(self, apk_path):
+        """Install (``adb install -r``) a local APK onto the device. Returns
+        ``(success: bool, output: str)``. Requires ``adb`` — the app-driver provisioning
+        primitive (plan 18)."""
+        require_permission(self._slug, "adb")
+        return _host.install_apk(apk_path, device=self._device_id)
+
+    def uninstall_app(self, package):
+        """Uninstall a package (``adb uninstall``). Requires ``adb``. Used by the gated
+        ``reprovision`` remediation (uninstall + reinstall the pinned build)."""
+        require_permission(self._slug, "adb")
+        return _host.run_adb_command(["uninstall", package], device=self._device_id)
+
+    def app_version(self, package):
+        """Return the installed ``versionName`` of ``package`` (via ``dumpsys package``), or
+        ``None`` if the app is not installed. Requires ``device.control`` — the cheap per-call
+        read the version-adapter resolver uses to pick the right adapter per device (plan 18)."""
+        import re
+        require_permission(self._slug, "device.control")
+        out = _host.run_adb_command(
+            ["shell", "dumpsys", "package", package], device=self._device_id) or ""
+        m = re.search(r"versionName=(\S+)", out)
+        return m.group(1) if m else None
+
+    def forward(self, local_port, remote="localabstract:chrome_devtools_remote"):
+        """Set up an ``adb forward`` from a local TCP port to a device socket (default the
+        Chrome DevTools abstract socket). Returns adb stdout. Requires ``adb``."""
+        require_permission(self._slug, "adb")
+        return _host.run_adb_command(
+            ["forward", f"tcp:{local_port}", remote], device=self._device_id)
+
+    def remove_forward(self, local_port):
+        """Tear down a previously created ``adb forward`` for ``local_port``. Requires ``adb``."""
+        require_permission(self._slug, "adb")
+        return _host.run_adb_command(
+            ["forward", "--remove", f"tcp:{local_port}"], device=self._device_id)
+
 
 def device_control(slug, device_id):
     return _DeviceControl(slug, device_id)
@@ -178,6 +222,70 @@ class _AiBinder:
 
 def ai(slug):
     return _AiBinder(slug)
+
+
+# --------------------------------------------------- sibling extensions (plan 17)
+class _ExtensionClient:
+    """Thin client for a sibling extension's ``provides`` surface. Attribute access returns a
+    callable that dispatches **in-process** to the sibling's registered method — resolved fresh
+    on every call and gated on the sibling being *active* at that moment, so a runtime disable
+    surfaces as :class:`ExtensionUnavailable` instead of a stale reference or a mystery 503.
+    Not a raw import of the sibling's module: internals stay private and the status guard is
+    honoured."""
+
+    def __init__(self, slug):
+        self._slug = slug
+
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        slug = self._slug
+
+        def _invoke(*args, **kwargs):
+            if _host is None:
+                raise ExtensionUnavailable("extension host is not ready")
+            return _host.invoke_extension_api(slug, name, args, kwargs)
+
+        _invoke.__name__ = name
+        return _invoke
+
+    def available(self):
+        """True if the sibling is installed and active right now (a cheap pre-check so a
+        dependent can branch without catching :class:`ExtensionUnavailable`)."""
+        if _host is None:
+            return False
+        row = _host.get_extension(self._slug)
+        return bool(row and row.get("status") == "active")
+
+
+def extension(slug):
+    """Return a thin client for a sibling extension's :func:`provides` surface (plan 17).
+    Calls dispatch in-process and raise :class:`ExtensionUnavailable` if the sibling is not
+    installed/active. Declare the dependency with the ``requires_extensions`` manifest key so
+    install refuses when the sibling is absent."""
+    return _ExtensionClient(slug)
+
+
+class _ProvidesBinder:
+    """Passed to an extension's ``provides`` register function; collects the curated set of
+    callables that siblings may invoke via :func:`extension`. Registration is scoped to the
+    current slug (like AI tools), so disable/uninstall tears the surface down."""
+
+    def __init__(self, slug):
+        self._slug = slug
+
+    def method(self, func=None, *, name=None):
+        """Register a sibling-callable method. Usable bare (``api.method(fetch)``) or with an
+        explicit name (``api.method(fetch, name="get")``)."""
+        def _register(f):
+            n = name or getattr(f, "__name__", "method")
+            _host._register_extension_api(self._slug, n, f)
+            return f
+        return _register(func) if func is not None else _register
+
+
+def provides(slug):
+    return _ProvidesBinder(slug)
 
 
 # --------------------------------------------------------------------------- jobs
@@ -251,11 +359,18 @@ class _Notify:
 
 notify = _Notify()
 
+# App-driver framework (plan 18): provisioning + version adapters + policy. Imported last so
+# the submodule sees a fully-populated devicekit_sdk namespace (it uses ``db``/``device_control``
+# lazily inside functions, so the partial-module cache during this import is safe).
+from devicekit_sdk import appdriver  # noqa: E402
+
 __all__ = [
     "set_host", "get_host", "devicekit_version",
     "db", "logger", "config", "broadcast",
     "devices", "device_control",
     "register_step_type", "register_fql_field", "ai",
+    "extension", "provides", "ExtensionUnavailable",
     "jobs", "notify",
     "permissions", "require_permission", "PermissionDenied",
+    "appdriver",
 ]

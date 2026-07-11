@@ -217,7 +217,7 @@ DeviceKit/
 │   ├── app.py          Entrypoint
 │   ├── config.py       Environment config
 │   └── devicekit/      Core package
-│       ├── client.py             Mixin composition (28 mixins)
+│       ├── client.py             Mixin composition (31 mixins)
 │       ├── device_manager.py     Thread-safe device pool
 │       └── mixins/               ADB, UIAutomator2, CDP, DynamoDB, S3,
 │                                 Automation, Prompture, Fleet, Streaming,
@@ -257,10 +257,19 @@ graph LR
 
 ## Documentation
 
+The full documentation suite lives in **[`docs/`](docs/README.md)** — start there for the map.
+The highlights:
+
 | Guide | Description |
 | --- | --- |
+| [Documentation Index](docs/README.md) | The map — every doc, grouped by what it answers |
+| [Getting Started](docs/getting-started.md) | Install → run backend → connect a device → first automation |
+| [Architecture](docs/ARCHITECTURE.md) | The four components and how they talk (read this first) |
+| [Fleet Contract](docs/FLEET_CONTRACT.md) | Agent ↔ backend protocol: register/heartbeat/state/commands, HMAC, capabilities |
+| [Extension Guide](docs/extensions/guide.md) | Build an extension — contribution points, SDK, manifest, tutorial |
+| [AI Agent](docs/ai-agent.md) | Prompture-backed device agents: tools, confirmation gate, session modes |
+| [droidlink](docs/droidlink.md) | Drive a DeviceKit-managed fleet from Python (`pip install droidlink`) |
 | [CI/CD Setup](docs/ci-setup.md) | GitHub Actions integration, device fixtures, parallel testing |
-| [Prompture Integration](prompture_integration.md) | AI agent architecture, tool registration, multi-provider config |
 | [Roadmap](ROADMAP.md) | Full development history and upcoming phases |
 | [Environment Variables](#environment-variables) | All configuration options |
 

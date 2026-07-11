@@ -30,6 +30,7 @@ from devicekit.models import InstalledExtension
 from devicekit.models.extension import STATUS_ACTIVE, STATUS_DISABLED, STATUS_ERROR
 from devicekit.extension_manifest import (
     validate_manifest, safe_extract_path, assert_devicekit_compatible, table_prefix,
+    range_satisfies,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,10 @@ class ExtensionsMixin:
         # (bound per-device; write tools are always gated, plan 13).
         if not hasattr(self, "_ext_ai_tools"):
             self._ext_ai_tools = {}
+        # slug -> {method_name: callable} — the sibling-callable surface an extension exposes
+        # via its ``provides`` register func, dispatched by sdk.extension(slug) (plan 17).
+        if not hasattr(self, "_ext_extension_api"):
+            self._ext_extension_api = {}
         os.makedirs(_EXTENSIONS_PKG_DIR, exist_ok=True)
 
         # Let the SDK façade route extension calls back to this live host.
@@ -90,6 +95,32 @@ class ExtensionsMixin:
 
     def _register_ai_tool(self, slug, name, func, description, is_write=True):
         self._ext_ai_tools.setdefault(slug, []).append((name, func, description, is_write))
+
+    # ------------------------------------------------------------------
+    # Sibling-callable API surface (sdk.extension / sdk.provides — plan 17)
+    # ------------------------------------------------------------------
+    def _register_extension_api(self, slug, name, func):
+        """Record a callable an extension exposes to siblings via its ``provides`` func."""
+        self._ext_extension_api.setdefault(slug, {})[name] = func
+
+    def invoke_extension_api(self, slug, name, args=(), kwargs=None):
+        """Dispatch ``sdk.extension(slug).<name>(*args, **kwargs)`` in-process. Raises
+        :class:`devicekit_sdk.ExtensionUnavailable` if the sibling is not installed or not
+        active (so a runtime disable degrades a dependent cleanly), and ``AttributeError`` if
+        the method isn't part of the sibling's provided surface."""
+        import devicekit_sdk
+        kwargs = kwargs or {}
+        row = self.get_extension(slug)
+        if not row:
+            raise devicekit_sdk.ExtensionUnavailable(
+                f"extension '{slug}' is not installed")
+        if row.get("status") != STATUS_ACTIVE:
+            raise devicekit_sdk.ExtensionUnavailable(
+                f"extension '{slug}' is not active (status: {row.get('status')})")
+        func = (self._ext_extension_api.get(slug) or {}).get(name)
+        if func is None:
+            raise AttributeError(f"extension '{slug}' provides no method '{name}'")
+        return func(*args, **kwargs)
 
     # ------------------------------------------------------------------
     # Queries
@@ -154,6 +185,50 @@ class ExtensionsMixin:
             return e.to_dict()["config"]
 
     # ------------------------------------------------------------------
+    # Dependency graph (requires_extensions — plan 17)
+    # ------------------------------------------------------------------
+    def missing_required_extensions(self, manifest):
+        """Return a list of unmet dependency problems for ``manifest`` — one per required
+        sibling that is not installed or whose installed version is out of range. Empty list
+        means every dependency is satisfied. Read-only; used by both preview and the install
+        gate so the consent UI and the hard failure agree."""
+        requires = manifest.get("requires_extensions") or {}
+        if not isinstance(requires, dict):
+            return []
+        problems = []
+        for dep_slug, dep_range in requires.items():
+            dep = self.get_extension(dep_slug)
+            if not dep:
+                problems.append(
+                    f"requires '{dep_slug}' ({dep_range or 'any'}), which is not installed — "
+                    f"install {dep_slug} first")
+            elif not range_satisfies(dep["version"], dep_range):
+                problems.append(
+                    f"requires '{dep_slug}' {dep_range}, but v{dep['version']} is installed")
+        return problems
+
+    def assert_required_extensions(self, manifest):
+        """Refuse install when a ``requires_extensions`` dependency is missing or version-
+        incompatible. Mirrors :func:`assert_devicekit_compatible`, one level down
+        (extension→extension instead of extension→host)."""
+        problems = self.missing_required_extensions(manifest)
+        if problems:
+            name = manifest.get("display_name") or manifest.get("name")
+            raise ValueError(f"{name} " + "; ".join(problems) + ".")
+
+    def active_dependents(self, slug):
+        """Slugs of currently-active extensions that declare ``slug`` in their
+        ``requires_extensions`` — i.e. who would break if ``slug`` went away."""
+        dependents = []
+        for ext in self.list_extensions():
+            if ext["slug"] == slug or ext.get("status") != STATUS_ACTIVE:
+                continue
+            requires = (ext.get("manifest") or {}).get("requires_extensions") or {}
+            if isinstance(requires, dict) and slug in requires:
+                dependents.append(ext["slug"])
+        return dependents
+
+    # ------------------------------------------------------------------
     # Preview (consent flow) — resolves sha256 without installing
     # ------------------------------------------------------------------
     def preview_extension(self, *, url=None, path=None, zip_bytes=None):
@@ -171,6 +246,20 @@ class ExtensionsMixin:
         existing = self.get_extension(manifest["name"])
         if existing:
             warnings.append(f"'{manifest['name']}' is already installed (v{existing['version']}).")
+        # Surface unmet extension dependencies as warnings so the consent UI can offer to
+        # install the chain (the actual install still hard-fails on them via the gate).
+        warnings.extend(self.missing_required_extensions(manifest))
+        # Surface an app-driver's device requirement up front (plan 18): the extension will drive
+        # (and, for user_supplied_apk, install) a third-party app — no surprise device changes.
+        device_reqs = manifest.get("device_requirements") or {}
+        if device_reqs.get("package"):
+            pkg = device_reqs["package"]
+            if device_reqs.get("provision", "user_supplied_apk") == "user_supplied_apk":
+                warnings.append(
+                    f"This extension drives {pkg}; you must supply its APK (installed "
+                    f"hash-pinned onto each device).")
+            else:
+                warnings.append(f"This extension drives {pkg} (installed via the Play Store).")
         return {
             "slug": manifest["name"],
             "display_name": manifest.get("display_name", manifest["name"]),
@@ -180,6 +269,8 @@ class ExtensionsMixin:
             "permissions": manifest.get("permissions", []),
             "contributions": manifest.get("contributions", {}),
             "config_schema": manifest.get("config_schema", {}),
+            "requires_extensions": manifest.get("requires_extensions", {}),
+            "device_requirements": device_reqs,
             "source_url": source_url,
             "sha256": digest,
             "warnings": warnings,
@@ -232,9 +323,15 @@ class ExtensionsMixin:
             "source": extension_registry.source_label(),
         }
 
-    def install_extension_from_registry(self, slug, *, force=False):
+    def install_extension_from_registry(self, slug, *, force=False, install_deps=True):
         """Install a registry entry: bundled entries come from ``builtin-extensions/``,
-        others download from the entry's pinned ``source`` + ``sha256``."""
+        others download from the entry's pinned ``source`` + ``sha256``.
+
+        With ``install_deps`` (default), any required siblings the entry declares (registry
+        ``requires`` → manifest ``requires_extensions``) that aren't already present+compatible
+        are installed first from the registry — the "install the chain" UX (plan 17). The
+        install-time gate still enforces the requirement, so a dep that can't be resolved from
+        the registry produces the same clear "install X first" error."""
         from devicekit import extension_registry
         entry = extension_registry.get_entry(slug)
         if not entry:
@@ -245,6 +342,8 @@ class ExtensionsMixin:
             "min_devicekit_version": entry.get("min_devicekit_version"),
             "max_devicekit_version": entry.get("max_devicekit_version"),
         })
+        if install_deps:
+            self._install_required_chain(entry, force=force, _seen=set())
         if entry.get("bundled"):
             return self.install_builtin_extension(slug, force=force or True)
         if not entry.get("source"):
@@ -252,6 +351,33 @@ class ExtensionsMixin:
         return self.install_extension_from_url(
             entry["source"], expected_sha256=entry.get("sha256"),
             force=force, source="registry")
+
+    def _install_required_chain(self, entry, *, force, _seen):
+        """Install (from the registry) every required sibling of ``entry`` that isn't already
+        present+compatible — depth-first so transitive deps land first. Cycle-guarded by
+        ``_seen``; a dep absent from the registry is left for the install gate to report."""
+        from devicekit import extension_registry
+        requires = entry.get("requires")
+        if not isinstance(requires, dict):
+            return
+        for dep_slug, dep_range in requires.items():
+            if dep_slug in _seen:
+                continue
+            _seen.add(dep_slug)
+            current = self.get_extension(dep_slug)
+            if current and range_satisfies(current["version"], dep_range):
+                continue  # already satisfied
+            dep_entry = extension_registry.get_entry(dep_slug)
+            if not dep_entry:
+                continue  # unresolvable — assert_required_extensions will raise a clear error
+            self._install_required_chain(dep_entry, force=force, _seen=_seen)  # transitive first
+            logger.info(f"Installing required dependency '{dep_slug}' before '{entry['slug']}'")
+            if dep_entry.get("bundled"):
+                self.install_builtin_extension(dep_slug, force=True)
+            elif dep_entry.get("source"):
+                self.install_extension_from_url(
+                    dep_entry["source"], expected_sha256=dep_entry.get("sha256"),
+                    force=force, source="registry")
 
     def check_extension_updates(self, force=False):
         """Compare installed versions against the registry."""
@@ -352,6 +478,7 @@ class ExtensionsMixin:
         manifest, prefix = self._read_manifest(buf)
         validate_manifest(manifest)
         assert_devicekit_compatible(manifest)
+        self.assert_required_extensions(manifest)
 
         slug = manifest["name"]
         existing = self.get_extension(slug)
@@ -493,8 +620,9 @@ class ExtensionsMixin:
         best-effort so a partial contribution set still yields a usable extension."""
         import devicekit_sdk
 
-        # Fresh AI-tool list on (re-)activation so we don't double-bind.
+        # Fresh AI-tool list + provided-API surface on (re-)activation so we don't double-bind.
         self._ext_ai_tools[slug] = []
+        self._ext_extension_api[slug] = {}
         self._ext_contributions.setdefault(slug, {})
 
         with devicekit_sdk._activating(slug):
@@ -525,25 +653,94 @@ class ExtensionsMixin:
             if ai_ref:
                 self._import_ext_ref(slug, ai_ref)(devicekit_sdk.ai(slug))
 
-            # Jobs — func returns {kind: handler(job_dict) -> result} (plan 05).
-            jobs_ref = manifest.get("jobs")
-            if jobs_ref:
-                specs = self._import_ext_ref(slug, jobs_ref)()
-                for kind, fn in (specs or {}).items():
-                    devicekit_sdk.jobs.register(kind, fn)
+            # Provided API — func receives a binder and registers the curated set of callables
+            # siblings may reach through sdk.extension(slug) (plan 17).
+            provides_ref = manifest.get("provides")
+            if provides_ref:
+                self._import_ext_ref(slug, provides_ref)(devicekit_sdk.provides(slug))
 
-            # Schedules — func returns a list of dicts:
-            # {name, kind, interval_seconds|cron, payload?, max_attempts?}.
-            schedules_ref = manifest.get("schedules")
-            if schedules_ref:
-                specs = self._import_ext_ref(slug, schedules_ref)()
-                for spec in (specs or []):
-                    devicekit_sdk.jobs.schedule(
-                        spec["name"], spec["kind"],
-                        interval_seconds=spec.get("interval_seconds"),
-                        cron=spec.get("cron"), payload=spec.get("payload"),
-                        max_attempts=spec.get("max_attempts", 1),
-                        startup_delay_seconds=spec.get("startup_delay_seconds", 0))
+            # Jobs — a list of {kind, handler: "module:func"} (matches the manifest spec).
+            # Each handler is handler(job_dict) -> result (plan 05).
+            for job in (manifest.get("jobs") or []):
+                kind = job.get("kind")
+                handler_ref = job.get("handler")
+                if kind and handler_ref:
+                    handler = self._import_ext_ref(slug, handler_ref)
+                    devicekit_sdk.jobs.register(kind, handler)
+
+            # Schedules — a list of {name, kind, interval_seconds|cron, payload?,
+            # max_attempts?, startup_delay_seconds?}. Owned by the extension so disable/enable
+            # pauses/resumes them and uninstall deletes them.
+            for spec in (manifest.get("schedules") or []):
+                devicekit_sdk.jobs.schedule(
+                    spec["name"], spec["kind"],
+                    interval_seconds=spec.get("interval_seconds"),
+                    cron=spec.get("cron"), payload=spec.get("payload"),
+                    max_attempts=spec.get("max_attempts", 1),
+                    startup_delay_seconds=spec.get("startup_delay_seconds", 0))
+
+        # Automation templates — ready-made automations shipped by the extension. Registered
+        # outside the _activating scope: teardown is by provenance tag (on uninstall), not the
+        # per-slug contribution tracker, because these are durable rows the user may edit.
+        self._register_automation_templates(slug, manifest)
+
+    _AUTOMATION_SOURCE_TAG = "ext:{slug}"
+
+    def _register_automation_templates(self, slug, manifest):
+        """Seed the extension's ``automation_templates`` (a list of JSON paths, relative to the
+        extracted backend dir) as real automations, tagged ``ext:<slug>`` for provenance.
+
+        Idempotent: skips any template whose automation (same tag + name) already exists, so it
+        is safe to re-run on every boot and on enable. No-op if the host composite lacks the
+        AutomationMixin."""
+        templates = manifest.get("automation_templates")
+        if not templates or not hasattr(self, "create_automation"):
+            return
+        source_tag = self._AUTOMATION_SOURCE_TAG.format(slug=slug)
+        try:
+            existing_names = {
+                a["name"] for a in self.list_automations()
+                if source_tag in (a.get("tags") or [])
+            }
+        except Exception as e:
+            logger.warning(f"Could not list automations for template seeding ('{slug}'): {e}")
+            existing_names = set()
+
+        base = self._ext_dir(slug)
+        for rel in templates:
+            try:
+                path = safe_extract_path(base, str(rel))
+                if not os.path.isfile(path):
+                    logger.warning(f"Extension '{slug}' automation_template not found: {rel}")
+                    continue
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                name = data.get("name") or os.path.splitext(os.path.basename(str(rel)))[0]
+                if name in existing_names:
+                    continue
+                tags = list(dict.fromkeys((data.get("tags") or []) + [source_tag]))
+                self.create_automation(
+                    name=name,
+                    description=data.get("description", ""),
+                    steps=data.get("steps") or [],
+                    tags=tags)
+                existing_names.add(name)
+                logger.info(f"Seeded automation template '{name}' from extension '{slug}'")
+            except Exception as e:
+                logger.warning(f"Failed to seed automation_template {rel!r} for '{slug}': {e}")
+
+    def _remove_automation_templates(self, slug):
+        """Delete automations this extension seeded (tagged ``ext:<slug>``). Called on uninstall
+        so the marketplace round-trips cleanly; disable leaves them in place."""
+        if not hasattr(self, "list_automations") or not hasattr(self, "delete_automation"):
+            return
+        source_tag = self._AUTOMATION_SOURCE_TAG.format(slug=slug)
+        try:
+            for a in self.list_automations():
+                if source_tag in (a.get("tags") or []):
+                    self.delete_automation(a["id"])
+        except Exception as e:
+            logger.warning(f"Failed to remove seeded automations for '{slug}': {e}")
 
     def _import_ext_ref(self, slug, ref):
         """Resolve a ``module:attr`` manifest reference under ``devicekit.extensions.<slug>``."""
@@ -663,6 +860,15 @@ class ExtensionsMixin:
             logger.warning(f"Deregister on disable failed for '{slug}': {e}")
         if slug in self._extensions:
             self._extensions[slug]["status"] = STATUS_DISABLED
+        # Warn (don't block) if active dependents rely on this extension — their
+        # sdk.extension(slug) calls now raise ExtensionUnavailable until it's re-enabled. This
+        # is the intended graceful-degradation path (plan 17), not an error.
+        dependents = self.active_dependents(slug)
+        if dependents:
+            logger.warning(
+                f"Disabled extension '{slug}' is still required by active extension(s) "
+                f"{', '.join(dependents)}; their sdk.extension('{slug}') calls will raise "
+                f"ExtensionUnavailable until it is re-enabled.")
         logger.info(f"Disabled extension '{slug}'")
         return result
 
@@ -694,15 +900,28 @@ class ExtensionsMixin:
                 logger.warning(f"Pausing schedules for '{slug}' failed: {e}")
         self._ext_contributions.pop(slug, None)
         self._ext_ai_tools.pop(slug, None)
+        # Drop the sibling-callable surface; sdk.extension(slug) then raises ExtensionUnavailable
+        # (the status guard also blocks it, but clearing keeps the map honest).
+        self._ext_extension_api.pop(slug, None)
 
     # ------------------------------------------------------------------
     # Uninstall (keep-data default; purge drops ext_<slug>_* tables)
     # ------------------------------------------------------------------
-    def uninstall_extension(self, slug, purge=False):
+    def uninstall_extension(self, slug, purge=False, force=False):
         row = self.get_extension(slug)
         if not row:
             return False
         manifest = row["manifest"]
+
+        # Dependency graph (plan 17): block uninstall while an active dependent still requires
+        # this extension. Decision (logged here): block rather than warn-and-cascade — cascading
+        # uninstalls is surprising and hard to undo; the user disables/uninstalls dependents
+        # first, or passes force=True to override.
+        dependents = self.active_dependents(slug)
+        if dependents and not force:
+            raise ValueError(
+                f"Cannot uninstall '{slug}': still required by active extension(s) "
+                f"{', '.join(dependents)}. Uninstall or disable them first, or force.")
 
         # Best-effort lifecycle hook + contribution teardown before removing files.
         self._run_lifecycle_hook(slug, manifest, "uninstall", purge=purge)
@@ -717,6 +936,9 @@ class ExtensionsMixin:
                     self.delete_scheduled_job(sch["id"])
             except Exception as e:
                 logger.warning(f"Removing schedules for '{slug}' failed: {e}")
+
+        # Remove automations this extension seeded from its automation_templates.
+        self._remove_automation_templates(slug)
 
         if purge:
             self._drop_ext_tables(slug)

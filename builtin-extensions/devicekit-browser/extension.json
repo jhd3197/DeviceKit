@@ -1,0 +1,26 @@
+{
+  "name": "devicekit-browser",
+  "display_name": "Browser (CDP Driver)",
+  "version": "1.0.0",
+  "category": "automation",
+  "description": "Drive each device's real Chrome over the Chrome DevTools Protocol (adb forward to chrome_devtools_remote): navigate, read the DOM, evaluate JS, screenshot. Treat N devices as one browser farm with round-robin/random/LRU pools, FQL membership, busy-skip failover, and sticky sessions.",
+  "author": "Juan Denis",
+  "permissions": ["adb", "device.control", "network"],
+  "min_devicekit_version": "1.0.0",
+
+  "entry_point": "routes:bp",
+  "url_prefix": "/ext/devicekit-browser",
+  "models": "models:register",
+  "step_types": "steps:register",
+  "ai_tools": "tools:register",
+  "provides": "api:register",
+  "lifecycle": { "install": "lifecycle:on_install", "uninstall": "lifecycle:on_uninstall" },
+
+  "config_schema": {
+    "port_base": { "type": "number", "label": "Forward port base", "secret": false },
+    "port_count": { "type": "number", "label": "Forward port count", "secret": false },
+    "cdp_timeout": { "type": "number", "label": "CDP command timeout (seconds)", "secret": false }
+  },
+
+  "automation_templates": ["automations/browser-demo.json"]
+}

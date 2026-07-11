@@ -1,0 +1,22 @@
+{
+  "name": "VPN Egress Check",
+  "description": "Steady-state VPN health for one device: read the in-app connection status, then verify the REAL exit country with a device-side geo-IP check (the app UI can't reveal a wrong-country connection). If egress drifted, reconnect to the preferred location and re-verify; a still-wrong exit — or a device on an unsupported/over-ceiling app version — fails the run loud so the notification bus alerts, and screenshot-on-failure captures evidence. The final screenshot is the success evidence. Target it across the fleet with an FQL query; each device resolves its own version adapter.",
+  "tags": ["vpn", "monitoring"],
+  "steps": [
+    {
+      "type": "vpn_status",
+      "name": "Read in-app status",
+      "config": { "store_as": "vpn" }
+    },
+    {
+      "type": "vpn_ensure_egress",
+      "name": "Verify egress + self-heal drift",
+      "config": {}
+    },
+    {
+      "type": "screenshot",
+      "name": "Evidence",
+      "config": {}
+    }
+  ]
+}

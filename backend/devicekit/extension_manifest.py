@@ -34,6 +34,12 @@ CATEGORIES = {"automation", "monitoring", "integration", "ai", "utility"}
 # gate (declaration-based, not a sandbox — see plan 03 / ServerKit ADR 0002).
 KNOWN_PERMISSIONS = {"adb", "device.control", "filesystem", "network", "llm"}
 
+# How an app-driver extension (``device_requirements``, plan 18) puts its target app on a
+# device. ``user_supplied_apk`` is the honest default: the user uploads the APK once, the
+# extension pins its sha256 and installs it. ``play_store`` fires a ``market://`` intent and
+# lets the user finish — no pinning, weaker guarantees.
+PROVISION_MODES = {"user_supplied_apk", "play_store"}
+
 # Contribution kinds and the keys each entry must carry (frontend wiring, plan 04).
 REQUIRED_CONTRIB_KEYS = {
     "nav": ("label", "route"),
@@ -89,7 +95,7 @@ def validate_manifest(manifest):
                 f"unknown permissions {unknown} (known: {sorted(KNOWN_PERMISSIONS)})")
 
     # module:attr references
-    for field in ("entry_point", "models", "step_types", "fql_fields", "ai_tools"):
+    for field in ("entry_point", "models", "step_types", "fql_fields", "ai_tools", "provides"):
         val = manifest.get(field)
         if val is not None and not _is_module_ref(val):
             problems.append(f"{field} must be a 'module:attr' string (got {val!r})")
@@ -125,9 +131,45 @@ def validate_manifest(manifest):
     if config_schema is not None and not isinstance(config_schema, dict):
         problems.append("config_schema must be an object of field -> spec")
 
+    # requires_extensions — a map of sibling slug -> loose-semver version range. Declared here,
+    # enforced at install (mixins/extensions.py) the same way ``min/max_devicekit_version`` gates
+    # extension→host. An empty/absent map means no dependencies (unchanged behavior).
+    requires = manifest.get("requires_extensions")
+    if requires is not None:
+        if not isinstance(requires, dict):
+            problems.append("requires_extensions must be an object of slug -> version range")
+        else:
+            for dep_slug, dep_range in requires.items():
+                if not isinstance(dep_slug, str) or not SLUG_RE.match(dep_slug):
+                    problems.append(
+                        f"requires_extensions key {dep_slug!r} is not a valid slug")
+                elif not isinstance(dep_range, str):
+                    problems.append(
+                        f"requires_extensions[{dep_slug!r}] must be a version range string "
+                        f"(e.g. '>=0.1.0'), got {dep_range!r}")
+
     templates = manifest.get("automation_templates")
     if templates is not None and not isinstance(templates, list):
         problems.append("automation_templates must be a list of paths")
+
+    # device_requirements — an app-driver extension declares the third-party app it drives, the
+    # version range it has adapters for, and how the app gets onto a device (plan 18). Surfaced
+    # in the consent card and enforced at drive time (SDK appdriver), not at install (the app may
+    # legitimately be absent until the user provisions it).
+    reqs = manifest.get("device_requirements")
+    if reqs is not None:
+        if not isinstance(reqs, dict):
+            problems.append("device_requirements must be an object")
+        else:
+            if not reqs.get("package") or not isinstance(reqs.get("package"), str):
+                problems.append("device_requirements.package is required (the app's package name)")
+            sv = reqs.get("supported_versions")
+            if sv is not None and not isinstance(sv, str):
+                problems.append("device_requirements.supported_versions must be a version-range string")
+            prov = reqs.get("provision")
+            if prov is not None and prov not in PROVISION_MODES:
+                problems.append(
+                    f"device_requirements.provision must be one of {sorted(PROVISION_MODES)}, got {prov!r}")
 
     url_prefix = manifest.get("url_prefix")
     if url_prefix is not None and (not isinstance(url_prefix, str) or not url_prefix.startswith("/")):
@@ -207,6 +249,45 @@ def version_satisfies(current, minimum=None, maximum=None):
     return True
 
 
+# A single range constraint: an optional comparator then a version (``>=0.1.0``, ``1.2``, ``<2``).
+_RANGE_TOKEN_RE = re.compile(r'^(>=|<=|==|=|>|<)?\s*(\d[\w.-]*)$')
+
+
+def range_satisfies(current, spec):
+    """True if version ``current`` satisfies a loose range ``spec``.
+
+    A ``spec`` is one or more space/comma-separated constraints, ANDed together — e.g.
+    ``'>=0.1.0'``, ``'>=1.0 <2.0'``, ``'1.2.0'`` (bare ⇒ ``>=``), or ``'*'``/empty (any). Reuses
+    :func:`_parse_version`, so it is the same loose matcher as ``min/max_devicekit_version``.
+    An unparseable constraint is skipped (permissive) rather than treated as a hard block.
+    """
+    if spec is None:
+        return True
+    spec = str(spec).strip()
+    if not spec or spec == "*":
+        return True
+    cur = _parse_version(current)
+    for token in re.split(r'[\s,]+', spec):
+        if not token:
+            continue
+        m = _RANGE_TOKEN_RE.match(token)
+        if not m:
+            continue
+        op = m.group(1) or ">="
+        target = _parse_version(m.group(2))
+        if op == ">=" and not (cur >= target):
+            return False
+        if op == ">" and not (cur > target):
+            return False
+        if op == "<=" and not (cur <= target):
+            return False
+        if op == "<" and not (cur < target):
+            return False
+        if op in ("==", "=") and not (cur == target):
+            return False
+    return True
+
+
 def assert_devicekit_compatible(manifest):
     """Raise :class:`ManifestError` if the manifest's version gate excludes this DeviceKit."""
     minv = manifest.get("min_devicekit_version")
@@ -239,6 +320,11 @@ def manifest_spec():
             "config_schema": "{field: {type, secret}}",
             "automation_templates": "[relative/path.json]",
             "contributions": "{nav, routes, widgets, command_palette, page_titles}",
+            "requires_extensions": "{sibling-slug: version range} — enforced at install",
+            "provides": "module:func registering sibling-callable methods (sdk.extension(slug))",
+            "device_requirements": "{package, supported_versions, provision} — the third-party "
+                                   "app an app-driver extension drives (plan 18)",
         },
+        "provision_modes": sorted(PROVISION_MODES),
         "devicekit_version": DEVICEKIT_VERSION,
     }

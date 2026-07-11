@@ -1,5 +1,6 @@
 import uuid
 import time
+import re
 import logging
 import threading
 import base64
@@ -585,6 +586,7 @@ class AutomationMixin:
 
         step_results = []
         completed = 0
+        variables = {}  # run-scoped variables captured via step config `store_as`
         self_heal_enabled = run_record.get("self_heal", False)
 
         for idx, step in enumerate(steps):
@@ -614,11 +616,12 @@ class AutomationMixin:
             }
 
             try:
-                output = self._execute_step(step, device_id)
+                output = self._execute_step(step, device_id, variables=variables)
                 elapsed = int((time.time() - start_ts) * 1000)
                 result["status"] = "completed"
                 result["output"] = str(output) if output else None
                 result["duration_ms"] = elapsed
+                self._store_step_var(variables, step, output)
                 completed += 1
             except Exception as e:
                 error_str = str(e)
@@ -639,7 +642,7 @@ class AutomationMixin:
                             exec_box = {}
 
                             def _apply_heal():
-                                exec_box["output"] = self._execute_step(healed_step, device_id)
+                                exec_box["output"] = self._execute_step(healed_step, device_id, variables=variables)
                                 exec_box["ran"] = True
                                 return str(exec_box["output"]) if exec_box["output"] else ""
 
@@ -664,6 +667,7 @@ class AutomationMixin:
                                 result["original_step"] = copy.deepcopy(step)
                                 result["healed_step"] = healed_step
                                 result["heal_reasoning"] = reasoning
+                                self._store_step_var(variables, step, output)
                                 completed += 1
                                 healed = True
                                 self._notify_run_healed(run_record, idx, result.get("heal_reasoning", ""))
@@ -751,9 +755,14 @@ class AutomationMixin:
         self._save_run(run_record)
         self._active_runs.pop(run_record["id"], None)
 
-    def _execute_step(self, step, device_id):
+    def _execute_step(self, step, device_id, variables=None):
         step_type = step.get("type")
         config = step.get("config", {})
+        # Run-scoped variables: interpolate {{name}} placeholders in the step config against
+        # values captured by earlier steps (via their config's ``store_as``). Additive — a
+        # config with no placeholders is returned unchanged.
+        if variables:
+            config = self._interpolate_vars(config, variables)
 
         spec = self.step_type_registry().get(step_type)
         if spec is None:
@@ -762,6 +771,57 @@ class AutomationMixin:
         if executor is None or not callable(executor):
             raise ValueError(f"Step type '{step_type}' has no executor")
         return executor(self, config, device_id)
+
+    # Placeholder like {{otp}} — a simple, safe run-scoped variable reference. A missing
+    # variable is left literal rather than raising, so a typo can't crash a run.
+    _VAR_RE = re.compile(r"\{\{\s*([a-zA-Z_]\w*)\s*\}\}")
+
+    def _interpolate_vars(self, value, variables):
+        if isinstance(value, str):
+            return self._VAR_RE.sub(lambda m: str(variables.get(m.group(1), m.group(0))), value)
+        if isinstance(value, dict):
+            return {k: self._interpolate_vars(v, variables) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._interpolate_vars(v, variables) for v in value]
+        return value
+
+    @staticmethod
+    def _store_step_var(variables, step, output):
+        """If a step's config declares ``store_as``, capture its output into the run's
+        variable bag so later steps can reference it as ``{{name}}``.
+
+        Scalars store verbatim as ``str(output)`` (unchanged). A **structured** output (dict or
+        list — e.g. ``serp_search``'s ``{results: [...]}``) is stored as JSON under ``{name}``,
+        and, for a dict, each scalar top-level value is also exposed as ``{name}_{key}`` so an
+        automation can chain on it (``{{serp_device_id}}``); a ``{results:[{url:...}]}`` shape
+        additionally yields ``{name}_top_url`` — the "open first result" primitive. The run's
+        ``{{name}}`` interpolation is flat-string only, so these derived keys are how structured
+        data becomes referenceable without a nested-path variable system."""
+        import json as _json
+
+        name = (step.get("config") or {}).get("store_as")
+        if not name:
+            return
+        name = str(name)
+        if isinstance(output, dict):
+            try:
+                variables[name] = _json.dumps(output, default=str)
+            except Exception:
+                variables[name] = str(output)
+            for key, val in output.items():
+                if isinstance(val, (str, int, float, bool)):
+                    variables[f"{name}_{key}"] = str(val)
+            results = output.get("results")
+            if (isinstance(results, list) and results
+                    and isinstance(results[0], dict) and results[0].get("url")):
+                variables[f"{name}_top_url"] = str(results[0]["url"])
+        elif isinstance(output, list):
+            try:
+                variables[name] = _json.dumps(output, default=str)
+            except Exception:
+                variables[name] = str(output)
+        else:
+            variables[name] = "" if output is None else str(output)
 
     # ---------------------------------------------------------------
     # Run management

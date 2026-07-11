@@ -28,6 +28,13 @@ _FIELDS = {
     "slug": None, "display_name": None, "description": "", "version": "0.0.0",
     "category": "utility", "author": "", "first_party": False, "bundled": False,
     "permissions": list, "min_devicekit_version": None, "max_devicekit_version": None,
+    # ``requires`` mirrors the manifest ``requires_extensions`` (slug -> version range) so the
+    # marketplace can show "requires devicekit-browser" and the installer can offer the chain
+    # (plan 17).
+    "requires": dict,
+    # ``device_requirements`` mirrors the manifest key (plan 18) so the marketplace consent card
+    # can show "drives com.expressvpn.vpn — you supply the APK" before install.
+    "device_requirements": dict,
     "source": None, "sha256": None, "repo": None, "homepage": None,
     "logo": None, "screenshots": list,
 }

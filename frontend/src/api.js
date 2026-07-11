@@ -56,6 +56,27 @@ export const api = {
   downloadFileUrl: (id, path) =>
     `${API}/devices/${id}/files/download?path=${encodeURIComponent(path)}`,
 
+  // File Explorer extension (devicekit-explorer) — device-scoped /ext/<slug>/... verbs.
+  explorerList: (id, path) =>
+    request(`/ext/devicekit-explorer/devices/${id}/files?path=${encodeURIComponent(path || '/sdcard')}`),
+  explorerDelete: (id, path) =>
+    request(`/ext/devicekit-explorer/devices/${id}/files`, {
+      method: 'DELETE',
+      body: JSON.stringify({ path }),
+    }),
+  explorerMkdir: (id, path) =>
+    request(`/ext/devicekit-explorer/devices/${id}/files/mkdir`, {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    }),
+  explorerRename: (id, from, to) =>
+    request(`/ext/devicekit-explorer/devices/${id}/files/rename`, {
+      method: 'POST',
+      body: JSON.stringify({ from, to }),
+    }),
+  explorerPreviewUrl: (id, path) =>
+    `${API}/ext/devicekit-explorer/devices/${id}/files/preview?path=${encodeURIComponent(path)}`,
+
   // Pipeline
   getBuilds: () => request('/pipeline/builds'),
   getBuild: (id) => request(`/pipeline/builds/${id}`),

@@ -1,0 +1,17 @@
+{
+  "name": "devicekit-serp",
+  "display_name": "SERP (Device Search)",
+  "version": "1.0.0",
+  "category": "integration",
+  "description": "Search the web from your fleet's real Chrome — not a key-based SERP API. Runs google/bing/duckduckgo queries through devicekit-browser's device pool, so every search carries a real-device fingerprint and residential IP, rotates across the fleet, and costs nothing per query. Owns no device code: it is a thin consumer of the devicekit-browser extension (plan 17's dependency demo).",
+  "author": "Juan Denis",
+  "permissions": ["network"],
+  "min_devicekit_version": "1.0.0",
+
+  "requires_extensions": { "devicekit-browser": ">=0.1.0" },
+
+  "ai_tools": "tools:register",
+  "step_types": "steps:register",
+
+  "automation_templates": ["automations/serp-demo.json"]
+}
