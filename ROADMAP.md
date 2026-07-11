@@ -451,7 +451,7 @@ See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
 - [x] `devicekit-notification-capture`: poll agent notification listener → capture table → `wait_for_notification` step type (OTP extraction) → plan-06 bus forwarding
 - [x] Registry entries with real sha256s + EXTENSIONS.md device-scoped API convention + stale jobs/notify doc fix
 
-### Phase 36: Documentation Suite
+### Phase 36: Documentation Suite ✅
 **Goal**: A navigable docs *system* like ServerKit's — orientation, reference, and decision records, not scattered markdown.
 See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md).
 
@@ -459,7 +459,7 @@ See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md)
 - [x] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
 - [x] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
 - [x] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
-- [ ] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
+- [x] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
 
 ### Phase 37: Extension Dependencies + SERP
 **Goal**: Extensions compose — one plugin calls another's surface instead of reimplementing it.

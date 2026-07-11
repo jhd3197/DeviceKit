@@ -68,6 +68,24 @@ roof, not absorbed into it.
 - [docs/plans/](plans/00-overview.md) — the numbered improvement plans (the design docs behind
   every phase). The dependency graph and phase ordering live in the overview.
 
+## Tooling
+
+These docs render on GitHub as-is. Optionally, build them into a searchable static site with
+[MkDocs Material](https://squidfunk.github.io/mkdocs-material/):
+
+```bash
+pip install -r docs/requirements.txt
+mkdocs serve     # live preview at http://127.0.0.1:8000
+mkdocs build     # static site into ./site
+```
+
+Link integrity is enforced in CI (`.github/workflows/docs.yml`) by a GitHub-relative-aware
+dead-link checker you can also run locally:
+
+```bash
+python scripts/check_docs_links.py
+```
+
 ---
 
 > Docs describe **shipped code**. Every reference here maps to something in the repo today; where

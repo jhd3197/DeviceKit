@@ -1,0 +1,86 @@
+# MkDocs Material config for the DeviceKit documentation suite (plan 16 phase 5).
+#
+# Build locally:
+#     pip install -r docs/requirements.txt
+#     mkdocs serve            # live preview on http://127.0.0.1:8000
+#     mkdocs build            # static site into ./site
+#
+# The canonical rendering is GitHub (relative links resolve there). This site is a
+# convenience over the same markdown. Repo-root links (../README.md, ../ROADMAP.md) point
+# back into the repository and are intentionally not part of the built site; the strict
+# link gate is scripts/check_docs_links.py, which understands GitHub-relative semantics.
+
+site_name: DeviceKit Documentation
+site_description: A unified Android device management and test automation platform.
+repo_url: https://github.com/jhd3197/DeviceKit
+repo_name: jhd3197/DeviceKit
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+# Internal plan docs are design history — kept in the repo, excluded from the built site.
+exclude_docs: |
+  plans/
+
+# Link integrity is enforced by scripts/check_docs_links.py (GitHub-relative aware), so we
+# don't double-fail on the intentional repo-root links here. Nav must still be complete.
+validation:
+  links:
+    not_found: ignore
+    absolute_links: ignore
+    unrecognized_links: ignore
+  nav:
+    omitted_files: ignore
+
+nav:
+  - Home: README.md
+  - Getting Started: getting-started.md
+  - Architecture: ARCHITECTURE.md
+  - Fleet Contract: FLEET_CONTRACT.md
+  - AI Agent: ai-agent.md
+  - droidlink: droidlink.md
+  - CI/CD Setup: ci-setup.md
+  - Extensions:
+      - Guide: extensions/guide.md
+      - First Extension Tutorial: extensions/tutorial.md
+      - Manifest Reference: extensions/manifest-reference.md
+      - SDK Reference: extensions/sdk-reference.md
+  - Decision Records:
+      - Overview: adr/README.md
+      - 0001 · In-process extensions: adr/0001-in-process-extensions.md
+      - 0002 · No third-party frontend code: adr/0002-no-third-party-frontend-code.md
+      - 0003 · SQLAlchemy source of truth: adr/0003-sqlalchemy-source-of-truth.md
+      - 0004 · droidlink name on PyPI: adr/0004-droidlink-name-on-pypi.md
+      - 0005 · Extension AI tools always gated: adr/0005-extension-ai-tools-always-gated.md

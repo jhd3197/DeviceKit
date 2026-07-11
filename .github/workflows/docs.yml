@@ -1,0 +1,48 @@
+name: Docs
+
+# Enforces docs link integrity and builds the MkDocs site (plan 16 phase 5).
+# GitHub-hosted, no device access — safe for fork PRs.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'prompture_integration.md'
+      - 'mkdocs.yml'
+      - 'scripts/check_docs_links.py'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'prompture_integration.md'
+      - 'mkdocs.yml'
+      - 'scripts/check_docs_links.py'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Strict link gate — GitHub-relative aware; fails on any broken file/anchor link.
+      - name: Check docs links
+        run: python scripts/check_docs_links.py
+
+      - name: Install MkDocs
+        run: pip install -r docs/requirements.txt
+
+      # Compiles the site — catches nav/config errors and malformed markdown.
+      - name: Build site
+        run: mkdocs build
