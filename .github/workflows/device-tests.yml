@@ -10,7 +10,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  DEVICEKIT_URL: ${{ secrets.DEVICEKIT_URL || 'http://127.0.0.1:5050' }}
+  DEVICEKIT_URL: ${{ secrets.DEVICEKIT_URL || 'http://127.0.0.1:7317' }}
   DEVICEKIT_API_KEY: ${{ secrets.DEVICEKIT_API_KEY }}
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
           python app.py &
           echo "Waiting for backend to start..."
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:5050/health > /dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:7317/health > /dev/null 2>&1; then
               echo "Backend is ready"
               break
             fi

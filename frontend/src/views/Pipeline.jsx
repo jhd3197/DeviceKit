@@ -143,7 +143,7 @@ export default function Pipeline() {
 {`pip install droidlink
 pytest tests/ \\
   --device=SERIAL \\
-  --devicekit-url=http://localhost:5050`}
+  --devicekit-url=http://localhost:7317`}
                 </pre>
               </div>
             ) : (

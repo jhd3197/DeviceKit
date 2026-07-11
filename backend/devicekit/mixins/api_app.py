@@ -106,7 +106,7 @@ class ApiAppMixin:
 
         return app
 
-    def api_app(self, host='0.0.0.0', port=5050, debug=True):
+    def api_app(self, host='0.0.0.0', port=7317, debug=True):
         try:
             self.start_uiautomator2_server()
         except Exception as e:

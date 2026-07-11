@@ -13,8 +13,8 @@ if errorlevel 1 (
 
 echo Starting DeviceKit dev servers...
 echo.
-echo   Backend  : http://localhost:5050
-echo   Frontend : http://localhost:5173
+echo   Backend  : http://localhost:7317
+echo   Frontend : http://localhost:7318
 echo.
 
 REM Start backend in a new window

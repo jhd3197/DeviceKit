@@ -54,14 +54,27 @@ switch ($Command) {
     'dev' {
         Write-Host 'Starting DeviceKit dev servers...'
         Write-Host ''
-        Write-Host '  Backend  : http://localhost:5050'
-        Write-Host '  Frontend : http://localhost:5173'
+        Write-Host '  Backend  : http://localhost:7317'
+        Write-Host '  Frontend : http://localhost:7318'
         Write-Host ''
 
         Start-Process pwsh -WorkingDirectory "$root\backend" `
             -ArgumentList '-NoExit', '-Command', 'python app.py'
 
-        Start-Sleep -Seconds 2
+        # Wait for the backend to answer /health before opening the frontend,
+        # so the first page load doesn't race the boot.
+        Write-Host 'Waiting for backend...' -NoNewline
+        for ($i = 0; $i -lt 30; $i++) {
+            try {
+                $null = Invoke-WebRequest -Uri 'http://127.0.0.1:7317/health' -TimeoutSec 2 -UseBasicParsing
+                Write-Host ' ready.'
+                break
+            }
+            catch {
+                Write-Host '.' -NoNewline
+                Start-Sleep -Seconds 1
+            }
+        }
 
         Start-Process pwsh -WorkingDirectory "$root\frontend" `
             -ArgumentList '-NoExit', '-Command', 'npm run dev'

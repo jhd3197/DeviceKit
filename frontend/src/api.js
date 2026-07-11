@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5050'
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:7317'
 const API_KEY = import.meta.env.VITE_API_KEY || localStorage.getItem('devicekit_api_key') || ''
 
 async function request(url, options = {}) {

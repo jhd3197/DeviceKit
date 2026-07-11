@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API
-API_PORT = int(os.getenv("API_PORT", 5050))
+API_PORT = int(os.getenv("API_PORT", 7317))
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 
 # AWS
