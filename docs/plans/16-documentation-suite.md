@@ -1,6 +1,6 @@
 # Plan 16 — Documentation Suite
 
-**Status:** proposed
+**Status:** 🚧 in progress — Phase 1 ✅
 **Inspired by:** ServerKit ships a real docs *system*, not a pile of markdown — a
 navigable site, an extension author guide, an SDK reference, a fleet/agent contract, and
 ADRs that record *why* the architecture is the way it is. DeviceKit has grown the same
@@ -97,7 +97,7 @@ extensions' APIs.
 
 | Phase | Delivers | Notes |
 |---|---|---|
-| 1 | `docs/README.md` index + `getting-started.md` + fix root README docs table | The on-ramp. Everything else hangs off the index. |
+| 1 ✅ | `docs/README.md` index + `getting-started.md` + fix root README docs table | The on-ramp. Everything else hangs off the index. |
 | 2 | `ARCHITECTURE.md` (extract from ROADMAP) + `FLEET_CONTRACT.md` | The two "how the system works" docs. ROADMAP keeps a short diagram + a link. |
 | 3 | Split `EXTENSIONS.md` → `extensions/guide.md` + `manifest-reference.md` + `sdk-reference.md`; add `tutorial.md` | Reference vs. narrative. Old path redirects/points to the new tree so external links don't rot. |
 | 4 | `ai-agent.md` (from `prompture_integration.md`) + `droidlink.md` + the five ADRs | The remaining subsystems + decision records. |

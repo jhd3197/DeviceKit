@@ -470,7 +470,7 @@ See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
 **Goal**: A navigable docs *system* like ServerKit's — orientation, reference, and decision records, not scattered markdown.
 See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md).
 
-- [ ] Docs index (`docs/README.md`) + getting-started walkthrough + fixed root README docs table
+- [x] Docs index (`docs/README.md`) + getting-started walkthrough + fixed root README docs table
 - [ ] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
 - [ ] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
 - [ ] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
