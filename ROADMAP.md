@@ -455,7 +455,7 @@ See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md)
 
 - [x] Docs index (`docs/README.md`) + getting-started walkthrough + fixed root README docs table
 - [x] `ARCHITECTURE.md` (extracted from ROADMAP) + `FLEET_CONTRACT.md` (agent ↔ backend protocol, HMAC, capabilities)
-- [ ] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
+- [x] Split EXTENSIONS.md into guide + manifest-reference + sdk-reference; add first-extension tutorial
 - [ ] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
 - [ ] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
 
