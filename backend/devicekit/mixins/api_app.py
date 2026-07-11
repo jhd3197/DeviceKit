@@ -1,11 +1,12 @@
 import logging
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from devicekit.routes import register_all
+from devicekit.services.gate import authorize
 
 logger = logging.getLogger(__name__)
 
@@ -39,31 +40,14 @@ class ApiAppMixin:
 
         @app.before_request
         def check_auth():
-            # Skip auth for health, CORS preflight, SSE
-            if request.path in ('/health',) or request.method == 'OPTIONS':
-                return None
-            # Agent device endpoints use agent token
-            if request.path.startswith('/agent-device/'):
-                token = request.headers.get('X-Agent-Token', '')
-                if not client.validate_agent_token(token):
-                    return jsonify({'error': 'Invalid agent token'}), 401
-                return None
-            # SSE endpoint: allow query param fallback (EventSource can't send headers)
-            if request.path == '/events/stream':
-                key = request.headers.get('X-API-Key') or request.args.get('api_key', '')
-                if not client.validate_api_key(key):
-                    return jsonify({'error': 'Invalid API key'}), 401
-                return None
-            # Stream endpoint: allow query param fallback (MJPEG streams can't send headers)
-            if '/stream' in request.path and request.path.startswith('/devices/'):
-                key = request.headers.get('X-API-Key') or request.args.get('api_key', '')
-                if not client.validate_api_key(key):
-                    return jsonify({'error': 'Invalid API key'}), 401
-                return None
-            # All other endpoints use API key
-            key = request.headers.get('X-API-Key', '')
-            if not client.validate_api_key(key):
-                return jsonify({'error': 'Invalid API key'}), 401
+            # Single shared decision function (also exercised directly by the test-suite).
+            # Resolves the principal, attaches it to ``g``, and returns an error response when
+            # authentication is missing or the write gate blocks the request.
+            principal, error = authorize(client, request)
+            g.principal = principal
+            if error:
+                body, status = error
+                return jsonify(body), status
             return None
 
         @app.after_request

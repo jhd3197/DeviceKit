@@ -10,6 +10,7 @@ identical to the pre-refactor closure routes (plan 02); only the code layout cha
 """
 from devicekit.routes import (
     health,
+    auth,
     events,
     devices,
     dashboard,
@@ -39,6 +40,7 @@ from devicekit.routes import (
 # but this mirrors the section order of the original api_app.py for readability.
 BLUEPRINT_MODULES = [
     health,
+    auth,
     events,
     devices,
     dashboard,

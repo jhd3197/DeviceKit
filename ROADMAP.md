@@ -500,7 +500,7 @@ Phases 40–45 come from a closer read of ServerKit ([docs/plans/00-overview.md]
 See [docs/plans/20-identity-rbac-and-secrets.md](docs/plans/20-identity-rbac-and-secrets.md).
 
 - [ ] Opt-in narrow-only `scope_query` retrofit (no workspace context = unchanged behavior)
-- [ ] `User` + login/session + global role + per-feature read/write matrix; `AuthMixin` → principal resolver
+- [x] `User` + login/session + global role + per-feature read/write matrix; `AuthMixin` → principal resolver
 - [ ] Hashed, scoped, multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single global key
 - [ ] User-attributed `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog`
 - [ ] `Workspace` + `WorkspaceMember` scoping devices (born-in-workspace) + automations; capability fold + `ResourceGrant`

@@ -1,6 +1,6 @@
 # Plan 20 — Identity, RBAC, Scoped API Keys, Audit & Secrets Vault
 
-**Status:** proposed
+**Status:** in progress
 **Inspired by:** ServerKit added multi-user tenancy to an *already-shipped single-tenant app
 without a rewrite* — the whole retrofit turns on one `scope_query()` helper where **no
 workspace context in the request = byte-for-byte the old behavior**
@@ -117,14 +117,28 @@ passkeys are heavier (L) — defer until there are real teams.
 
 ## Phases
 
-| Phase | Delivers | Proves |
-|---|---|---|
-| 1 | `User` + login/session + global role + per-feature matrix; `AuthMixin` → principal resolver (solo mode unchanged) | identity substrate exists |
-| 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope |
-| 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what |
-| 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang |
-| 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` |
-| 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security |
+| Phase | Delivers | Proves | Status |
+|---|---|---|---|
+| 1 | `User` + login/session + global role + per-feature matrix; `AuthMixin` → principal resolver (solo mode unchanged) | identity substrate exists | ✅ |
+| 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope | ⏳ |
+| 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ⏳ |
+| 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ⏳ |
+| 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ⏳ |
+| 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security | ⏳ |
+
+### Phase 1 — shipped (backend)
+
+Delivered: `services/permissions.py` (role templates + narrow-only override validation, write⇒read),
+`services/principal.py` (`Principal` + `feature_for_path`), `services/passwords.py` (bcrypt),
+`services/gate.py` (the single `authorize()` decision function the app + tests share), `models/user.py`
+(`User` + `UserSession`, string-UUID PKs / float times), `mixins/identity.py` (user CRUD, sessions,
+`resolve_principal`, last-admin guards, env-bootstrap admin), `routes/auth.py`
+(`/auth/login|logout|session|permissions/schema`, `/users` CRUD admin-only). `api_app` before_request now
+resolves principal → attaches to `g` → gates writes. Migration `c0d0a1b2e001`.
+**Solo mode unchanged:** auth disabled + no users ⇒ full-access `solo` principal; the first created user flips
+the instance to login-required. Verified: 16 new tests + full app boot flow (solo → first user → login → gated
+write) + all 300 pre-existing tests green. *Deviation:* Phase-1 UI (login gate + user management) lands in the
+consolidated plan-20 frontend commit, not inline.
 
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.

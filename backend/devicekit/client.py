@@ -34,6 +34,7 @@ from devicekit.mixins.jobs import JobsMixin
 from devicekit.mixins.notifications import NotificationsMixin
 from devicekit.mixins.metrics_history import MetricsHistoryMixin
 from devicekit.mixins.settings import SettingsMixin
+from devicekit.mixins.identity import IdentityMixin
 
 
 class Client(
@@ -62,6 +63,7 @@ class Client(
     NotificationsMixin,
     MetricsHistoryMixin,
     SettingsMixin,
+    IdentityMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -119,6 +121,13 @@ class Client(
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS
         self.configure_auth(API_KEY, AGENT_TOKENS)
+
+        # Identity/RBAC substrate (plan 20): reset the user-count cache and optionally
+        # bootstrap an admin from the environment. Solo mode (no users) is unchanged.
+        try:
+            self.init_identity()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Identity init skipped: {e}")
 
         # Configure colored logging
         log = logging.getLogger('devicekit')

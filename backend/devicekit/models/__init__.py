@@ -19,6 +19,7 @@ from devicekit.models.metric_alert import MetricAlertRule
 from devicekit.models.notification import (
     Notification, NotificationDelivery, NotificationChannelConfig,
     NotificationPreference, NotificationRecipientSettings)
+from devicekit.models.user import User, UserSession
 
 # Queue Bus + Jobs live in their own packages (plan 05) but must register on the shared
 # ``Base`` here so ``create_all`` and Alembic's autogenerate see every table.
@@ -50,6 +51,8 @@ __all__ = [
     "NotificationChannelConfig",
     "NotificationPreference",
     "NotificationRecipientSettings",
+    "User",
+    "UserSession",
     "QueueGroup",
     "Queue",
     "QueueMessage",
