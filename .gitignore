@@ -65,6 +65,19 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# DeviceKit persistence (SQLite store + WAL sidecars)
+*.db
+*.db-wal
+*.db-shm
+backend/devicekit.db
+backend/recordings/
+backend/output/debug_bundles/
+backend/.apk_cache/
+
+# Installed extensions are extracted here at runtime (tracked: only the package marker)
+backend/devicekit/extensions/*
+!backend/devicekit/extensions/__init__.py
+
 # Scrapy stuff:
 .scrapy
 

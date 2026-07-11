@@ -1,0 +1,47 @@
+name: Frontend CI
+
+# Builds the React app and enforces the builtin-extension frontend drift gate (plan 04).
+# Runs on GitHub-hosted runners for every push/PR — safe for fork PRs (no device access).
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'frontend/**'
+      - 'builtin-extensions/**'
+      - 'scripts/sync-builtin-frontends.mjs'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'builtin-extensions/**'
+      - 'scripts/sync-builtin-frontends.mjs'
+      - '.github/workflows/frontend-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci || npm install
+
+      # Drift gate: the tracked `frontend/src/extensions/<slug>/` copies must match the
+      # source of truth in `builtin-extensions/<slug>/frontend/`. Fails loudly with the
+      # exact out-of-date files if a builtin frontend was edited without re-syncing.
+      - name: Check builtin frontend sync
+        run: node scripts/sync-builtin-frontends.mjs --check
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build

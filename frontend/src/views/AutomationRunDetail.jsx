@@ -19,6 +19,7 @@ import {
   Download,
 } from 'lucide-react'
 import { api } from '../api'
+import ExtensionSlot from '../extensions/ExtensionSlot'
 
 const POLL_INTERVAL = 1500
 
@@ -506,6 +507,9 @@ export default function AutomationRunDetail() {
             </pre>
           </div>
         )}
+
+        {/* Extension panels contributed to the run detail (plan 04) */}
+        <ExtensionSlot name="run-detail.panels" className="space-y-6" run={run} />
       </div>
 
       {/* Failure screenshot overlay */}

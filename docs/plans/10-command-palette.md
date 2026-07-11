@@ -1,6 +1,6 @@
 # Plan 10 — Command Palette
 
-**Status:** proposed
+**Status:** ✅ done (phases 1–3)
 **Inspired by:** ServerKit's `frontend/src/components/CommandPalette.jsx` (cmdk,
 `Cmd/Ctrl+K`, static pages + live entities + extension entries + fuzzy scoring)
 **Depends on:** 09 (soft — shares hooks/styling), 04 (extension entries, optional)
@@ -47,9 +47,15 @@ double as a query launcher.
 
 ## Phases
 
-1. Palette + pages + devices + automations (one component, ~1 day of work).
-2. Actions + recents + extension entries.
-3. FQL mode.
+1. ✅ Palette + pages + devices + automations (`components/CommandPalette.jsx`, cmdk 1.1.1,
+   `Ctrl/Cmd+K`, ported fuzzy scorer, sources fetched on open). Mounted in `App.jsx`.
+2. ✅ Actions + recents + extension entries. Static actions (New Automation, Compare
+   Devices, New Profile, Install Extension); `localStorage` recents (last 6) shown on an
+   empty query; `command_palette` contributions merge in as their own category groups.
+3. ✅ FQL mode. A `>`-prefixed query (or the "Query Fleet…" action) runs `/fleet/query`
+   inline (250 ms debounce, validate/query endpoints untouched); matches list as device rows
+   (enter → `/node/<id>`), with an "Open in Dashboard" row that applies the query via `/?q=`
+   (Dashboard reads the param on mount and runs it).
 
 ## Definition of done
 

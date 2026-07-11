@@ -1,6 +1,6 @@
 # Plan 06 — Notification Bus & Notification Center
 
-**Status:** proposed
+**Status:** ✅ complete — all 3 phases shipped (catalog + in-app bell; webhook + queue delivery; preferences + email + digests)
 **Inspired by:** ServerKit's `backend/app/notifications/` (event catalog, per-channel
 delivery, digests) and `NotificationsContext` / `NotificationBell` on the frontend
 **Depends on:** 01 (delivery rows), 05 (async channel delivery rides the queue)
@@ -64,9 +64,57 @@ happens to be open.
 
 ## Phases
 
-1. Catalog + models + producer + in-app channel over SSE + bell UI.
-2. Webhook channel + delivery rows + retry via queue (plan 05).
-3. Preferences (per-event mute, quiet hours) + email channel + digests.
+1. ✅ Catalog + models + producer + in-app channel over SSE + bell UI.
+   Shipped: `devicekit/notifications/` (`catalog.py` with `register()` + 10 seeded fleet
+   events, `service.py` producer, `channels/inapp.py`); `models/notification.py`
+   (`Notification` + `NotificationDelivery`, epoch timestamps); `NotificationsMixin`
+   (`notify_event`, read/query façade, retention prune job+schedule); `routes/notifications.py`
+   blueprint; migration `c3d4e5f6a7b8`. Producer call sites wired: automation run
+   failed/healed, device offline (heartbeat reaper stopgap in `agent-device/status`),
+   battery critical, storage low. SDK `notify` seam live (`send` + `register_event`, tracked
+   for extension teardown). Frontend: `store/notifications.js` (single-SSE singleton),
+   `NotificationBell` in the sidebar (unread badge, optimistic mark-read, deep links),
+   `/notifications` history view. Tests: `test_notifications.py` (14).
+2. ✅ Webhook channel + delivery rows + retry via queue (plan 05).
+   Shipped: `channels/webhook.py` (Slack/Discord/generic render + transmit), `crypto.py`
+   (Fernet at-rest secret encryption keyed on `DEVICEKIT_SECRET_KEY`, dev fallback),
+   `config.py` (`NotificationChannelService`: per-channel enable/config, secret masking +
+   mask-resubmit preservation, severity-threshold gating), `consumer.py`
+   (`notification.deliver` job kind — render+transmit, success→sent, failure→raise so the
+   Queue Bus retries/dead-letters, delivery row mirrors outcome). Producer
+   `_plan_async_channels` writes a pending delivery per enabled channel and enqueues one
+   delivery job (target persisted as a non-secret host hint). Channel API
+   (`GET/PUT /notifications/channels[/<channel>]`, `POST .../test`). Migration
+   `d4e5f6a7b8c9`. Frontend: `NotificationChannels` config panel (schema-driven, masked
+   secrets, Test button) behind the Notifications "Channels" toggle. Tests:
+   `test_notification_channels.py` (11).
+3. ✅ Preferences (per-event mute, quiet hours) + email channel + digests.
+   Shipped: `channels/email.py` (SMTP via stdlib, encrypted creds, retries on the delivery
+   job); `preferences.py` (`PreferenceService`: full/per-channel mutes, quiet-hours window
+   with critical break-through, digest membership; `flush_digests` batches pending markers
+   into one summary per recipient/channel). Producer wired: full mute drops the event,
+   in-app mute keeps history, quiet hours suppress async (in-app kept), digested events drop
+   a marker instead of pushing. Models `NotificationPreference` + `NotificationRecipientSettings`;
+   `notification.digest.flush` job + 5-min schedule. Preferences API
+   (`GET/PUT /notifications/preferences`, `PUT .../mute`, `POST /notifications/digests/flush`).
+   Migration `e5f6a7b8c9d0`. Frontend: `NotificationPreferences` panel (quiet hours, digest
+   config + event picker, per-event mute list) behind the Notifications "Preferences" toggle;
+   `NotificationChannels` now also surfaces the email channel. Tests:
+   `test_notification_preferences.py` (12).
+
+## Deviations / notes
+
+- **Device-offline producer** rides the existing stale-heartbeat sweep in
+  `GET /agent-device/status` (15s threshold) rather than the dedicated heartbeat reaper,
+  which is Plan 07 (Phase 29) — the notification fires today and will move to the reaper when
+  it lands.
+- **`regression.detected`** is seeded in the catalog and firable via the SDK/producer, but no
+  core call site was wired (visual-regression verdicts live deep inside `screenshot_assert`
+  step execution); wire it opportunistically with the Plan 07 reaper work.
+- **Digest cadence** is a fixed 5-min global flush; `digest_window_minutes` is retained as a
+  per-recipient hint for a future finer-grained scheduler.
+- **`DEVICEKIT_SECRET_KEY`** gates channel-secret encryption; unset in dev uses an insecure
+  deterministic key (logged once). Set it in any real deployment.
 
 ## Definition of done
 

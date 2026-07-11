@@ -36,9 +36,42 @@ import {
   SkipForward,
   Users,
   Settings2,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Eye,
+  Check,
+  X,
+  Clock,
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
 import StreamCanvas from '../components/StreamCanvas'
+import MetricChart, { seriesColor } from '../components/ds/MetricChart'
+
+// AI session-mode metadata (plan 13): how each mode looks + its one-line guarantee.
+const MODE_META = {
+  observe: {
+    label: 'Observe', icon: Eye, hint: 'read-only — no write tools',
+    active: 'bg-sky-500/20 text-sky-300 border border-sky-500/30',
+  },
+  supervised: {
+    label: 'Supervised', icon: ShieldCheck, hint: 'write tools need approval',
+    active: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+  },
+  autonomous: {
+    label: 'Autonomous', icon: ShieldAlert, hint: 'writes auto-approved + logged',
+    active: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+  },
+}
+
+// Historical metric selector config (plan 08) — device-scoped view.
+const HIST_METRICS = [
+  { key: 'battery_pct', label: 'Battery', unit: '%', yMin: 0, yMax: 100 },
+  { key: 'cpu_load', label: 'CPU', unit: '%', yMin: 0, yMax: 100 },
+  { key: 'battery_temp', label: 'Temp', unit: '°C' },
+  { key: 'storage_free', label: 'Storage Free', unit: ' MB' },
+]
+const HIST_PERIODS = ['1h', '6h', '24h', '7d', '30d']
 
 const REFRESH_INTERVAL = 30000
 
@@ -73,6 +106,8 @@ export default function NodeDetail() {
   const [commandInput, setCommandInput] = useState('')
   const [urgentCommand, setUrgentCommand] = useState(false)
   const [hasProfile, setHasProfile] = useState(null)
+  const [confirming, setConfirming] = useState({})   // action_id -> true while a decision is in flight
+  const [nowMs, setNowMs] = useState(Date.now())     // 1s tick for gate countdowns
   const agentLogRef = useRef(null)
 
   // Recording state
@@ -102,6 +137,12 @@ export default function NodeDetail() {
 
   // Metrics history for step charts (max 60 entries = ~5 min at 5s intervals)
   const metricsHistory = useRef([])
+
+  // Persisted metrics history (plan 08) — device-scoped period chart.
+  const [histMetric, setHistMetric] = useState('battery_pct')
+  const [histPeriod, setHistPeriod] = useState('24h')
+  const [histSeries, setHistSeries] = useState([])
+  const [histTier, setHistTier] = useState('')
 
   const fetchData = useCallback(async () => {
     if (!deviceId) return
@@ -148,6 +189,12 @@ export default function NodeDetail() {
     return () => { clearInterval(tid); clearInterval(aid) }
   }, [fetchData, fetchAgent])
 
+  // 1s tick so gate countdowns tick down smoothly between the 2s status polls.
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
   // SSE subscription for real-time device state
   useEffect(() => {
     const es = subscribeToEvents({
@@ -178,6 +225,20 @@ export default function NodeDetail() {
     })
     return () => es.close()
   }, [deviceId])
+
+  // Load persisted metrics history whenever the device / metric / period changes (plan 08).
+  useEffect(() => {
+    if (!deviceId) return
+    let cancelled = false
+    api.getDeviceMetrics(deviceId, histMetric, histPeriod)
+      .then((res) => {
+        if (cancelled) return
+        setHistTier(res.tier || '')
+        setHistSeries([{ id: deviceId, label: histMetric, color: seriesColor(0), points: res.points || [] }])
+      })
+      .catch(() => { if (!cancelled) setHistSeries([]) })
+    return () => { cancelled = true }
+  }, [deviceId, histMetric, histPeriod])
 
   // Fetch stream sessions
   const fetchStreamSessions = useCallback(async () => {
@@ -406,6 +467,31 @@ export default function NodeDetail() {
       // silent
     }
   }
+
+  // Confirmation gate (plan 13): release a blocked write-tool action.
+  const handleConfirmAction = async (actionId, approve) => {
+    setConfirming((c) => ({ ...c, [actionId]: true }))
+    try {
+      await api.confirmAgentAction(deviceId, actionId, approve)
+      fetchAgent()
+    } catch {
+      // silent
+    } finally {
+      setConfirming((c) => { const n = { ...c }; delete n[actionId]; return n })
+    }
+  }
+
+  const handleSetMode = async (mode) => {
+    try {
+      await api.setAgentMode(deviceId, mode)
+      fetchAgent()
+    } catch {
+      // silent
+    }
+  }
+
+  const agentMode = agentStatus.mode || 'supervised'
+  const pendingActions = agentStatus.pending_actions || []
 
   const macroCommands = [
     { label: 'Clear Cache', cmd: 'pm clear com.android.chrome' },
@@ -882,6 +968,62 @@ export default function NodeDetail() {
                 </div>
               </div>
 
+              {/* Metrics History (plan 08) */}
+              <div className="bg-card-alt border border-main rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                    Metrics History
+                    {histTier && <span className="ml-2 text-zinc-600 normal-case font-normal">· {histTier} tier</span>}
+                  </h3>
+                  <div className="flex items-center gap-1">
+                    {HIST_PERIODS.map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setHistPeriod(p)}
+                        className={`text-[10px] px-2 py-0.5 rounded border transition-colors mono ${
+                          histPeriod === p
+                            ? 'bg-emerald-950 border-emerald-800 text-emerald-400'
+                            : 'border-main text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 mb-3">
+                  {HIST_METRICS.map((m) => (
+                    <button
+                      key={m.key}
+                      onClick={() => setHistMetric(m.key)}
+                      className={`text-[11px] px-2.5 py-1 rounded border transition-colors ${
+                        histMetric === m.key
+                          ? 'bg-zinc-800 border-zinc-600 text-white'
+                          : 'border-main text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                {(() => {
+                  const m = HIST_METRICS.find((x) => x.key === histMetric) || {}
+                  const fmt = m.unit === ' MB'
+                    ? (v) => `${(v / 1024).toFixed(1)}G`
+                    : (v) => `${Math.round(v)}${m.unit || ''}`
+                  return (
+                    <MetricChart
+                      series={histSeries}
+                      unit={m.unit}
+                      yMin={m.yMin}
+                      yMax={m.yMax}
+                      valueFormat={fmt}
+                      height={200}
+                    />
+                  )
+                })()}
+              </div>
+
               {/* Node Properties */}
               <div className="bg-card-alt border border-main rounded-xl overflow-hidden">
                 <div className="px-6 py-4 border-b border-main bg-zinc-900/20">
@@ -934,6 +1076,34 @@ export default function NodeDetail() {
                     </div>
                   )}
 
+                  {/* Session mode (plan 13) — observe / supervised / autonomous */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                        <Shield className="w-3 h-3" /> Session Mode
+                      </span>
+                      <span className="text-[10px] text-zinc-600">{MODE_META[agentMode]?.hint}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 bg-zinc-900 border border-main rounded p-1">
+                      {['observe', 'supervised', 'autonomous'].map((m) => {
+                        const meta = MODE_META[m]
+                        const Icon = meta.icon
+                        const active = agentMode === m
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => handleSetMode(m)}
+                            className={`flex items-center justify-center gap-1 py-1.5 rounded text-[10px] font-bold transition-all ${
+                              active ? meta.active : 'text-zinc-500 hover:text-zinc-300'
+                            }`}
+                          >
+                            <Icon className="w-3 h-3" /> {meta.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
                   {/* Start/Stop */}
                   <button
                     onClick={handleAgentToggle}
@@ -957,6 +1127,57 @@ export default function NodeDetail() {
                       {agentStatus.current_action}
                     </div>
                   )}
+
+                  {/* Pending action approval cards (plan 13) */}
+                  {pendingActions.map((action) => {
+                    const remaining = Math.max(0, Math.round((action.deadline * 1000 - nowMs) / 1000))
+                    const busy = !!confirming[action.id]
+                    return (
+                      <div key={action.id} className="bg-amber-950/40 border border-amber-500/40 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-amber-300 uppercase tracking-widest flex items-center gap-1.5">
+                            <ShieldAlert className="w-3 h-3" /> Approval required
+                          </span>
+                          <span className="text-[10px] text-amber-400/80 mono flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5" /> {remaining}s
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-200 font-medium">{action.summary}</p>
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500 mono">
+                          <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{action.tool}</span>
+                          {action.source && action.source !== 'core' && (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                              {action.source}
+                            </span>
+                          )}
+                        </div>
+                        {action.args && Object.keys(action.args).length > 0 && (
+                          <details className="text-[10px] text-zinc-500">
+                            <summary className="cursor-pointer hover:text-zinc-300">args</summary>
+                            <pre className="mt-1 bg-[#020202] rounded p-2 overflow-x-auto text-zinc-400">
+{JSON.stringify(action.args, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => handleConfirmAction(action.id, true)}
+                            disabled={busy}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-900/50 hover:bg-emerald-900 disabled:opacity-40"
+                          >
+                            <Check className="w-3 h-3" /> Approve
+                          </button>
+                          <button
+                            onClick={() => handleConfirmAction(action.id, false)}
+                            disabled={busy}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[11px] font-bold bg-red-950 text-red-400 border border-red-900/50 hover:bg-red-900 disabled:opacity-40"
+                          >
+                            <X className="w-3 h-3" /> Deny
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
 
                   {/* Command input */}
                   <div className="flex gap-2">

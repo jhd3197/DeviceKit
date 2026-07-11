@@ -1,6 +1,11 @@
 # Plan 07 — Agent Security & Fleet Registry Hardening
 
-**Status:** proposed
+**Status:** ✅ shipped (backend + dashboard UI of all phases; APK pairing *screen* deferred — needs rebuild+device)
+
+Frontend: `views/Enrollment.jsx` (pending-agent list + claim-by-code + manual entry,
+5s poll), `views/CommandHistory.jsx` (device-action audit trail with status filter +
+expandable args/result/error), wired into `App.jsx` routes + Management nav; `api.js`
+gained `getPendingAgents`/`claimAgent`/`getDeviceCommands`. `npm run build` clean.
 **Inspired by:** ServerKit's `backend/app/services/agent_registry.py` (1,035 lines — the
 richest single code reference), `agent_gateway.py`, `pairing_service.py`,
 `docs/FLEET_CONTRACT.md`
@@ -89,13 +94,57 @@ leaves room to add a push channel later without reworking callers.
 
 ## Phases
 
-1. Registry extraction to a mixin + `AgentDevice`/`DeviceCommand` persistence +
+1. ✅ Registry extraction to a mixin + `AgentDevice`/`DeviceCommand` persistence +
    heartbeat reaper with the two race fixes.
-2. HMAC auth + nonce/timestamp guard + per-device secrets (agent APK update — token
+   - `AgentDeviceMixin` hardened with an `RLock`-guarded registry, reconnect-aware
+     `register_agent_device` (fails old in-flight commands with `AGENT_RECONNECTED`),
+     `reap_stale_agents` (offline exactly once; freshness re-validated under lock so a
+     quick reconnect never flaps), and synchronous `send_command`-style dispatch over the
+     poll transport backed by a `DeviceCommand` audit row (pending→running→completed/
+     failed/timeout). Reaper runs as an `agent.heartbeat.reap` scheduled job (30s).
+     New endpoints: `/agent-device/command-result`, `/agent-device/<id>/dispatch`,
+     `/agent-device/<id>/command-history`, `/device-commands`. Migration
+     `a71c07a10001` (device_commands). Tests: `tests/test_agent_registry.py` (6).
+2. ✅ HMAC auth + nonce/timestamp guard + per-device secrets (agent APK update — token
    storage + signing in the Kotlin `AgentHttpServer` client path).
-3. Pairing flow (backend + APK pairing screen + dashboard claim UI).
-4. Capability map formalization + FQL fields + `require_capability` step type +
+   - Backend `verify_agent_request` enforces order rate-limit → timestamp window →
+     signature → nonce-consume, so a forged request can't burn a legitimate nonce
+     (ServerKit's subtle fix). `verify_agent_signature` accepts active or pending secret.
+     Applied by `_require_agent_auth` on every agent endpoint (enforced when enrolled, or
+     globally with `AGENT_ENROLLMENT_REQUIRED`). Tests: `tests/test_agent_auth.py` (8).
+   - APK: `api/AgentCredentials.kt` (SharedPreferences secret store + `HmacSHA256` signing),
+     `DeviceKitClient` signs every request via `.signed(deviceId)` and gained
+     `postCommandResult` + `enroll`/`pollEnrollment`. **Source written; APK not rebuilt/
+     deployed** (needs Android toolchain + a device — deferred, backend contract is ready).
+3. 🚧 Pairing flow (backend ✅ + dashboard claim UI ✅ + APK pairing screen deferred).
+   - `PairingMixin` (`mixins/pairing.py`): `enroll_agent` mints a rotating 6-char code
+     (unambiguous alphabet) + `PendingAgent` row; `claim_pending_agent` (optional
+     passphrase gate = `API_KEY`) mints the secret, promotes the device, notifies
+     `agent.enrolled`; `poll_enrollment` hands the secret over exactly once then deletes
+     the row; expired codes pruned. Routes: `/agent-device/enroll[/<id>]`,
+     `/agent-devices/pending`, `/agent-devices/claim`. Migration `a71c07a30003`.
+     Tests: `tests/test_agent_pairing.py` (6). APK enroll/poll client methods shipped in
+     ph2; the on-screen pairing UI in `MainActivity` is deferred (needs APK rebuild+device).
+4. ✅ Capability map formalization + FQL fields + `require_capability` step type +
    key rotation.
+   - FQL: dotted identifiers now tokenize, so `can.screen_record = true` /
+     `android_api >= 33` filter the fleet; `can.*` resolves against the device capability
+     map (inline or via the registry). Fixed a lurking bug: bareword `true`/`false` are now
+     case-insensitive booleans (so `online = false` presets evaluate correctly).
+   - `require_capability` automation step (`fail`/`warn`) gates a run on a capability;
+     fleet-level skip is done by targeting with an FQL `can.*` filter.
+   - Key rotation endpoints `/agent-device/<id>/rotate-key[/complete]` over the
+     `start_key_rotation`/`complete_key_rotation` mixin helpers (both secrets valid mid-
+     rotation). Capabilities surfaced on `/devices` + `/fleet/query` device dicts + a
+     `/agent-device/<id>/capabilities` endpoint. Migration `a71c07a40004`.
+     Tests: `tests/test_agent_capabilities.py` (8).
+
+> **Assumption (logged):** auth stays *opt-in* for dev/back-compat. The full HMAC guard
+> (`verify_agent_request`) + per-device secrets ship in phase 1's mixin but are only
+> enforced for enrolled devices, or globally when `AGENT_ENROLLMENT_REQUIRED=true`. This
+> satisfies the "unenrolled agent cannot register" DoD without breaking the auth-disabled
+> dev flow or the current APK. The reaper offline window moved 15s→90s (config
+> `AGENT_HEARTBEAT_TIMEOUT`), matching ServerKit.
 
 ## Definition of done
 

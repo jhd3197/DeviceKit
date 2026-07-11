@@ -2,10 +2,12 @@ import uuid
 import time
 import logging
 import base64
-import threading
 import io
 import json
 import math
+
+from devicekit.db import session_scope
+from devicekit.models import VisualBaseline
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +126,6 @@ Do not include any markdown formatting or code fences in your response."""
 class VisualRegressionMixin:
     """Visual regression testing: baseline management, SSIM comparison, AI-powered diff analysis."""
 
-    _vr_baselines = []  # list of baseline dicts
-    _vr_baselines_lock = threading.Lock()
-
     # -----------------------------------------------------------
     # Baseline Management
     # -----------------------------------------------------------
@@ -135,92 +134,109 @@ class VisualRegressionMixin:
                         resolution=None, label=None, mask_regions=None):
         """Store a baseline screenshot for an automation step."""
         baseline_id = str(uuid.uuid4())
-        baseline = {
-            'id': baseline_id,
-            'automation_id': automation_id,
-            'step_index': step_index,
-            'device_model': device_model or 'default',
-            'resolution': resolution or 'default',
-            'label': label or f'Step {step_index} baseline',
-            'image_b64': base64.b64encode(image_data).decode('ascii'),
-            'image_size': len(image_data),
-            'mask_regions': mask_regions or [],
-            'version': 1,
-            'created_at': time.time(),
-            'updated_at': time.time(),
-        }
-        with self._vr_baselines_lock:
-            self._vr_baselines.append(baseline)
+        now = time.time()
+        with session_scope() as s:
+            baseline = VisualBaseline(
+                id=baseline_id,
+                automation_id=automation_id,
+                step_index=step_index,
+                device_model=device_model or 'default',
+                resolution=resolution or 'default',
+                label=label or f'Step {step_index} baseline',
+                image_data=image_data,
+                image_size=len(image_data),
+                mask_regions=mask_regions or [],
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            s.add(baseline)
+            s.flush()
+            result = baseline.to_dict()
         logger.info(f"Created baseline {baseline_id} for automation {automation_id} step {step_index}")
-        return {k: v for k, v in baseline.items() if k != 'image_b64'}
+        return result
 
     def get_baseline(self, baseline_id):
-        """Get a baseline by ID."""
-        with self._vr_baselines_lock:
-            return next((b for b in self._vr_baselines if b['id'] == baseline_id), None)
+        """Get a baseline by ID (includes image_b64 for internal comparison callers)."""
+        with session_scope() as s:
+            baseline = s.get(VisualBaseline, baseline_id)
+            return baseline.to_dict(include_image=True) if baseline else None
 
     def get_baseline_image(self, baseline_id):
         """Get baseline image bytes."""
-        baseline = self.get_baseline(baseline_id)
-        if not baseline:
-            return None
-        return base64.b64decode(baseline['image_b64'])
+        with session_scope() as s:
+            baseline = s.get(VisualBaseline, baseline_id)
+            return bytes(baseline.image_data) if baseline and baseline.image_data else None
 
     def list_baselines(self, automation_id):
         """List baselines for an automation (without image data)."""
-        with self._vr_baselines_lock:
-            results = [b for b in self._vr_baselines if b['automation_id'] == automation_id]
-        return [{k: v for k, v in b.items() if k != 'image_b64'} for b in results]
+        with session_scope() as s:
+            results = (
+                s.query(VisualBaseline)
+                .filter(VisualBaseline.automation_id == automation_id)
+                .all()
+            )
+            return [b.to_dict() for b in results]
 
     def update_baseline(self, baseline_id, image_data=None, mask_regions=None, label=None):
         """Re-capture or update a baseline."""
-        baseline = self.get_baseline(baseline_id)
-        if not baseline:
-            return None
-        if image_data:
-            baseline['image_b64'] = base64.b64encode(image_data).decode('ascii')
-            baseline['image_size'] = len(image_data)
-            baseline['version'] = baseline.get('version', 1) + 1
-        if mask_regions is not None:
-            baseline['mask_regions'] = mask_regions
-        if label is not None:
-            baseline['label'] = label
-        baseline['updated_at'] = time.time()
-        logger.info(f"Updated baseline {baseline_id} (v{baseline.get('version', 1)})")
-        return {k: v for k, v in baseline.items() if k != 'image_b64'}
+        with session_scope() as s:
+            baseline = s.get(VisualBaseline, baseline_id)
+            if not baseline:
+                return None
+            if image_data:
+                baseline.image_data = image_data
+                baseline.image_size = len(image_data)
+                baseline.version = (baseline.version or 1) + 1
+            if mask_regions is not None:
+                baseline.mask_regions = mask_regions
+            if label is not None:
+                baseline.label = label
+            baseline.updated_at = time.time()
+            s.flush()
+            version = baseline.version
+            result = baseline.to_dict()
+        logger.info(f"Updated baseline {baseline_id} (v{version})")
+        return result
 
     def delete_baseline(self, baseline_id):
         """Delete a baseline."""
-        with self._vr_baselines_lock:
-            before = len(self._vr_baselines)
-            self._vr_baselines = [b for b in self._vr_baselines if b['id'] != baseline_id]
-            return len(self._vr_baselines) < before
+        with session_scope() as s:
+            baseline = s.get(VisualBaseline, baseline_id)
+            if not baseline:
+                return False
+            s.delete(baseline)
+            return True
 
     def find_baseline(self, automation_id, step_index, device_model=None, resolution=None):
         """Find the best matching baseline for a step, preferring device-specific baselines."""
-        with self._vr_baselines_lock:
-            candidates = [
-                b for b in self._vr_baselines
-                if b['automation_id'] == automation_id and b['step_index'] == step_index
-            ]
+        with session_scope() as s:
+            candidates = (
+                s.query(VisualBaseline)
+                .filter(
+                    VisualBaseline.automation_id == automation_id,
+                    VisualBaseline.step_index == step_index,
+                )
+                .order_by(VisualBaseline.created_at.asc())
+                .all()
+            )
+            if not candidates:
+                return None
 
-        if not candidates:
-            return None
+            # Prefer exact device model + resolution match
+            if device_model and resolution:
+                exact = [b for b in candidates if b.device_model == device_model and b.resolution == resolution]
+                if exact:
+                    return exact[-1].to_dict(include_image=True)  # most recent
 
-        # Prefer exact device model + resolution match
-        if device_model and resolution:
-            exact = [b for b in candidates if b['device_model'] == device_model and b['resolution'] == resolution]
-            if exact:
-                return exact[-1]  # most recent
+            # Then device model match
+            if device_model:
+                model_match = [b for b in candidates if b.device_model == device_model]
+                if model_match:
+                    return model_match[-1].to_dict(include_image=True)
 
-        # Then device model match
-        if device_model:
-            model_match = [b for b in candidates if b['device_model'] == device_model]
-            if model_match:
-                return model_match[-1]
-
-        # Fall back to default / any
-        return candidates[-1]
+            # Fall back to default / any
+            return candidates[-1].to_dict(include_image=True)
 
     # -----------------------------------------------------------
     # Screenshot Comparison

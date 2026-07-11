@@ -104,6 +104,13 @@ export const api = {
   updateConfig: (data) =>
     request('/config', { method: 'PUT', body: JSON.stringify(data) }),
 
+  getHealth: () => request('/health'),
+
+  // Settings (durable, schema-backed — plan 12)
+  getSettings: () => request('/settings'),
+  updateSettings: (data) =>
+    request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
+
   // Automations
   getStepTypes: () => request('/automations/step-types'),
   getAutomations: () => request('/automations'),
@@ -353,6 +360,63 @@ export const api = {
       method: 'POST', body: JSON.stringify(event),
     }),
 
+  // Extensions (platform + marketplace)
+  getContributions: () => request('/extensions/contributions'),
+  getSdkVersion: () => request('/extensions/sdk-version'),
+  getManifestSpec: () => request('/extensions/manifest-spec'),
+  getExtensions: () => request('/extensions'),
+  getExtension: (slug) => request(`/extensions/${slug}`),
+  getExtensionRegistry: (refresh = false) =>
+    request(`/extensions/registry${refresh ? '?refresh=1' : ''}`),
+  getExtensionUpdates: (refresh = false) =>
+    request(`/extensions/updates${refresh ? '?refresh=1' : ''}`),
+  previewExtension: (body) =>
+    request('/extensions/preview', { method: 'POST', body: JSON.stringify(body) }),
+  installExtension: (body) =>
+    request('/extensions/install', { method: 'POST', body: JSON.stringify(body) }),
+  installExtensionUpload: (file, force = false) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (force) form.append('force', '1')
+    const headers = {}
+    if (API_KEY) headers['X-API-Key'] = API_KEY
+    return fetch(`${API}/extensions/install-upload`, { method: 'POST', headers, body: form })
+      .then((r) => {
+        if (!r.ok) return r.json().then((e) => { throw new Error(e.error || 'Upload failed') })
+        return r.json()
+      })
+  },
+  uninstallExtension: (slug, purge = false) =>
+    request(`/extensions/${slug}${purge ? '?purge=1' : ''}`, { method: 'DELETE' }),
+  updateExtension: (slug) =>
+    request(`/extensions/${slug}/update`, { method: 'POST' }),
+  enableExtension: (slug) =>
+    request(`/extensions/${slug}/enable`, { method: 'POST' }),
+  disableExtension: (slug) =>
+    request(`/extensions/${slug}/disable`, { method: 'POST' }),
+  getExtensionConfig: (slug) => request(`/extensions/${slug}/config`),
+  updateExtensionConfig: (slug, data) =>
+    request(`/extensions/${slug}/config`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Jobs & Scheduler (plan 05)
+  listJobs: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/jobs${qs ? `?${qs}` : ''}`)
+  },
+  getJob: (id) => request(`/jobs/${id}`),
+  getJobStats: () => request('/jobs/stats'),
+  retryJob: (id) => request(`/jobs/${id}/retry`, { method: 'POST' }),
+  cancelJob: (id) => request(`/jobs/${id}/cancel`, { method: 'POST' }),
+  listScheduledJobs: () => request('/jobs/schedules'),
+  runScheduledJob: (id) => request(`/jobs/schedules/${id}/run`, { method: 'POST' }),
+  setScheduledJobEnabled: (id, enabled) =>
+    request(`/jobs/schedules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
+
   // AI Agent (Prompture)
   getConversationHistory: (deviceId) => request(`/devices/${deviceId}/conversation/history`),
   clearConversation: (deviceId) => request(`/devices/${deviceId}/conversation`, { method: 'DELETE' }),
@@ -362,6 +426,90 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ model_name: modelName }),
     }),
+
+  // AI Confirmation Gate (plan 13)
+  getAgentPending: (deviceId) => request(`/devices/${deviceId}/agent/pending`),
+  confirmAgentAction: (deviceId, actionId, approve) =>
+    request(`/devices/${deviceId}/agent/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({ action_id: actionId, approve }),
+    }),
+  getAgentMode: (deviceId) => request(`/devices/${deviceId}/agent/mode`),
+  setAgentMode: (deviceId, mode) =>
+    request(`/devices/${deviceId}/agent/mode`, {
+      method: 'PUT',
+      body: JSON.stringify({ mode }),
+    }),
+  getAgentAudit: (deviceId, limit = 100) =>
+    request(`/devices/${deviceId}/agent/audit?limit=${limit}`),
+
+  // Notifications (plan 06)
+  getNotifications: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/notifications${qs ? `?${qs}` : ''}`)
+  },
+  getNotification: (id) => request(`/notifications/${id}`),
+  getUnreadCount: () => request('/notifications/unread-count'),
+  getNotificationEvents: () => request('/notifications/events'),
+  markNotificationRead: (id, read = true) =>
+    request(`/notifications/${id}/read`, { method: 'PUT', body: JSON.stringify({ read }) }),
+  markAllNotificationsRead: () =>
+    request('/notifications/read-all', { method: 'PUT' }),
+  deleteNotification: (id) => request(`/notifications/${id}`, { method: 'DELETE' }),
+  clearNotifications: () => request('/notifications', { method: 'DELETE' }),
+  getNotificationChannels: () => request('/notifications/channels'),
+  getNotificationChannel: (channel) => request(`/notifications/channels/${channel}`),
+  updateNotificationChannel: (channel, data) =>
+    request(`/notifications/channels/${channel}`, { method: 'PUT', body: JSON.stringify(data) }),
+  testNotificationChannel: (channel) =>
+    request(`/notifications/channels/${channel}/test`, { method: 'POST' }),
+  getNotificationPreferences: () => request('/notifications/preferences'),
+  updateNotificationPreferences: (data) =>
+    request('/notifications/preferences', { method: 'PUT', body: JSON.stringify(data) }),
+  setNotificationMute: (data) =>
+    request('/notifications/preferences/mute', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Agent Security & Fleet Registry (plan 07)
+  getPendingAgents: () => request('/agent-devices/pending'),
+  claimAgent: (code, passphrase) =>
+    request('/agent-devices/claim', {
+      method: 'POST',
+      body: JSON.stringify({ code, passphrase }),
+    }),
+  getDeviceCommands: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/device-commands${qs ? `?${qs}` : ''}`)
+  },
+
+  // Metrics History (plan 08)
+  getMetricsCatalog: () => request('/metrics/catalog'),
+  getDeviceMetrics: (id, metric = 'battery_pct', period = '24h') =>
+    request(`/devices/${id}/metrics?metric=${encodeURIComponent(metric)}&period=${period}`),
+  getDeviceSparkline: (id, metric = 'battery_pct', period = '24h') =>
+    request(`/devices/${id}/metrics/sparkline?metric=${encodeURIComponent(metric)}&period=${period}`),
+  getFleetMetrics: (metric = 'battery_pct', deviceIds = null, period = '24h') => {
+    const params = new URLSearchParams({ metric, period })
+    if (deviceIds && deviceIds.length) params.set('devices', deviceIds.join(','))
+    return request(`/fleet/metrics?${params}`)
+  },
+  getFleetSparklines: (metric = 'battery_pct', deviceIds = null, period = '24h') => {
+    const params = new URLSearchParams({ metric, period })
+    if (deviceIds && deviceIds.length) params.set('devices', deviceIds.join(','))
+    return request(`/fleet/metrics/sparklines?${params}`)
+  },
+  getMetricAlertRules: (deviceId) =>
+    request(`/metrics/alert-rules${deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''}`),
+  getMetricAlertRuleOps: () => request('/metrics/alert-rules/ops'),
+  createMetricAlertRule: (data) =>
+    request('/metrics/alert-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updateMetricAlertRule: (id, data) =>
+    request(`/metrics/alert-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMetricAlertRule: (id) =>
+    request(`/metrics/alert-rules/${id}`, { method: 'DELETE' }),
 }
 
 export function subscribeToEvents(handlers = {}) {
@@ -402,6 +550,18 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('stream_viewer', (e) => {
     handlers.onStreamViewer?.(JSON.parse(e.data))
+  })
+  es.addEventListener('job', (e) => {
+    handlers.onJob?.(JSON.parse(e.data))
+  })
+  es.addEventListener('notification', (e) => {
+    handlers.onNotification?.(JSON.parse(e.data))
+  })
+  es.addEventListener('pending_action', (e) => {
+    handlers.onPendingAction?.(JSON.parse(e.data))
+  })
+  es.addEventListener('pending_action_resolved', (e) => {
+    handlers.onPendingActionResolved?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()

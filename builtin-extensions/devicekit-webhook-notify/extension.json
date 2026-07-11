@@ -1,0 +1,43 @@
+{
+  "name": "devicekit-webhook-notify",
+  "display_name": "Webhook Notifier",
+  "version": "1.0.0",
+  "category": "integration",
+  "description": "Send fleet notifications to a Slack/Discord-compatible webhook. The first builtin extension, proving every DeviceKit contribution seam: a step type, an AI tool, a blueprint, a config schema with a secret, a data table, and lifecycle hooks.",
+  "author": "Juan Denis",
+  "permissions": ["network"],
+  "min_devicekit_version": "1.0.0",
+
+  "entry_point": "routes:bp",
+  "url_prefix": "/extensions/devicekit-webhook-notify",
+  "models": "models:register",
+  "step_types": "steps:register",
+  "ai_tools": "tools:register",
+  "lifecycle": { "install": "lifecycle:on_install", "uninstall": "lifecycle:on_uninstall" },
+
+  "config_schema": {
+    "webhook_url": { "type": "string", "label": "Webhook URL", "secret": true },
+    "default_message": { "type": "string", "label": "Default message", "secret": false }
+  },
+
+  "contributions": {
+    "nav": [
+      {
+        "id": "webhook-notify",
+        "label": "Webhook Notify",
+        "route": "/x/webhook-notify",
+        "section": "Extensions",
+        "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"/><path d=\"M10.3 21a1.94 1.94 0 0 0 3.4 0\"/></svg>"
+      }
+    ],
+    "routes": [
+      { "path": "/x/webhook-notify", "component": "WebhookNotifyPage" }
+    ],
+    "widgets": [
+      { "slot": "dashboard.top", "component": "WebhookNotifyWidget" }
+    ],
+    "page_titles": {
+      "/x/webhook-notify": "Webhook Notify"
+    }
+  }
+}

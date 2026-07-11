@@ -5,6 +5,10 @@ import threading
 import base64
 import copy
 
+from devicekit.db import session_scope
+from devicekit.models import Automation, AutomationRun, AutomationSchedule
+from devicekit.jobs.service import JobService
+
 logger = logging.getLogger(__name__)
 
 STEP_TYPES = {
@@ -148,64 +152,340 @@ STEP_TYPES = {
             "use_ai": {"type": "select", "label": "AI diff analysis", "required": False, "options": ["off", "on"], "default": "on"},
         },
     },
+    "require_capability": {
+        "label": "Require Capability",
+        "category": "Control",
+        "config": {
+            "capability": {"type": "text", "label": "Capability key (e.g. screen_record)", "required": True},
+            "mode": {"type": "select", "label": "If missing", "required": False,
+                     "options": ["fail", "warn"], "default": "fail"},
+        },
+    },
 }
 
 
+# ---------------------------------------------------------------------------
+# Step dispatch registry
+# ---------------------------------------------------------------------------
+# Every step type carries an ``execute(client, config, device_id) -> output`` callable so
+# core and extension steps run through one path (``_execute_step``) — no ``elif`` chain to
+# edit when an extension contributes a step type. Executors are plain module functions
+# attached to the metadata entries below; ``get_step_types`` strips the callable before
+# serializing the metadata for the AutomationEditor.
+
+def _exec_tap(client, config, device_id):
+    x = int(config["x"])
+    y = int(config["y"])
+    client.click(x, y, device_id)
+    return f"Tapped ({x}, {y})"
+
+
+def _exec_tap_by_text(client, config, device_id):
+    text = config["text"]
+    client.click_by_text(text, device_id)
+    return f"Tapped element with text '{text}'"
+
+
+def _exec_tap_by_resource_id(client, config, device_id):
+    rid = config["resource_id"]
+    client.click_by_resource_id(rid, device_id)
+    return f"Tapped element '{rid}'"
+
+
+def _exec_swipe(client, config, device_id):
+    direction = config.get("direction", "up")
+    duration = int(config.get("duration", 500))
+    d = client.get_device(device_id)
+    info = d.info
+    w = info.get("displayWidth", 1080)
+    h = info.get("displayHeight", 1920)
+    cx, cy = w // 2, h // 2
+    swipe_map = {
+        "up": (cx, h * 3 // 4, cx, h // 4),
+        "down": (cx, h // 4, cx, h * 3 // 4),
+        "left": (w * 3 // 4, cy, w // 4, cy),
+        "right": (w // 4, cy, w * 3 // 4, cy),
+    }
+    coords = swipe_map.get(direction, swipe_map["up"])
+    d.swipe(*coords, duration=duration / 1000)
+    return f"Swiped {direction}"
+
+
+def _exec_type_text(client, config, device_id):
+    text = config["text"]
+    d = client.get_device(device_id)
+    d.send_keys(text)
+    return f"Typed '{text}'"
+
+
+def _exec_press_key(client, config, device_id):
+    key = config["key"]
+    client.press_action(key, device_id)
+    return f"Pressed '{key}'"
+
+
+def _exec_open_app(client, config, device_id):
+    package = config["package"]
+    d = client.get_device(device_id)
+    d.app_start(package)
+    return f"Opened {package}"
+
+
+def _exec_close_app(client, config, device_id):
+    package = config["package"]
+    client.run_adb_command(f"shell am force-stop {package}", device=device_id)
+    return f"Closed {package}"
+
+
+def _exec_open_url(client, config, device_id):
+    url = config["url"]
+    client.run_adb_command([
+        "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url
+    ], device=device_id)
+    return f"Opened URL {url}"
+
+
+def _exec_wait(client, config, device_id):
+    delay = int(config.get("delay", 1000))
+    time.sleep(delay / 1000)
+    return f"Waited {delay}ms"
+
+
+def _exec_wait_for_element(client, config, device_id):
+    by = config.get("by", "text")
+    value = config["value"]
+    timeout = int(config.get("timeout", 10000))
+    timeout_secs = timeout / 1000
+    if by == "text":
+        found = client.exists_by_text(value, device_id, timeout=timeout_secs)
+    else:
+        found = client.exists_by_resource_id(value, device_id, timeout=timeout_secs)
+    if not found:
+        raise Exception(f"Element not found by {by}='{value}' within {timeout}ms")
+    return f"Found element {by}='{value}'"
+
+
+def _exec_screenshot(client, config, device_id):
+    data = client.take_screenshot(device_id)
+    if data:
+        return f"Screenshot captured ({len(data)} bytes)"
+    raise Exception("Screenshot failed")
+
+
+def _exec_assert_element(client, config, device_id):
+    by = config.get("by", "text")
+    value = config["value"]
+    timeout = int(config.get("timeout", 5000))
+    timeout_secs = timeout / 1000
+    if by == "text":
+        found = client.exists_by_text(value, device_id, timeout=timeout_secs)
+    else:
+        found = client.exists_by_resource_id(value, device_id, timeout=timeout_secs)
+    if not found:
+        raise AssertionError(f"Assertion failed: element {by}='{value}' not found")
+    return f"Assertion passed: {by}='{value}' exists"
+
+
+def _exec_adb_shell(client, config, device_id):
+    command = config["command"]
+    output = client.run_adb_command(f"shell {command}", device=device_id)
+    return output or "(no output)"
+
+
+def _exec_file_operation(client, config, device_id):
+    operation = config.get("operation", "push")
+    local_path = config.get("local_path", "")
+    remote_path = config["remote_path"]
+    if operation == "push":
+        if not local_path:
+            raise ValueError("local_path is required for push operation")
+        output = client.run_adb_command(f"push {local_path} {remote_path}", device=device_id)
+        return output or f"Pushed {local_path} to {remote_path}"
+    elif operation == "pull":
+        if not local_path:
+            raise ValueError("local_path is required for pull operation")
+        output = client.run_adb_command(f"pull {remote_path} {local_path}", device=device_id)
+        return output or f"Pulled {remote_path} to {local_path}"
+    elif operation == "delete":
+        output = client.run_adb_command(f"shell rm -f {remote_path}", device=device_id)
+        return output or f"Deleted {remote_path}"
+    else:
+        raise ValueError(f"Unknown file operation: {operation}")
+
+
+def _exec_screenshot_assert(client, config, device_id):
+    baseline_id = config.get("baseline_id", "")
+    threshold = float(config.get("threshold", 95))
+    use_ai = config.get("use_ai", "on") == "on"
+    screenshot_data = client.take_screenshot(device_id)
+    if not screenshot_data:
+        raise Exception("Failed to capture screenshot for visual assertion")
+    result = client.compare_screenshot(
+        screenshot_data, baseline_id=baseline_id,
+        threshold=threshold, use_ai=use_ai, device_id=device_id,
+    )
+    if result.get("passed"):
+        return f"Visual assertion passed (SSIM={result.get('ssim', 0):.1f}%, verdict={result.get('verdict', 'pass')})"
+    else:
+        msg = f"Visual assertion failed (SSIM={result.get('ssim', 0):.1f}%, threshold={threshold}%"
+        if result.get("ai_analysis"):
+            msg += f", AI: {result['ai_analysis'][:200]}"
+        msg += ")"
+        raise AssertionError(msg)
+
+
+def _exec_require_capability(client, config, device_id):
+    """Gate a run on a device capability (plan 07). ``fail`` (default) aborts the run when
+    the capability is missing; ``warn`` continues with a note. Fleet-level "skip the device"
+    is achieved upstream by targeting with an FQL ``can.*`` filter."""
+    cap = config["capability"]
+    mode = (config.get("mode") or "fail").lower()
+    caps = {}
+    if hasattr(client, "get_agent_capabilities"):
+        caps = client.get_agent_capabilities(device_id) or {}
+    if bool(caps.get(cap)):
+        return f"Capability '{cap}' present"
+    msg = f"Device '{device_id}' lacks required capability '{cap}'"
+    if mode == "warn":
+        return f"WARN: {msg} (continuing)"
+    raise ValueError(msg)
+
+
+_CORE_EXECUTORS = {
+    "tap": _exec_tap,
+    "tap_by_text": _exec_tap_by_text,
+    "tap_by_resource_id": _exec_tap_by_resource_id,
+    "swipe": _exec_swipe,
+    "type_text": _exec_type_text,
+    "press_key": _exec_press_key,
+    "open_app": _exec_open_app,
+    "close_app": _exec_close_app,
+    "open_url": _exec_open_url,
+    "wait": _exec_wait,
+    "wait_for_element": _exec_wait_for_element,
+    "screenshot": _exec_screenshot,
+    "assert_element": _exec_assert_element,
+    "adb_shell": _exec_adb_shell,
+    "file_operation": _exec_file_operation,
+    "screenshot_assert": _exec_screenshot_assert,
+    "require_capability": _exec_require_capability,
+}
+
+# Attach each executor to its metadata entry, making STEP_TYPES the dispatch registry.
+for _type_name, _executor in _CORE_EXECUTORS.items():
+    STEP_TYPES[_type_name]["execute"] = _executor
+
+
 class AutomationMixin:
-    _automations = []
-    _automation_runs = []
-    _active_runs = {}  # run_id -> cancel_event
+    _active_runs = {}  # run_id -> cancel_event (ephemeral: live cancel handles)
+    _run_jobs = {}  # run_id -> job_id (ephemeral: lets cancel find a still-queued run's job)
     _recording_sessions = {}  # session_id -> {device_id, actions, started_at}
-    _schedules = []
-    _scheduler_thread = None
-    _scheduler_stop_event = None
+    _device_run_locks = {}  # device_id -> threading.Lock (per-device run serialization)
+    _device_run_locks_guard = threading.Lock()
+    _ext_step_types = {}  # type_name -> spec (contributed by extensions; overlays STEP_TYPES)
+
+    def _device_run_lock(self, device_id):
+        """A per-device lock so two automation jobs never drive the same device at once
+        (fleet-wide parallelism is still allowed — different devices run concurrently)."""
+        with self._device_run_locks_guard:
+            lock = self._device_run_locks.get(device_id)
+            if lock is None:
+                lock = threading.Lock()
+                self._device_run_locks[device_id] = lock
+            return lock
+
+    # ---------------------------------------------------------------
+    # Step-type dispatch registry
+    # ---------------------------------------------------------------
+    def step_type_registry(self):
+        """Merged view of core + extension step types (entries include ``execute``)."""
+        if self._ext_step_types:
+            return {**STEP_TYPES, **self._ext_step_types}
+        return STEP_TYPES
 
     def get_step_types(self):
-        return STEP_TYPES
+        """Metadata for the AutomationEditor — the ``execute`` callable is stripped so the
+        registry serializes cleanly to JSON."""
+        out = {}
+        for name, spec in self.step_type_registry().items():
+            out[name] = {k: v for k, v in spec.items() if k != "execute"}
+        return out
+
+    def register_step_type(self, type_name, spec):
+        """Register (or replace) an extension-contributed step type. ``spec`` is the same
+        metadata shape as ``STEP_TYPES`` entries plus a required ``execute`` callable
+        ``execute(client, config, device_id) -> output``."""
+        if "execute" not in spec or not callable(spec["execute"]):
+            raise ValueError(f"Step type '{type_name}' must provide an 'execute' callable")
+        self._ext_step_types[type_name] = spec
+        logger.info(f"Registered extension step type '{type_name}'")
+
+    def unregister_step_type(self, type_name):
+        """Remove an extension-contributed step type (used on disable/uninstall)."""
+        self._ext_step_types.pop(type_name, None)
 
     # ---------------------------------------------------------------
     # Automation CRUD
     # ---------------------------------------------------------------
     def create_automation(self, name, description="", steps=None, tags=None):
-        automation = {
-            "id": str(uuid.uuid4()),
-            "name": name,
-            "description": description,
-            "steps": steps or [],
-            "tags": tags or [],
-            "created_at": time.time(),
-            "updated_at": time.time(),
-        }
-        self._automations.append(automation)
-        logger.info(f"Created automation '{name}' ({automation['id']})")
-        return automation
+        now = time.time()
+        with session_scope() as s:
+            automation = Automation(
+                id=str(uuid.uuid4()),
+                name=name,
+                description=description,
+                steps=steps or [],
+                tags=tags or [],
+                created_at=now,
+                updated_at=now,
+            )
+            s.add(automation)
+            s.flush()
+            result = automation.to_dict()
+        logger.info(f"Created automation '{name}' ({result['id']})")
+        return result
 
     def get_automation(self, automation_id):
-        return next((a for a in self._automations if a["id"] == automation_id), None)
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            return automation.to_dict() if automation else None
 
     def list_automations(self):
-        return list(self._automations)
+        with session_scope() as s:
+            return [a.to_dict() for a in s.query(Automation).all()]
 
     def update_automation(self, automation_id, updates):
-        automation = self.get_automation(automation_id)
-        if not automation:
-            return None
-        updates["updated_at"] = time.time()
-        automation.update(updates)
-        return automation
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            if not automation:
+                return None
+            for key in ("name", "description", "steps", "tags"):
+                if key in updates:
+                    setattr(automation, key, updates[key])
+            automation.updated_at = time.time()
+            s.flush()
+            return automation.to_dict()
 
     def delete_automation(self, automation_id):
-        before = len(self._automations)
-        self._automations = [a for a in self._automations if a["id"] != automation_id]
-        deleted = len(self._automations) < before
-        if deleted:
-            logger.info(f"Deleted automation {automation_id}")
-        return deleted
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            if not automation:
+                return False
+            s.delete(automation)
+        logger.info(f"Deleted automation {automation_id}")
+        return True
 
     # ---------------------------------------------------------------
     # Execution
     # ---------------------------------------------------------------
     def execute_automation(self, automation_id, device_id, self_heal=False):
+        """Create a run record and enqueue an ``automation.run`` job that executes it.
+
+        Formerly this spawned a raw daemon thread; now the run is durable work on the job
+        system — it survives a restart with a coherent status, can be retried, and appears in
+        the jobs list. The step loop itself is unchanged; it just runs inside the job handler
+        (``_job_run_automation``) on a bounded worker pool. Returns the queued run record
+        immediately so the API still responds 201 without blocking."""
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
@@ -216,7 +496,7 @@ class AutomationMixin:
             "automation_id": automation_id,
             "automation_name": automation.get("name", ""),
             "device_id": device_id,
-            "status": "running",
+            "status": "queued",
             "started_at": time.time(),
             "finished_at": None,
             "total_steps": len(steps),
@@ -226,22 +506,82 @@ class AutomationMixin:
             "error": None,
             "self_heal": self_heal,
         }
-        self._automation_runs.append(run_record)
+        self._save_run(run_record)
 
-        cancel_event = threading.Event()
-        self._active_runs[run_record["id"]] = cancel_event
-
-        thread = threading.Thread(
-            target=self._run_automation_thread,
-            args=(run_record, steps, device_id, cancel_event),
-            daemon=True,
+        # A thin pointer rides the queue; the steps snapshot travels in the payload so an edit
+        # to the automation between enqueue and execution doesn't change what this run does.
+        job = JobService.enqueue(
+            "automation.run",
+            payload={
+                "run_id": run_record["id"],
+                "automation_id": automation_id,
+                "device_id": device_id,
+                "self_heal": self_heal,
+                "steps": steps,
+            },
+            max_attempts=1,  # a failed automation is a terminal outcome, not a job to retry
+            owner_type="automation_run",
+            owner_id=run_record["id"],
         )
-        thread.start()
-
+        self._run_jobs[run_record["id"]] = job["id"]
         return run_record
 
-    def _run_automation_thread(self, run_record, steps, device_id, cancel_event):
+    def _job_run_automation(self, job):
+        """Job handler for ``automation.run`` — drives one run's step loop to completion.
+
+        Registered by JobsMixin. Honors a cancel requested before pickup, serializes per
+        device, and never raises for a normal step failure (that's a ``failed`` run, a
+        succeeded job). Returns a compact summary as the job result."""
+        payload = job.get("payload", {})
+        run_id = payload.get("run_id")
+        device_id = payload.get("device_id")
+        steps = payload.get("steps") or []
+        self_heal = payload.get("self_heal", False)
+        if not run_id:
+            return {"error": "missing run_id"}
+
+        run_record = self.get_automation_run(run_id)
+        if not run_record:
+            return {"skipped": "run record missing"}
+        if run_record.get("status") in ("cancelled", "failed", "completed"):
+            # Cancelled, or reconciled-as-failed on a prior restart — do not re-run.
+            return {"skipped": run_record.get("status")}
+
+        run_record["self_heal"] = self_heal
+        cancel_event = threading.Event()
+        self._active_runs[run_id] = cancel_event
+
+        try:
+            lock = self._device_run_lock(device_id)
+            with lock:
+                if cancel_event.is_set():
+                    run_record.update({"status": "cancelled", "finished_at": time.time()})
+                    self._save_run(run_record)
+                    return {"run_id": run_id, "status": "cancelled"}
+                self._run_automation_steps(run_record, steps, device_id, cancel_event)
+        except Exception as e:
+            logger.error(f"Automation run {run_id} crashed: {e}")
+            run_record.update({"status": "failed", "finished_at": time.time(), "error": str(e)})
+            self._save_run(run_record)
+            self._notify_run_failed(run_record, run_record.get("current_step_index", 0),
+                                    None, str(e))
+            self._active_runs.pop(run_id, None)
+        finally:
+            self._run_jobs.pop(run_id, None)
+
+        final = self.get_automation_run(run_id)
+        return {
+            "run_id": run_id,
+            "status": final.get("status") if final else None,
+            "completed_steps": final.get("completed_steps") if final else None,
+        }
+
+    def _run_automation_steps(self, run_record, steps, device_id, cancel_event):
         from devicekit.mixins.nl_automation import UI_TARGETING_STEP_TYPES
+
+        # Flip queued -> running now that a worker owns this run.
+        run_record["status"] = "running"
+        self._save_run(run_record)
 
         step_results = []
         completed = 0
@@ -256,6 +596,7 @@ class AutomationMixin:
                     "current_step_index": idx,
                     "step_results": step_results,
                 })
+                self._save_run(run_record)
                 self._active_runs.pop(run_record["id"], None)
                 return
 
@@ -289,20 +630,47 @@ class AutomationMixin:
                     try:
                         heal_result = self.self_heal_step(device_id, step, error_str)
                         if heal_result.get("healed"):
-                            # Re-execute with healed step config
+                            # A heal is a write-ish decision: apply it through the same
+                            # confirmation gate as agent tools (plan 13). Supervised runs
+                            # pause for approval; autonomous auto-applies + audits; observe
+                            # refuses. Falls back to direct execution if no gate is composed.
                             healed_step = heal_result["new_step"]
-                            heal_start = time.time()
-                            output = self._execute_step(healed_step, device_id)
-                            elapsed = int((time.time() - start_ts) * 1000)
-                            result["status"] = "completed"
-                            result["output"] = str(output) if output else None
-                            result["duration_ms"] = elapsed
-                            result["healed"] = True
-                            result["original_step"] = copy.deepcopy(step)
-                            result["healed_step"] = healed_step
-                            result["heal_reasoning"] = heal_result.get("reasoning", "")
-                            completed += 1
-                            healed = True
+                            reasoning = heal_result.get("reasoning", "")
+                            exec_box = {}
+
+                            def _apply_heal():
+                                exec_box["output"] = self._execute_step(healed_step, device_id)
+                                exec_box["ran"] = True
+                                return str(exec_box["output"]) if exec_box["output"] else ""
+
+                            if hasattr(self, "gate_tool_call"):
+                                gate_msg = self.gate_tool_call(
+                                    device_id, "self_heal",
+                                    {"proposed_step": healed_step, "reason": reasoning},
+                                    {"is_write": True, "category": "self_heal",
+                                     "label": "Apply self-heal"},
+                                    source="self_heal", real_fn=_apply_heal)
+                            else:
+                                _apply_heal()
+                                gate_msg = ""
+
+                            if exec_box.get("ran"):
+                                output = exec_box["output"]
+                                elapsed = int((time.time() - start_ts) * 1000)
+                                result["status"] = "completed"
+                                result["output"] = str(output) if output else None
+                                result["duration_ms"] = elapsed
+                                result["healed"] = True
+                                result["original_step"] = copy.deepcopy(step)
+                                result["healed_step"] = healed_step
+                                result["heal_reasoning"] = reasoning
+                                completed += 1
+                                healed = True
+                                self._notify_run_healed(run_record, idx, result.get("heal_reasoning", ""))
+                            else:
+                                # Gate denied/timed out — the heal was not applied.
+                                result["healed"] = False
+                                result["heal_reasoning"] = gate_msg or "Heal not approved"
                         else:
                             # Heal attempted but failed
                             result["healed"] = False
@@ -363,12 +731,15 @@ class AutomationMixin:
                         "step_results": step_results,
                         "error": error_str,
                     })
+                    self._save_run(run_record)
+                    self._notify_run_failed(run_record, idx, step, error_str)
                     self._active_runs.pop(run_record["id"], None)
                     return
 
             step_results.append(result)
             run_record["completed_steps"] = completed
             run_record["step_results"] = step_results
+            self._save_run(run_record)
 
         run_record.update({
             "status": "completed",
@@ -377,181 +748,125 @@ class AutomationMixin:
             "current_step_index": len(steps),
             "step_results": step_results,
         })
+        self._save_run(run_record)
         self._active_runs.pop(run_record["id"], None)
 
     def _execute_step(self, step, device_id):
         step_type = step.get("type")
         config = step.get("config", {})
 
-        if step_type == "tap":
-            x = int(config["x"])
-            y = int(config["y"])
-            self.click(x, y, device_id)
-            return f"Tapped ({x}, {y})"
-
-        elif step_type == "tap_by_text":
-            text = config["text"]
-            self.click_by_text(text, device_id)
-            return f"Tapped element with text '{text}'"
-
-        elif step_type == "tap_by_resource_id":
-            rid = config["resource_id"]
-            self.click_by_resource_id(rid, device_id)
-            return f"Tapped element '{rid}'"
-
-        elif step_type == "swipe":
-            direction = config.get("direction", "up")
-            duration = int(config.get("duration", 500))
-            d = self.get_device(device_id)
-            info = d.info
-            w = info.get("displayWidth", 1080)
-            h = info.get("displayHeight", 1920)
-            cx, cy = w // 2, h // 2
-            swipe_map = {
-                "up": (cx, h * 3 // 4, cx, h // 4),
-                "down": (cx, h // 4, cx, h * 3 // 4),
-                "left": (w * 3 // 4, cy, w // 4, cy),
-                "right": (w // 4, cy, w * 3 // 4, cy),
-            }
-            coords = swipe_map.get(direction, swipe_map["up"])
-            d.swipe(*coords, duration=duration / 1000)
-            return f"Swiped {direction}"
-
-        elif step_type == "type_text":
-            text = config["text"]
-            d = self.get_device(device_id)
-            d.send_keys(text)
-            return f"Typed '{text}'"
-
-        elif step_type == "press_key":
-            key = config["key"]
-            self.press_action(key, device_id)
-            return f"Pressed '{key}'"
-
-        elif step_type == "open_app":
-            package = config["package"]
-            d = self.get_device(device_id)
-            d.app_start(package)
-            return f"Opened {package}"
-
-        elif step_type == "close_app":
-            package = config["package"]
-            self.run_adb_command(f"shell am force-stop {package}", device=device_id)
-            return f"Closed {package}"
-
-        elif step_type == "open_url":
-            url = config["url"]
-            self.run_adb_command([
-                "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url
-            ], device=device_id)
-            return f"Opened URL {url}"
-
-        elif step_type == "wait":
-            delay = int(config.get("delay", 1000))
-            time.sleep(delay / 1000)
-            return f"Waited {delay}ms"
-
-        elif step_type == "wait_for_element":
-            by = config.get("by", "text")
-            value = config["value"]
-            timeout = int(config.get("timeout", 10000))
-            timeout_secs = timeout / 1000
-            if by == "text":
-                found = self.exists_by_text(value, device_id, timeout=timeout_secs)
-            else:
-                found = self.exists_by_resource_id(value, device_id, timeout=timeout_secs)
-            if not found:
-                raise Exception(f"Element not found by {by}='{value}' within {timeout}ms")
-            return f"Found element {by}='{value}'"
-
-        elif step_type == "screenshot":
-            data = self.take_screenshot(device_id)
-            if data:
-                return f"Screenshot captured ({len(data)} bytes)"
-            raise Exception("Screenshot failed")
-
-        elif step_type == "assert_element":
-            by = config.get("by", "text")
-            value = config["value"]
-            timeout = int(config.get("timeout", 5000))
-            timeout_secs = timeout / 1000
-            if by == "text":
-                found = self.exists_by_text(value, device_id, timeout=timeout_secs)
-            else:
-                found = self.exists_by_resource_id(value, device_id, timeout=timeout_secs)
-            if not found:
-                raise AssertionError(f"Assertion failed: element {by}='{value}' not found")
-            return f"Assertion passed: {by}='{value}' exists"
-
-        elif step_type == "adb_shell":
-            command = config["command"]
-            output = self.run_adb_command(f"shell {command}", device=device_id)
-            return output or "(no output)"
-
-        elif step_type == "file_operation":
-            operation = config.get("operation", "push")
-            local_path = config.get("local_path", "")
-            remote_path = config["remote_path"]
-            if operation == "push":
-                if not local_path:
-                    raise ValueError("local_path is required for push operation")
-                output = self.run_adb_command(f"push {local_path} {remote_path}", device=device_id)
-                return output or f"Pushed {local_path} to {remote_path}"
-            elif operation == "pull":
-                if not local_path:
-                    raise ValueError("local_path is required for pull operation")
-                output = self.run_adb_command(f"pull {remote_path} {local_path}", device=device_id)
-                return output or f"Pulled {remote_path} to {local_path}"
-            elif operation == "delete":
-                output = self.run_adb_command(f"shell rm -f {remote_path}", device=device_id)
-                return output or f"Deleted {remote_path}"
-            else:
-                raise ValueError(f"Unknown file operation: {operation}")
-
-        elif step_type == "screenshot_assert":
-            baseline_id = config.get("baseline_id", "")
-            threshold = float(config.get("threshold", 95))
-            use_ai = config.get("use_ai", "on") == "on"
-            screenshot_data = self.take_screenshot(device_id)
-            if not screenshot_data:
-                raise Exception("Failed to capture screenshot for visual assertion")
-            result = self.compare_screenshot(
-                screenshot_data, baseline_id=baseline_id,
-                threshold=threshold, use_ai=use_ai, device_id=device_id,
-            )
-            if result.get("passed"):
-                return f"Visual assertion passed (SSIM={result.get('ssim', 0):.1f}%, verdict={result.get('verdict', 'pass')})"
-            else:
-                msg = f"Visual assertion failed (SSIM={result.get('ssim', 0):.1f}%, threshold={threshold}%"
-                if result.get("ai_analysis"):
-                    msg += f", AI: {result['ai_analysis'][:200]}"
-                msg += ")"
-                raise AssertionError(msg)
-
-        else:
+        spec = self.step_type_registry().get(step_type)
+        if spec is None:
             raise ValueError(f"Unknown step type: {step_type}")
+        executor = spec.get("execute")
+        if executor is None or not callable(executor):
+            raise ValueError(f"Step type '{step_type}' has no executor")
+        return executor(self, config, device_id)
 
     # ---------------------------------------------------------------
     # Run management
     # ---------------------------------------------------------------
     def cancel_automation_run(self, run_id):
+        # Actively running on a worker: signal the cooperative cancel event; the step loop
+        # marks the run cancelled at the next step boundary.
         cancel_event = self._active_runs.get(run_id)
         if cancel_event:
             cancel_event.set()
             return True
-        return False
+        # Still queued (no worker yet): mark it cancelled and cancel the underlying job so the
+        # consumer skips the message when it arrives.
+        run = self.get_automation_run(run_id)
+        if not run or run.get("status") not in ("queued", "running"):
+            return False
+        run["status"] = "cancelled"
+        run["finished_at"] = time.time()
+        self._save_run(run)
+        job_id = self._run_jobs.get(run_id) or self._find_run_job(run_id)
+        if job_id:
+            try:
+                JobService.cancel(job_id)
+            except Exception:
+                pass
+        return True
+
+    # ---------------------------------------------------------------
+    # Notification producer hooks (plan 06). Best-effort — a notification problem must
+    # never affect a run. ``notify_event`` is provided by NotificationsMixin on the
+    # composite and is itself exception-safe; the hasattr guard keeps AutomationMixin
+    # usable in isolation (tests compose a bare subset).
+    # ---------------------------------------------------------------
+    def _notify_run_failed(self, run_record, step_index, step, error):
+        if not hasattr(self, "notify_event"):
+            return
+        self.notify_event(
+            "automation.run.failed",
+            data={
+                "automation_name": run_record.get("automation_name") or "automation",
+                "automation_id": run_record.get("automation_id"),
+                "run_id": run_record.get("id"),
+                "device_id": run_record.get("device_id"),
+                "step_index": step_index,
+                "step_type": (step or {}).get("type", "") if step else "",
+                "error": (error or "")[:300],
+            },
+            subject_type="automation_run", subject_id=run_record.get("id"))
+
+    def _notify_run_healed(self, run_record, step_index, reasoning):
+        if not hasattr(self, "notify_event"):
+            return
+        self.notify_event(
+            "automation.run.healed",
+            data={
+                "automation_name": run_record.get("automation_name") or "automation",
+                "automation_id": run_record.get("automation_id"),
+                "run_id": run_record.get("id"),
+                "device_id": run_record.get("device_id"),
+                "step_index": step_index,
+                "heal_reasoning": (reasoning or "")[:300],
+            },
+            subject_type="automation_run", subject_id=run_record.get("id"))
+
+    def _find_run_job(self, run_id):
+        """Locate the ``automation.run`` job for a run (in-memory map lost after a restart)."""
+        jobs = JobService.list(owner_type="automation_run", owner_id=run_id, limit=1)
+        return jobs[0]["id"] if jobs else None
+
+    def _save_run(self, run_record):
+        """Upsert an automation-run row from the live in-memory record. Called at
+        creation and after every step/terminal transition so polling and restart both
+        see current progress."""
+        with session_scope() as s:
+            row = s.get(AutomationRun, run_record["id"])
+            if not row:
+                row = AutomationRun(id=run_record["id"])
+                s.add(row)
+            row.automation_id = run_record.get("automation_id")
+            row.automation_name = run_record.get("automation_name", "")
+            row.device_id = run_record.get("device_id")
+            row.status = run_record.get("status")
+            row.started_at = run_record.get("started_at")
+            row.finished_at = run_record.get("finished_at")
+            row.total_steps = run_record.get("total_steps", 0)
+            row.completed_steps = run_record.get("completed_steps", 0)
+            row.current_step_index = run_record.get("current_step_index", 0)
+            row.step_results = run_record.get("step_results", [])
+            row.error = run_record.get("error")
+            row.self_heal = run_record.get("self_heal", False)
 
     def get_automation_run(self, run_id):
-        return next((r for r in self._automation_runs if r["id"] == run_id), None)
+        with session_scope() as s:
+            run = s.get(AutomationRun, run_id)
+            return run.to_dict() if run else None
 
     def list_automation_runs(self, automation_id=None, device_id=None, limit=50):
-        runs = list(self._automation_runs)
-        if automation_id:
-            runs = [r for r in runs if r.get("automation_id") == automation_id]
-        if device_id:
-            runs = [r for r in runs if r.get("device_id") == device_id]
-        runs.sort(key=lambda r: r.get("started_at", 0), reverse=True)
-        return runs[:limit]
+        with session_scope() as s:
+            q = s.query(AutomationRun)
+            if automation_id:
+                q = q.filter(AutomationRun.automation_id == automation_id)
+            if device_id:
+                q = q.filter(AutomationRun.device_id == device_id)
+            q = q.order_by(AutomationRun.started_at.desc()).limit(limit)
+            return [r.to_dict() for r in q.all()]
 
     # ---------------------------------------------------------------
     # Recording
@@ -627,81 +942,115 @@ class AutomationMixin:
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
         now = time.time()
-        schedule = {
-            "id": str(uuid.uuid4()),
-            "automation_id": automation_id,
-            "automation_name": automation.get("name", ""),
-            "device_id": device_id,
-            "interval_minutes": interval_minutes,
-            "enabled": enabled,
-            "last_run_at": None,
-            "next_run_at": now + interval_minutes * 60,
-            "created_at": now,
-        }
-        self._schedules.append(schedule)
-        self._ensure_scheduler_running()
-        logger.info(f"Created schedule {schedule['id']} for automation '{automation.get('name')}'")
-        return schedule
+        with session_scope() as s:
+            schedule = AutomationSchedule(
+                id=str(uuid.uuid4()),
+                automation_id=automation_id,
+                automation_name=automation.get("name", ""),
+                device_id=device_id,
+                interval_minutes=interval_minutes,
+                enabled=enabled,
+                last_run_at=None,
+                next_run_at=now + interval_minutes * 60,
+                created_at=now,
+            )
+            s.add(schedule)
+            s.flush()
+            result = schedule.to_dict()
+        logger.info(f"Created schedule {result['id']} for automation '{automation.get('name')}'")
+        return result
 
     def get_schedule(self, schedule_id):
-        return next((s for s in self._schedules if s["id"] == schedule_id), None)
+        with session_scope() as s:
+            schedule = s.get(AutomationSchedule, schedule_id)
+            return schedule.to_dict() if schedule else None
 
     def list_schedules(self, automation_id=None):
-        schedules = list(self._schedules)
-        if automation_id:
-            schedules = [s for s in schedules if s.get("automation_id") == automation_id]
-        return schedules
+        with session_scope() as s:
+            q = s.query(AutomationSchedule)
+            if automation_id:
+                q = q.filter(AutomationSchedule.automation_id == automation_id)
+            return [sch.to_dict() for sch in q.all()]
 
     def update_schedule(self, schedule_id, updates):
-        schedule = self.get_schedule(schedule_id)
-        if not schedule:
-            return None
-        for key in ("interval_minutes", "enabled", "device_id"):
-            if key in updates:
-                schedule[key] = updates[key]
-        if "interval_minutes" in updates:
-            schedule["next_run_at"] = time.time() + updates["interval_minutes"] * 60
-        return schedule
+        with session_scope() as s:
+            schedule = s.get(AutomationSchedule, schedule_id)
+            if not schedule:
+                return None
+            for key in ("interval_minutes", "enabled", "device_id"):
+                if key in updates:
+                    setattr(schedule, key, updates[key])
+            if "interval_minutes" in updates:
+                schedule.next_run_at = time.time() + updates["interval_minutes"] * 60
+            s.flush()
+            result = schedule.to_dict()
+        return result
 
     def delete_schedule(self, schedule_id):
-        before = len(self._schedules)
-        self._schedules = [s for s in self._schedules if s["id"] != schedule_id]
-        deleted = len(self._schedules) < before
-        if deleted:
-            logger.info(f"Deleted schedule {schedule_id}")
-        return deleted
+        with session_scope() as s:
+            schedule = s.get(AutomationSchedule, schedule_id)
+            if not schedule:
+                return False
+            s.delete(schedule)
+        logger.info(f"Deleted schedule {schedule_id}")
+        return True
 
-    def _ensure_scheduler_running(self):
-        if self._scheduler_thread and self._scheduler_thread.is_alive():
-            return
-        self._scheduler_stop_event = threading.Event()
-        self._scheduler_thread = threading.Thread(
-            target=self._scheduler_loop,
-            args=(self._scheduler_stop_event,),
-            daemon=True,
-        )
-        self._scheduler_thread.start()
-        logger.info("Scheduler thread started")
+    def _job_schedule_tick(self, job):
+        """Job handler for ``automation.schedule.tick`` — the unified replacement for the old
+        per-mixin scheduler daemon. The always-on JobScheduler fires this every 30s; it
+        enqueues an ``automation.run`` job for every due schedule and advances its clock."""
+        return {"fired": self.run_due_automation_schedules()}
 
-    def _scheduler_loop(self, stop_event):
-        while not stop_event.is_set():
-            now = time.time()
-            for schedule in list(self._schedules):
-                if not schedule.get("enabled"):
-                    continue
-                next_run = schedule.get("next_run_at", 0)
-                if now >= next_run:
-                    try:
-                        self.execute_automation(
-                            schedule["automation_id"],
-                            schedule["device_id"],
-                        )
-                        schedule["last_run_at"] = now
-                        schedule["next_run_at"] = now + schedule["interval_minutes"] * 60
-                        logger.info(f"Scheduler ran automation {schedule['automation_id']}")
-                    except Exception as e:
-                        logger.error(f"Scheduler error for {schedule['id']}: {e}")
-            stop_event.wait(30)
+    def run_due_automation_schedules(self):
+        """Enqueue a run for every enabled schedule whose ``next_run_at`` has passed, then
+        advance its ``next_run_at``. Reads the DB each tick (short-lived session) so restarts
+        and external edits are always reflected. Returns the number fired."""
+        now = time.time()
+        with session_scope() as s:
+            due = (
+                s.query(AutomationSchedule)
+                .filter(AutomationSchedule.enabled == True)  # noqa: E712
+                .filter(AutomationSchedule.next_run_at <= now)
+                .all()
+            )
+            due_specs = [
+                (sch.id, sch.automation_id, sch.device_id, sch.interval_minutes)
+                for sch in due
+            ]
+        fired = 0
+        for sched_id, automation_id, device_id, interval_minutes in due_specs:
+            try:
+                self.execute_automation(automation_id, device_id)
+                with session_scope() as s:
+                    sch = s.get(AutomationSchedule, sched_id)
+                    if sch:
+                        sch.last_run_at = now
+                        sch.next_run_at = now + (sch.interval_minutes or interval_minutes) * 60
+                fired += 1
+                logger.info(f"Scheduler enqueued automation {automation_id}")
+            except Exception as e:
+                logger.error(f"Scheduler error for {sched_id}: {e}")
+        return fired
+
+    def reconcile_interrupted_runs(self, reason="Backend restarted during run"):
+        """At boot, fail any run left ``queued``/``running`` by a previous process — its
+        in-memory execution is gone. Called by JobsMixin.start_job_workers so a mid-run
+        restart yields a coherent 'failed' status instead of a run stuck 'running' forever.
+        Returns the number reconciled."""
+        now = time.time()
+        with session_scope() as s:
+            rows = (
+                s.query(AutomationRun)
+                .filter(AutomationRun.status.in_(("queued", "running")))
+                .all()
+            )
+            n = 0
+            for r in rows:
+                r.status = "failed"
+                r.error = reason
+                r.finished_at = now
+                n += 1
+            return n
 
     # ---------------------------------------------------------------
     # Clone / Export / Import
@@ -710,14 +1059,15 @@ class AutomationMixin:
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
-        cloned = copy.deepcopy(automation)
-        cloned["id"] = str(uuid.uuid4())
-        cloned["name"] = new_name or f"{automation['name']} (Copy)"
-        cloned["created_at"] = time.time()
-        cloned["updated_at"] = time.time()
-        for step in cloned.get("steps", []):
+        steps = copy.deepcopy(automation.get("steps", []))
+        for step in steps:
             step["id"] = str(uuid.uuid4())
-        self._automations.append(cloned)
+        cloned = self.create_automation(
+            name=new_name or f"{automation['name']} (Copy)",
+            description=automation.get("description", ""),
+            steps=steps,
+            tags=list(automation.get("tags", [])),
+        )
         logger.info(f"Cloned automation '{automation['name']}' -> '{cloned['name']}'")
         return cloned
 

@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "updated": "2026-07-10",
+  "extensions": [
+    {
+      "slug": "devicekit-webhook-notify",
+      "display_name": "Webhook Notifier",
+      "description": "Send fleet notifications to a Slack/Discord-compatible webhook. The first builtin extension, proving every DeviceKit contribution seam.",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": true,
+      "permissions": ["network"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "repo": "https://github.com/jhd3197/devicekit",
+      "homepage": "https://github.com/jhd3197/devicekit"
+    },
+    {
+      "slug": "devicekit-appium",
+      "display_name": "Appium Bridge",
+      "description": "Drive devices through an Appium server: contributes an appium.run step type and appium.session_count fleet-query field.",
+      "version": "1.0.0",
+      "category": "automation",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": false,
+      "permissions": ["adb", "device.control", "network"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "source": "https://github.com/jhd3197/devicekit-appium/releases/download/v1.0.0/devicekit-appium-1.0.0.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "repo": "https://github.com/jhd3197/devicekit-appium",
+      "homepage": "https://github.com/jhd3197/devicekit-appium"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Plan 04 — Extension Platform: Frontend
 
-**Status:** proposed
+**Status:** ✅ shipped (2026-07-10)
 **Inspired by:** ServerKit's `frontend/src/plugins/` (contributions.js, ExtensionRoutes.jsx,
 PluginSlot.jsx, sdk/), `pages/Marketplace.jsx`, and ADR 0001 (frontend delivery decision)
 **Depends on:** 03 (contribution envelope is served by the backend)
@@ -92,15 +92,40 @@ New `Extensions.jsx` view (route `/extensions`, sidebar under Management), model
 
 ## Phases
 
-1. Contributions endpoint consumption: nav + routes + error boundaries + titles
-   (builtins only, build-time glob).
-2. `ExtensionSlot` + first slots in Dashboard and AutomationRunDetail.
-3. Marketplace view: installed management, then registry browse + consent install flow.
-4. SDK alias + sync script + CI drift gate.
+0. ✅ **Backend prerequisite** (plan 03 left this unbuilt): `GET /extensions/contributions`
+   merges active extensions' manifest `contributions` into one slug-tagged envelope;
+   `SDK_VERSION` backend constant + `GET /extensions/sdk-version`. The webhook-notify
+   builtin gained a `contributions` block + a frontend (page + dashboard widget) so the
+   platform has a real builtin to render. `backend/tests/test_frontend_contributions.py`.
+1. ✅ Contributions endpoint consumption: `contributions.js` singleton (fetch/cache/pubsub
+   via `useSyncExternalStore`, `refreshContributions()`, build-time `import.meta.glob`
+   fallback), `resolveComponent`, `ExtensionErrorBoundary`, `sanitizeSvgInner` +
+   `ExtensionIcon`, `App.jsx` merged nav + dynamic routes + page-title updater.
+2. ✅ `ExtensionSlot` + first slots: `dashboard.top` (Dashboard) and `run-detail.panels`
+   (AutomationRunDetail), each widget in a per-extension boundary.
+3. ✅ Marketplace view (`Extensions.jsx`, `/extensions`): browse (builtin+registry,
+   cover-art fallback chain, category/permission filters), consent detail modal, install
+   from registry/URL(+preview)/upload, installed management (enable/disable, update badge,
+   schema-driven config with secret masking, keep-vs-purge uninstall).
+4. ✅ SDK alias `devicekit-sdk` (Vite) + versioned surface (landed in ph1);
+   `scripts/sync-builtin-frontends.mjs` (+`--check` drift gate), `.github/workflows/
+   frontend-ci.yml`, `SDK_VERSION` mirrored + test, EXTENSIONS.md frontend section.
 
-## Definition of done
+**Deviations:** (a) The contributions endpoint + SDK version constant were specced as a
+plan-03 dependency but did not exist; built here as phase 0. (b) The `devicekit-sdk` alias
+and SDK surface (plan phase 4) had to land in phase 1 so the app builds once the builtin
+frontend imports the alias — phase 4 kept only the sync script + CI + docs. (c) Runtime
+verification surfaced a pre-existing local dev-DB drift (stamped at the
+`installed_extensions` revision but missing the table); healed non-destructively with
+`db.create_all()`. Command-palette rendering (`command_palette` kind) is carried in the
+envelope but rendered by plan 10; `settings.panels` slot is seeded for plan 12.
 
-A builtin extension contributes a sidebar item, a routed page, and a dashboard widget
-with no edits to `App.jsx` beyond the generic contribution rendering; disabling it in
-the marketplace removes its nav/routes/widgets immediately; a deliberately-throwing
-extension component shows a contained failure card while the rest of the app works.
+## Definition of done — ✅ verified
+
+A builtin extension (`devicekit-webhook-notify`) contributes a sidebar item, a routed page
+(`/x/webhook-notify`), and a `dashboard.top` widget with no edits to `App.jsx` beyond the
+generic contribution rendering; disabling it in the marketplace removes its nav/routes/
+widgets immediately (verified: envelope nav drops 1→0 on disable, 0→1 on enable); a
+deliberately-throwing extension component is contained by `ExtensionErrorBoundary` (per
+route and per widget) while the rest of the app works. Frontend builds clean; 54 backend
+tests pass including the envelope merge, disable/enable drop-restore, and SDK-version match.

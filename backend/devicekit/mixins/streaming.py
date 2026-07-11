@@ -3,9 +3,11 @@ import os
 import threading
 import time
 import uuid
-import tempfile
 
 import requests
+
+from devicekit.db import session_scope
+from devicekit.models import StreamSession
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +83,8 @@ class StreamingMixin:
     def _resolve_agent_stream_address(self, device_id):
         """Resolve the agent IP and port for streaming. Returns (ip, port) or (None, None)."""
         # Try agent device registry first
-        if hasattr(self, '_find_agent_device_for_stream'):
-            agent_data = self._find_agent_device_for_stream(device_id)
+        if hasattr(self, 'find_agent_device'):
+            agent_data = self.find_agent_device(device_id)
         else:
             agent_data = None
 
@@ -100,10 +102,35 @@ class StreamingMixin:
     # Session Recording
     # -----------------------------------------------------------
 
+    def _recordings_dir(self):
+        base = os.path.join(getattr(self, 'output_dir', 'output'), 'recordings')
+        os.makedirs(base, exist_ok=True)
+        return base
+
+    def _persist_session(self, session):
+        """Upsert a StreamSession row from the live session dict (ephemeral thread/stop
+        handles excluded)."""
+        with session_scope() as s:
+            row = s.get(StreamSession, session['id'])
+            if not row:
+                row = StreamSession(id=session['id'])
+                s.add(row)
+            row.device_id = session['device_id']
+            row.fps = session['fps']
+            row.quality = session['quality']
+            row.started_at = session['started_at']
+            row.stopped_at = session.get('stopped_at')
+            row.frame_count = session.get('frame_count', 0)
+            row.events = list(session.get('events', []))
+            row.frames_dir = session.get('frames_dir')
+            row.active = session.get('active', False)
+
     def start_recording_session(self, device_id, fps=10, quality=50):
         """Start a stream recording session. Captures frames in a background thread."""
         session_id = str(uuid.uuid4())
-        tmp_dir = tempfile.mkdtemp(prefix=f"devicekit_rec_{session_id[:8]}_")
+        # Stable per-session dir (under output/) so recordings survive a restart.
+        frames_dir = os.path.join(self._recordings_dir(), session_id)
+        os.makedirs(frames_dir, exist_ok=True)
         fps = max(1, min(30, int(fps)))
         quality = max(10, min(100, int(quality)))
 
@@ -116,13 +143,14 @@ class StreamingMixin:
             'stopped_at': None,
             'frame_count': 0,
             'events': [],
-            'frames_dir': tmp_dir,
+            'frames_dir': frames_dir,
             'active': True,
             '_stop_event': threading.Event(),
         }
 
         with self._recording_lock:
             self._recording_sessions[session_id] = session
+        self._persist_session(session)
 
         # Start background capture thread
         thread = threading.Thread(
@@ -231,6 +259,9 @@ class StreamingMixin:
         if thread and thread.is_alive():
             thread.join(timeout=2.0)
 
+        # Persist final metadata so the recording survives a restart.
+        self._persist_session(session)
+
         duration_ms = int((session['stopped_at'] - session['started_at']) * 1000)
 
         return {
@@ -246,64 +277,82 @@ class StreamingMixin:
 
     def get_recording_sessions(self, device_id):
         """List all recording sessions for a device."""
-        sessions = []
+        def _live_dict(session):
+            duration_ms = 0
+            if session.get('stopped_at') and session.get('started_at'):
+                duration_ms = int((session['stopped_at'] - session['started_at']) * 1000)
+            elif session.get('started_at'):
+                duration_ms = int((time.time() - session['started_at']) * 1000)
+            return {
+                'session_id': session['id'],
+                'device_id': session['device_id'],
+                'frame_count': session['frame_count'],
+                'duration_ms': duration_ms,
+                'fps': session['fps'],
+                'active': session['active'],
+                'started_at': session['started_at'],
+                'stopped_at': session.get('stopped_at'),
+                'event_count': len(session['events']),
+            }
+
+        by_id = {}
+        # Persisted (completed) sessions first...
+        with session_scope() as s:
+            rows = (
+                s.query(StreamSession)
+                .filter(StreamSession.device_id == device_id)
+                .all()
+            )
+            for row in rows:
+                d = row.to_dict()
+                d.pop('events', None)  # list view omits full events
+                by_id[row.id] = d
+        # ...then overlay live in-progress sessions (fresher frame_count).
         with self._recording_lock:
             for session in self._recording_sessions.values():
                 if session['device_id'] == device_id:
-                    duration_ms = 0
-                    if session.get('stopped_at') and session.get('started_at'):
-                        duration_ms = int((session['stopped_at'] - session['started_at']) * 1000)
-                    elif session.get('started_at'):
-                        duration_ms = int((time.time() - session['started_at']) * 1000)
-                    sessions.append({
-                        'session_id': session['id'],
-                        'device_id': session['device_id'],
-                        'frame_count': session['frame_count'],
-                        'duration_ms': duration_ms,
-                        'fps': session['fps'],
-                        'active': session['active'],
-                        'started_at': session['started_at'],
-                        'stopped_at': session.get('stopped_at'),
-                        'event_count': len(session['events']),
-                    })
-        return sorted(sessions, key=lambda s: s['started_at'], reverse=True)
+                    by_id[session['id']] = _live_dict(session)
+        return sorted(by_id.values(), key=lambda s: s['started_at'] or 0, reverse=True)
 
     def get_recording_metadata(self, session_id):
         """Return recording metadata (frame count, fps, duration, events)."""
         with self._recording_lock:
             session = self._recording_sessions.get(session_id)
-        if not session:
-            return None
-
-        duration_ms = 0
-        if session.get('stopped_at') and session.get('started_at'):
-            duration_ms = int((session['stopped_at'] - session['started_at']) * 1000)
-        elif session.get('started_at'):
-            duration_ms = int((time.time() - session['started_at']) * 1000)
-
-        return {
-            'session_id': session_id,
-            'device_id': session['device_id'],
-            'frame_count': session['frame_count'],
-            'duration_ms': duration_ms,
-            'fps': session['fps'],
-            'active': session['active'],
-            'started_at': session['started_at'],
-            'stopped_at': session.get('stopped_at'),
-            'events': session['events'],
-        }
+        if session:
+            duration_ms = 0
+            if session.get('stopped_at') and session.get('started_at'):
+                duration_ms = int((session['stopped_at'] - session['started_at']) * 1000)
+            elif session.get('started_at'):
+                duration_ms = int((time.time() - session['started_at']) * 1000)
+            return {
+                'session_id': session_id,
+                'device_id': session['device_id'],
+                'frame_count': session['frame_count'],
+                'duration_ms': duration_ms,
+                'fps': session['fps'],
+                'active': session['active'],
+                'started_at': session['started_at'],
+                'stopped_at': session.get('stopped_at'),
+                'events': session['events'],
+            }
+        # Fall back to a persisted session (e.g. after a restart).
+        with session_scope() as s:
+            row = s.get(StreamSession, session_id)
+            return row.to_dict() if row else None
 
     def get_recording_frame(self, session_id, frame_index):
         """Return a single frame as JPEG bytes."""
         with self._recording_lock:
             session = self._recording_sessions.get(session_id)
-        if not session:
+        frames_dir = session['frames_dir'] if session else None
+        if frames_dir is None:
+            with session_scope() as s:
+                row = s.get(StreamSession, session_id)
+                frames_dir = row.frames_dir if row else None
+        if not frames_dir:
             return None
 
-        frame_path = os.path.join(
-            session['frames_dir'],
-            f"frame_{int(frame_index):06d}.jpg"
-        )
+        frame_path = os.path.join(frames_dir, f"frame_{int(frame_index):06d}.jpg")
         if not os.path.exists(frame_path):
             return None
 

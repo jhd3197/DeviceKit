@@ -1,6 +1,6 @@
 # Plan 11 — Dashboard Widget System
 
-**Status:** proposed
+**Status:** ✅ shipped (all 3 phases)
 **Inspired by:** ServerKit's `frontend/src/pages/Dashboard.jsx` +
 `hooks/useDashboardLayout.js` (renderer map, localStorage layout, plugin slots)
 **Depends on:** 09 (soft), 04 (extension widgets, optional)
@@ -54,9 +54,28 @@ grid can come later if anyone actually asks.
 
 ## Phases
 
-1. Extract widgets from `Dashboard.jsx` (pure refactor, fixed layout).
-2. `useDashboardLayout` + edit mode + persistence.
-3. New widgets (ActiveRuns, RecentFailures) + extension slot.
+1. ✅ Extract widgets from `Dashboard.jsx` (pure refactor, fixed layout).
+   Carved into `components/widgets/{FleetSummary,FleetHealth,FQLBar,DeviceRegistry}`
+   + `hooks/useFleetData.js` (shared fleet feed) + `components/ds/MetricCard.jsx`.
+   The FQL bar owns query state and reports its result set up so the registry can
+   show matches (the one cross-widget link). Behavior/layout unchanged.
+2. ✅ `useDashboardLayout` + edit mode + persistence. Ported from ServerKit
+   (`hooks/useDashboardLayout.js`, `localStorage` key `devicekit_dashboard_layout`,
+   forward-merge against `DEFAULT_WIDGETS`). Gear button → `DashboardLayoutEditor`
+   popover with per-widget show/hide + up/down + reset. Dashboard maps a
+   `WIDGET_RENDERERS` map over the visible list.
+3. ✅ New widgets `ActiveRuns` (running/queued automations with live step-progress,
+   per-widget refresh selector, polls `/automations/runs`) and `RecentFailures`
+   (last N failed runs, deep-link to run detail). Both appended to
+   `DEFAULT_WIDGETS` so the phase-2 forward-merge surfaces them for saved layouts.
+   The `dashboard.top` `ExtensionSlot` (plan 04) already renders extension widgets
+   alongside.
+
+Deviation: the plan lists `PipelineStatus` / `Alerts` / `FleetHealth` as candidate
+widgets; `FleetHealth` shipped, and `ActiveRuns`+`RecentFailures` were the phase-3
+headline. `PipelineStatus`/`Alerts`/`Notifications` widgets are left as easy
+follow-ons (add a renderer + a `DEFAULT_WIDGETS` entry — forward-merge does the rest).
+No `ROADMAP.md` exists in the repo, so there were no roadmap checkboxes to tick.
 
 ## Definition of done
 

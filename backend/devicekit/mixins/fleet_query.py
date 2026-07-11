@@ -5,6 +5,9 @@ import re
 import csv
 import io
 
+from devicekit.db import session_scope
+from devicekit.models import SavedQuery
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -30,7 +33,19 @@ SUPPORTED_FIELDS = {
     'device_id', 'model', 'manufacturer', 'android_version', 'sdk',
     'battery', 'cpu', 'ram_used', 'ram_total', 'temperature',
     'online', 'status', 'agent_status', 'group', 'tags', 'model_name',
+    # Capability-driven targeting (plan 07): `can.<feature> = true`, plus the numeric
+    # `android_api` from the advertised capability map. Any `can.*` field resolves against
+    # the device's capability map, so agents can advertise new capabilities without a
+    # code change here.
+    'android_api', 'can.screen_record', 'can.accessibility', 'can.root',
+    'can.input', 'can.notification_listener',
 }
+
+# Extension-contributed FQL fields (plan 03). Each entry is
+# ``{'resolver': callable(device) -> value, 'description': str}``. ``_get_field_value``
+# falls through to these so an extension makes its data queryable
+# (e.g. ``appium.session_count > 0``) without editing core.
+_EXT_FQL_FIELDS = {}
 
 TOKEN_PATTERNS = [
     ('LPAREN',   r'\('),
@@ -40,7 +55,7 @@ TOKEN_PATTERNS = [
     ('NUMBER',   r'-?\d+(?:\.\d+)?'),
     ('STRING',   r"'[^']*'|\"[^\"]*\""),
     ('KEYWORD',  r'\b(?:AND|OR|NOT|IN|LIKE|TRUE|FALSE)\b'),
-    ('IDENT',    r'[a-zA-Z_][a-zA-Z0-9_]*'),
+    ('IDENT',    r'[a-zA-Z_][a-zA-Z0-9_.]*'),
     ('WS',       r'\s+'),
 ]
 
@@ -191,6 +206,11 @@ class Parser:
             return tok.value
         if tok.type == 'IDENT':
             self.consume()
+            # Bareword booleans are case-insensitive (`true`/`TRUE`), so `online = false`
+            # and `can.screen_record = true` evaluate as booleans, not string compares.
+            low = tok.value.lower()
+            if low in ('true', 'false'):
+                return low == 'true'
             return tok.value
         if tok.type in ('TRUE', 'FALSE'):
             self.consume()
@@ -272,6 +292,28 @@ def _get_field_value(device, field, fleet_mixin=None):
     if field == 'model_name':
         # AI model name from profile, if exists
         return device.get('model_name') or ''
+    # Capability-driven targeting (plan 07). `can.<feature>` resolves against the device's
+    # advertised capability map; `android_api` prefers the capability map, falling back to
+    # the reported SDK level.
+    caps = device.get('capabilities')
+    if caps is None and fleet_mixin is not None and hasattr(fleet_mixin, 'get_agent_capabilities'):
+        try:
+            caps = fleet_mixin.get_agent_capabilities(
+                device.get('device_id') or device.get('serial') or '')
+        except Exception:
+            caps = {}
+    caps = caps or {}
+    if field.startswith('can.'):
+        return bool(caps.get(field[4:], False))
+    if field == 'android_api':
+        return caps.get('android_api') or device.get('sdk') or device.get('sdkInt') or 0
+    # Extension-contributed fields (plan 03).
+    ext = _EXT_FQL_FIELDS.get(field)
+    if ext is not None:
+        try:
+            return ext['resolver'](device)
+        except Exception:
+            return ''
     return device.get(field, '')
 
 
@@ -393,7 +435,21 @@ PRESET_QUERIES = [
 class FleetQueryMixin:
     """Fleet Query Language: SQL-like queries across the device fleet."""
 
-    _saved_queries = []
+    # -----------------------------------------------------------
+    # Extension-contributed fields
+    # -----------------------------------------------------------
+    def register_fql_field(self, name, spec):
+        """Register (or replace) an extension FQL field. ``spec`` must carry a
+        ``resolver`` callable ``resolver(device) -> value`` and may carry ``description``."""
+        if not isinstance(spec, dict) or not callable(spec.get('resolver')):
+            raise ValueError(f"FQL field '{name}' must provide a 'resolver' callable")
+        _EXT_FQL_FIELDS[name] = spec
+        SUPPORTED_FIELDS.add(name)
+        logger.info(f"Registered extension FQL field '{name}'")
+
+    def unregister_fql_field(self, name):
+        _EXT_FQL_FIELDS.pop(name, None)
+        SUPPORTED_FIELDS.discard(name)
 
     # -----------------------------------------------------------
     # Query execution
@@ -440,6 +496,14 @@ class FleetQueryMixin:
             'group': 'Device group membership',
             'tags': 'Device tags',
             'model_name': 'AI model name from profile',
+            'android_api': 'Advertised Android API level (capability map)',
+            'can.screen_record': 'Device can screen-record (true/false)',
+            'can.accessibility': 'Accessibility service available (true/false)',
+            'can.root': 'Device is rooted (true/false)',
+            'can.input': 'Input injection available (true/false)',
+            'can.notification_listener': 'Notification listener available (true/false)',
+            **{name: spec.get('description', f'Extension field {name}')
+               for name, spec in _EXT_FQL_FIELDS.items()},
         }
 
     def get_preset_queries(self):
@@ -457,45 +521,55 @@ class FleetQueryMixin:
         if not validation['valid']:
             raise ValueError(f"Invalid query: {validation['error']}")
 
-        query = {
-            'id': str(uuid.uuid4()),
-            'name': name,
-            'expression': expression,
-            'description': description,
-            'created_at': time.time(),
-            'updated_at': time.time(),
-        }
-        self._saved_queries.append(query)
-        logger.info(f"Saved query created: '{name}' ({query['id']})")
-        return query
+        now = time.time()
+        with session_scope() as s:
+            query = SavedQuery(
+                id=str(uuid.uuid4()),
+                name=name,
+                expression=expression,
+                description=description,
+                created_at=now,
+                updated_at=now,
+            )
+            s.add(query)
+            s.flush()
+            result = query.to_dict()
+        logger.info(f"Saved query created: '{name}' ({result['id']})")
+        return result
 
     def get_saved_query(self, query_id):
-        return next((q for q in self._saved_queries if q['id'] == query_id), None)
+        with session_scope() as s:
+            query = s.get(SavedQuery, query_id)
+            return query.to_dict() if query else None
 
     def list_saved_queries(self):
-        return list(self._saved_queries)
+        with session_scope() as s:
+            return [q.to_dict() for q in s.query(SavedQuery).all()]
 
     def update_saved_query(self, query_id, updates):
-        query = self.get_saved_query(query_id)
-        if not query:
-            return None
         if 'expression' in updates:
             validation = self.validate_query(updates['expression'])
             if not validation['valid']:
                 raise ValueError(f"Invalid query: {validation['error']}")
-        for key in ('name', 'expression', 'description'):
-            if key in updates:
-                query[key] = updates[key]
-        query['updated_at'] = time.time()
-        return query
+        with session_scope() as s:
+            query = s.get(SavedQuery, query_id)
+            if not query:
+                return None
+            for key in ('name', 'expression', 'description'):
+                if key in updates:
+                    setattr(query, key, updates[key])
+            query.updated_at = time.time()
+            s.flush()
+            return query.to_dict()
 
     def delete_saved_query(self, query_id):
-        before = len(self._saved_queries)
-        self._saved_queries = [q for q in self._saved_queries if q['id'] != query_id]
-        deleted = len(self._saved_queries) < before
-        if deleted:
-            logger.info(f"Deleted saved query {query_id}")
-        return deleted
+        with session_scope() as s:
+            query = s.get(SavedQuery, query_id)
+            if not query:
+                return False
+            s.delete(query)
+        logger.info(f"Deleted saved query {query_id}")
+        return True
 
     # -----------------------------------------------------------
     # CSV export
