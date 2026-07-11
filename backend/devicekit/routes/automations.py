@@ -1,7 +1,12 @@
 """Automation routes (CRUD, runs, recording, schedules, AI generation)."""
 import base64
 
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request, Response, g
+
+
+def _workspace_id():
+    """The active workspace the gate attached to the principal (plan 20 part 4), or None."""
+    return getattr(getattr(g, 'principal', None), 'workspace_id', None)
 
 
 def make_blueprint(client, limiter):
@@ -13,7 +18,8 @@ def make_blueprint(client, limiter):
 
     @bp.route('/automations')
     def automations_list():
-        automations = client.list_automations()
+        # Narrowed to the active workspace when one is set; otherwise unchanged (all automations).
+        automations = client.list_automations(workspace_id=_workspace_id())
         return jsonify({'automations': automations, 'count': len(automations)})
 
     @bp.route('/automations', methods=['POST'])
@@ -27,6 +33,7 @@ def make_blueprint(client, limiter):
             description=data.get('description', ''),
             steps=data.get('steps', []),
             tags=data.get('tags', []),
+            workspace_id=_workspace_id(),   # born into the active workspace, if any
         )
         return jsonify(automation), 201
 

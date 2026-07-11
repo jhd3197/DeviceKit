@@ -93,11 +93,13 @@ _PATH_FEATURES = (
     ("/config", "settings"),
     ("/vault", "settings"),
     ("/secrets", "settings"),
-    ("/workspaces", "settings"),
     ("/api-keys", "settings"),
     ("/users", "settings"),
     ("/audit", "settings"),
 )
+# NB: ``/workspaces`` and ``/grants`` are intentionally NOT mapped — they self-authorize via the
+# workspace capability fold (``require_member``), which a global operator/viewer can satisfy for
+# a workspace they own. Matrix-gating them to ``settings`` would wrongly block workspace admins.
 
 
 def feature_for_path(path):

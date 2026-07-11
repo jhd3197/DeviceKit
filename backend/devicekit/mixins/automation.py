@@ -428,7 +428,7 @@ class AutomationMixin:
     # ---------------------------------------------------------------
     # Automation CRUD
     # ---------------------------------------------------------------
-    def create_automation(self, name, description="", steps=None, tags=None):
+    def create_automation(self, name, description="", steps=None, tags=None, workspace_id=None):
         now = time.time()
         with session_scope() as s:
             automation = Automation(
@@ -439,6 +439,7 @@ class AutomationMixin:
                 tags=tags or [],
                 created_at=now,
                 updated_at=now,
+                workspace_id=workspace_id,   # born-in-workspace (plan 20 part 4); None = global
             )
             s.add(automation)
             s.flush()
@@ -451,9 +452,13 @@ class AutomationMixin:
             automation = s.get(Automation, automation_id)
             return automation.to_dict() if automation else None
 
-    def list_automations(self):
+    def list_automations(self, workspace_id=None):
+        """List automations, narrowed to a workspace when one is active. With no workspace
+        context (``workspace_id=None``) the query is unchanged (plan 20 part 4, narrow-only)."""
+        from devicekit.services.workspace import scope_query
         with session_scope() as s:
-            return [a.to_dict() for a in s.query(Automation).all()]
+            q = scope_query(s.query(Automation), Automation, workspace_id)
+            return [a.to_dict() for a in q.all()]
 
     def update_automation(self, automation_id, updates):
         with session_scope() as s:

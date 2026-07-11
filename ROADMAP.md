@@ -499,11 +499,11 @@ Phases 40–45 come from a closer read of ServerKit ([docs/plans/00-overview.md]
 **Goal**: Move from single-token solo-localhost to real users, roles, workspaces, scoped API keys, a user-attributed audit trail, and an encrypted secrets vault — without breaking the solo setup.
 See [docs/plans/20-identity-rbac-and-secrets.md](docs/plans/20-identity-rbac-and-secrets.md).
 
-- [ ] Opt-in narrow-only `scope_query` retrofit (no workspace context = unchanged behavior)
+- [x] Opt-in narrow-only `scope_query` retrofit (no workspace context = unchanged behavior)
 - [x] `User` + login/session + global role + per-feature read/write matrix; `AuthMixin` → principal resolver
 - [x] Hashed, scoped, multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single global key
 - [x] User-attributed `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog`
-- [ ] `Workspace` + `WorkspaceMember` scoping devices (born-in-workspace) + automations; capability fold + `ResourceGrant`
+- [x] `Workspace` + `WorkspaceMember` scoping devices (born-in-workspace) + automations; capability fold + `ResourceGrant`
 - [ ] Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection
 - [ ] (optional) invitations + TOTP + lockout + require-2FA-with-grace policy
 

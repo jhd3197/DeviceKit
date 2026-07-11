@@ -19,6 +19,8 @@ class Automation(Base):
     tags = Column(JSON, default=list)
     created_at = Column(Float, nullable=False)
     updated_at = Column(Float, nullable=False)
+    # plan 20 part 4: born-in-workspace. NULL = global (unscoped, pre-plan-20 behavior).
+    workspace_id = Column(String, nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -29,6 +31,7 @@ class Automation(Base):
             "tags": self.tags or [],
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "workspace_id": self.workspace_id,
         }
 
 

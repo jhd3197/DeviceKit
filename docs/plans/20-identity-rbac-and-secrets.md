@@ -122,7 +122,7 @@ passkeys are heavier (L) — defer until there are real teams.
 | 1 | `User` + login/session + global role + per-feature matrix; `AuthMixin` → principal resolver (solo mode unchanged) | identity substrate exists | ✅ |
 | 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope | ✅ |
 | 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ✅ |
-| 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ⏳ |
+| 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ✅ |
 | 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ⏳ |
 | 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security | ⏳ |
 
@@ -163,6 +163,25 @@ api_app after-request hook now calls `audit_request` → durable attributed row 
 in-memory `/activities` feed (now carrying `user_id`). `log_activity` grew a `user_id` param; the AI-gate
 `confirm` route attributes the approver to the resolved principal's username instead of an API-key prefix.
 Migration `e2f3a4b5c001`. Verified: 7 new tests + full suite 334 green.
+
+### Phase 4 — shipped (backend)
+
+Delivered the multi-tenant substrate. `services/workspace.py` is the crown jewel: `scope_query(query,
+model, workspace_id)` — **opt-in, narrow-only** (no workspace context ⇒ query unchanged), `resolve_workspace_id`
+(lenient `X-Workspace-Id` read), the highest-wins role fold (viewer < member < admin < owner), and
+`DEVICE_ACTION_TIERS` / `PLATFORM_ADMIN_ONLY` (fleet-wide + raw shell/ADB never unlockable by a workspace role).
+`models/workspace.py` adds `Workspace` + `WorkspaceMember` (unique per pair) + `ResourceGrant` (viewer/editor,
+visibility-only). Born-in-workspace `workspace_id` columns added to `agent_devices`, `automations`, `saved_queries`
+(nullable ⇒ existing rows global). `mixins/workspaces.py`: workspace/member/grant CRUD, last-owner guards,
+`resolve_workspace_context` (lenient — unknown/forbidden degrades to no scoping), `require_member(min_role)`
+(404 missing / 403 insufficient, platform-admin bypass), `can_device_action`. `routes/workspaces.py`
+(`/workspaces` + `/members` + `/grants`) self-authorize via the fold — **not** the global write gate — so a
+global operator who owns a workspace can manage it. The gate attaches the active workspace to the principal;
+automation create/list are wired so listing narrows to the active workspace and new automations are born into it.
+Migration `f3a4b5c6d001`. Verified: 9 new tests, app-boot scoping flow, full suite 343 green. *Deviation:* the
+`/devices` merge (ADB + agent registry) is left unscoped for now — device rows carry `workspace_id` and the
+scope helper is available, but rewiring the multi-source merge is deferred to avoid destabilizing fleet listing;
+automation scoping is the shipped proof of the pattern.
 
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.

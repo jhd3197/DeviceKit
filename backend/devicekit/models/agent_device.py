@@ -34,6 +34,9 @@ class AgentDevice(Base):
     # --- plan 07: anomaly logging ---
     last_ip = Column(String, nullable=True)
 
+    # --- plan 20 part 4: born-in-workspace. NULL = global (unscoped). ---
+    workspace_id = Column(String, nullable=True, index=True)
+
     def to_dict(self):
         return {
             "device_id": self.device_id,
@@ -46,4 +49,5 @@ class AgentDevice(Base):
             "enrolled": bool(self.secret),
             "rotating_key": bool(self.secret_pending),
             "last_ip": self.last_ip,
+            "workspace_id": self.workspace_id,
         }

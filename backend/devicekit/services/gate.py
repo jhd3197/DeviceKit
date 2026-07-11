@@ -37,6 +37,12 @@ def authorize(client, request):
     if principal is None:
         return None, ({'error': 'Authentication required'}, 401)
 
+    # Attach the active workspace (plan 20 part 4). Lenient: an unknown/forbidden X-Workspace-Id
+    # degrades to no scoping, so this can never turn a valid request into an error.
+    resolver = getattr(client, 'resolve_workspace_context', None)
+    if resolver is not None:
+        principal.workspace_id = resolver(request, principal)
+
     if request.method in _WRITE_METHODS:
         feature = feature_for_path(request.path)
         if feature and not principal.can(feature, 'write'):

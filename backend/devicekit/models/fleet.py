@@ -47,6 +47,8 @@ class SavedQuery(Base):
     description = Column(Text, default="")
     created_at = Column(Float, nullable=False)
     updated_at = Column(Float, nullable=False)
+    # plan 20 part 4: saved FQL queries carry workspace_id directly. NULL = global.
+    workspace_id = Column(String, nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -56,4 +58,5 @@ class SavedQuery(Base):
             "description": self.description or "",
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "workspace_id": self.workspace_id,
         }
