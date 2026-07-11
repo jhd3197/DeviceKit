@@ -11,6 +11,7 @@ identical to the pre-refactor closure routes (plan 02); only the code layout cha
 from devicekit.routes import (
     health,
     auth,
+    api_keys,
     events,
     devices,
     dashboard,
@@ -41,6 +42,7 @@ from devicekit.routes import (
 BLUEPRINT_MODULES = [
     health,
     auth,
+    api_keys,
     events,
     devices,
     dashboard,

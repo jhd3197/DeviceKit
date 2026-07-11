@@ -120,7 +120,7 @@ passkeys are heavier (L) — defer until there are real teams.
 | Phase | Delivers | Proves | Status |
 |---|---|---|---|
 | 1 | `User` + login/session + global role + per-feature matrix; `AuthMixin` → principal resolver (solo mode unchanged) | identity substrate exists | ✅ |
-| 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope | ⏳ |
+| 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope | ✅ |
 | 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ⏳ |
 | 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ⏳ |
 | 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ⏳ |
@@ -139,6 +139,19 @@ resolves principal → attaches to `g` → gates writes. Migration `c0d0a1b2e001
 the instance to login-required. Verified: 16 new tests + full app boot flow (solo → first user → login → gated
 write) + all 300 pre-existing tests green. *Deviation:* Phase-1 UI (login gate + user management) lands in the
 consolidated plan-20 frontend commit, not inline.
+
+### Phase 2 — shipped (backend)
+
+Delivered: `models/api_key.py` (`ApiKey`: sha256 hash + `dk_` display prefix, JSON scopes, expiry,
+revoke, last-used IP), `services/api_keys.py` (generate/hash, scope catalog + validation),
+`mixins/api_keys.py` (create/list/revoke/**rotate** = revoke-old+recreate-same-config,
+`resolve_api_key_principal` with throttled last-used tracking), `routes/api_keys.py` (`/api-keys` CRUD +
+`/api-keys/scopes`, admin-only, raw key returned once). Wildcard scope matching (`devices:*` ⇒
+`devices:read`+`devices:write`, `*` ⇒ all) lives in `Principal.can` and gates the same write path as the
+role matrix. The `X-Agent-Token` axis is untouched (orthogonal). Legacy global `API_KEY` still validates
+(deprecated, back-compat). Migration `d1e2f3a4b001`. Verified: 11 new tests, clean single migration head.
+*Assumption:* key management is admin-only (creator recorded via `created_by`); self-service per-user key
+scoping deferred (not required until plan 21).
 
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.

@@ -35,6 +35,7 @@ from devicekit.mixins.notifications import NotificationsMixin
 from devicekit.mixins.metrics_history import MetricsHistoryMixin
 from devicekit.mixins.settings import SettingsMixin
 from devicekit.mixins.identity import IdentityMixin
+from devicekit.mixins.api_keys import ApiKeysMixin
 
 
 class Client(
@@ -64,6 +65,7 @@ class Client(
     MetricsHistoryMixin,
     SettingsMixin,
     IdentityMixin,
+    ApiKeysMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
