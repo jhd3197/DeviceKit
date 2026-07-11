@@ -470,15 +470,15 @@ See [docs/plans/17-extension-dependencies-and-serp.md](docs/plans/17-extension-d
 - [x] `devicekit-serp`: per-engine adapters → `search()` over `devicekit-browser` pool fetch → AI tool + `serp_search` step type
 - [x] Registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section
 
-### Phase 38: App-Driver Extensions
+### Phase 38: App-Driver Extensions ✅
 **Goal**: Install an extension, have it provision a third-party app, and drive it through UI drift across a fleet.
 See [docs/plans/18-app-driver-extensions.md](docs/plans/18-app-driver-extensions.md).
 
-- [ ] `device_requirements` manifest key + consent-card surfacing + `provision()` (pinned APK push/install/verify + `ext_*_provisioned` table)
-- [ ] Version-adapter framework: version-ranged flows (add/remove/reorder steps, not just selectors), per-device resolution, fail-loud on no match
-- [ ] Device version policy: `max_app_version` ceiling, over-ceiling refusal, optional gated `reprovision` (downgrade to pinned build)
-- [ ] `devicekit-vpn`: adapters + allowed-countries config + gated connect/disconnect/status tools + verify-egress automation template
-- [ ] Registry entry + EXTENSIONS.md "app-driver extensions" section (provisioning, adapters, policy)
+- [x] `device_requirements` manifest key + consent-card surfacing + `provision()` (pinned APK push/install/verify + `ext_*_provisioned` table) — reusable `devicekit_sdk.appdriver` framework
+- [x] Version-adapter framework: version-ranged flows (add/remove/reorder steps, not just selectors), per-device resolution, fail-loud on no match (three distinct unsupported outcomes)
+- [x] Device version policy: `max_app_version` ceiling (global + per-device), over-ceiling refusal (`VersionPolicyError`), optional gated `reprovision` (downgrade to pinned build)
+- [x] `devicekit-vpn`: version-keyed adapters + allowed-countries gate + gated connect/disconnect/status/provision tools + device-side verify-egress automation template
+- [x] Registry entry (bundled, real sha256) + EXTENSIONS docs "app-driver extensions" section (guide + manifest-reference + sdk-reference)
 
 ### Phase 39: AI Consolidation + Prompture Hub
 **Goal**: One AI path (Prompture, no direct provider SDKs) and an optional self-hosted `prompture-hub` backend that keeps provider keys out of DeviceKit.

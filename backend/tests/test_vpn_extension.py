@@ -260,3 +260,31 @@ def test_reprovision_gated_off_by_default(fresh_db):
     from devicekit.extensions.devicekit_vpn import driver
     with pytest.raises(PermissionError):
         driver.reprovision("dev-A")
+
+
+# --------------------------------------------------------------------------- registry (ph5)
+@pytest.fixture
+def _bundled_registry(monkeypatch):
+    monkeypatch.setenv("DEVICEKIT_REGISTRY_URL", "")     # set-but-empty ⇒ bundled index only
+    from devicekit import extension_registry
+    extension_registry._reset_cache()
+    yield
+    extension_registry._reset_cache()
+
+
+def test_vpn_registry_entry_carries_device_requirements(_bundled_registry):
+    from devicekit import extension_registry
+    entry = extension_registry.get_entry(SLUG)
+    assert entry and entry["bundled"] is True and entry["first_party"] is True
+    assert len(entry["sha256"]) == 64 and set(entry["sha256"]) != {"0"}
+    assert entry["device_requirements"]["package"] == PKG
+
+
+def test_vpn_installs_from_registry(fresh_db, _bundled_registry):
+    c = _Host()
+    c.init_extensions()
+    c._flask_app = Flask(__name__)
+    devicekit_sdk.set_host(c)
+    ext = c.install_extension_from_registry(SLUG)
+    assert ext["status"] == "active"
+    assert c._flask_app.test_client().get(f"/ext/{SLUG}/ping").status_code == 200

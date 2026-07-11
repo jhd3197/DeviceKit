@@ -446,6 +446,107 @@ signatures: [SDK Reference](sdk-reference.md#sibling-extensions-plan-17).
 
 ---
 
+## App-driver extensions: provision and drive a third-party app (plan 18)
+
+An **app-driver** extension automates an app it doesn't control — an app it can't ship (licensing,
+staleness) and whose UI drifts across releases. Two hard truths follow, and the
+`devicekit_sdk.appdriver` framework answers both so your extension stays a thin adapter layer.
+`devicekit-vpn` (ExpressVPN) is the worked example.
+
+Declare the target app with `device_requirements`:
+
+```json
+"device_requirements": {
+  "package": "com.expressvpn.vpn",
+  "supported_versions": ">=12.0.0 <14.0.0",
+  "provision": "user_supplied_apk"
+}
+```
+
+This is **surfaced on the consent card** (the install preview shows "drives `com.expressvpn.vpn`;
+you must supply an APK") but is **not** enforced at install — the app may legitimately be absent
+until the user provisions it. It's enforced at *drive time*.
+
+### 1. Provision — get the app there, at a known build
+
+The user uploads the APK once (into config, e.g. `apk_b64` + `apk_sha256`). `appdriver.provision`
+verifies the pinned sha256, installs it (`adb install -r`), reads back the installed `versionName`,
+and records the outcome in your `ext_<slug>_provisioned` table:
+
+```python
+from devicekit_sdk import appdriver
+
+def provision(device_id):
+    cfg = devicekit_sdk.config(SLUG)
+    return appdriver.provision(SLUG, device_id, package="com.expressvpn.vpn",
+                               apk_b64=cfg["apk_b64"], expected_sha256=cfg["apk_sha256"],
+                               expected_version=cfg.get("apk_version"))
+```
+
+A checksum mismatch **refuses to install** (same posture as extension-archive pinning). `provision`
+is a natural gated AI tool + step type. `models.register` just calls `appdriver.provisioned_table(SLUG)`
+so the ledger table exists.
+
+### 2. Version adapters — the drift answer
+
+The unit is an **adapter**, not a selector map: a named flow (`connect`, `disconnect`, `status`)
+bound to a **version range**, defined as an *ordered list of steps*. Two adapters for one flow can
+differ in selectors, step count, **and** order — because a new version can add a whole step (a
+consent dialog), not just move a button:
+
+```python
+from devicekit_sdk.appdriver import VersionAdapter, AppDriver, open_app, tap, tap_if_present, wait_for
+
+ADAPTERS = {"connect": [
+    VersionAdapter(">=12.0.0 <13.0.0", [open_app(), tap("Connect"), wait_for("Connected")], name="12.x"),
+    VersionAdapter(">=13.0.0 <14.0.0", [open_app(), tap("Connect"),
+                                        tap_if_present("Allow"),          # 13.x added this dialog
+                                        wait_for("Connected")], name="13.x"),
+]}
+driver = AppDriver(SLUG, "com.expressvpn.vpn", ADAPTERS, supported_versions=">=12.0.0 <14.0.0")
+driver.run("connect", device_id)
+```
+
+`run` resolves the adapter **per device per call** from the device's installed version, so a fleet
+where phone A runs 12.x and phone B runs 13.x Just Works — each gets its own adapter. **No match
+fails loud** (`NoAdapterError`), never a blind tap: a silent no-op on a drifted app is the failure
+this design exists to prevent. Shipping support for a new app version = adding an adapter + bumping
+`supported_versions`; it rides the normal extension-update flow, no host change.
+
+### 3. Version policy — "this device can't go above X"
+
+Pin a device (or the fleet) to a ceiling via config, wired through `ceiling_for`:
+
+```python
+driver = AppDriver(SLUG, PKG, ADAPTERS, supported_versions=">=12.0.0 <14.0.0",
+                   ceiling_for=appdriver.make_ceiling_resolver(lambda: devicekit_sdk.config(SLUG)))
+```
+
+If a device's installed version exceeds its ceiling, `run` refuses with `VersionPolicyError`
+(distinct from a missing adapter) rather than driving with a newer adapter. `appdriver.reprovision`
+is the optional, gated remediation (uninstall + reinstall the pinned build — a downgrade). The
+ceiling is *declared* policy the driver enforces; it can't block an OS-level update.
+
+**Three distinct "unsupported" outcomes, each with a clear message and none of which taps:**
+*no adapter* (`NoAdapterError` — not taught this version), *over policy ceiling*
+(`VersionPolicyError` — device pinned below installed), and *outside supported range*
+(`AppVersionUnsupported` — app too old/new for the extension entirely). Plus `AppNotInstalled`
+when the app isn't provisioned.
+
+### Verify the effect, not just the UI
+
+For something like VPN, the app's own UI can't prove you're connected *to the right country* — so
+verify the real effect. `devicekit-vpn` has the device fetch its public IP + geo (`curl` on-device)
+and compares the exit country to an allow-list; its shipped `automation_template`
+(`VPN Egress Check`) does status → verify-egress → reconnect-if-wrong → re-verify → screenshot
+evidence. A wrong adapter/version raises and fails the run loud, which alerts via the notification
+bus — it does not tap blindly.
+
+Full API: [SDK Reference → appdriver](sdk-reference.md#appdriver-app-driver-framework-plan-18).
+Manifest key: [Manifest Reference → App-driver requirements](manifest-reference.md#app-driver-requirements).
+
+---
+
 ## Frontend contributions (nav, routes, widgets)
 
 Extensions declare UI **declaratively** in the manifest's `contributions` block. The backend

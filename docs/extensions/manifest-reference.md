@@ -33,6 +33,7 @@ The manifest is the only required file, and it must sit at the **archive root**.
 | `ai_tools` | No | `module:attr` — registers Prompture tools. | — |
 | `provides` | No | `module:attr` — registers a sibling-callable surface (see [Extension dependencies](#extension-dependencies)). | — |
 | `requires_extensions` | No | Object of `sibling-slug -> version range` (see [Extension dependencies](#extension-dependencies)). | `{}` |
+| `device_requirements` | No | Object `{package, supported_versions?, provision?}` — the third-party app an app-driver extension drives (see [App-driver requirements](#app-driver-requirements)). | — |
 | `lifecycle` | No | Object of `phase -> "module:func"`. | — |
 | `jobs` | No | List of `{kind, handler: "module:func"}`. | — |
 | `schedules` | No | List of `{name, kind, ...}`. | — |
@@ -169,6 +170,34 @@ devicekit-browser" and installing from the registry pulls the chain in first.
 
 ---
 
+## App-driver requirements
+
+An **app-driver** extension automates a third-party app it doesn't ship. `device_requirements`
+declares that relationship (plan 18):
+
+```json
+"device_requirements": {
+  "package": "com.expressvpn.vpn",
+  "supported_versions": ">=12.0.0 <14.0.0",
+  "provision": "user_supplied_apk"
+}
+```
+
+| Sub-field | Required? | Meaning |
+| --- | --- | --- |
+| `package` | **Yes** | The app the driver targets (checkable per device via `list_installed_apps`). |
+| `supported_versions` | No | The loose version range the extension has adapters for. A device outside it is *known-unsupported* (surfaced, not blind-attempted). |
+| `provision` | No | `user_supplied_apk` (default: user uploads the APK once, extension pins its sha256) or `play_store` (fire a `market://` intent — no pinning). |
+
+Unlike `requires_extensions`, this is **not** enforced at install — the app may legitimately be
+absent until the user provisions it. It is instead surfaced up front on the **consent card**
+(`POST /extensions/preview` returns `device_requirements` and adds a "drives `<package>`…" warning),
+and enforced **at drive time** by the [`appdriver`](sdk-reference.md#appdriver-app-driver-framework-plan-18)
+framework. See the guide's [App-driver extensions](guide.md#app-driver-extensions-provision-and-drive-a-third-party-app-plan-18)
+section for the full model.
+
+---
+
 ## Data-table naming
 
 Any table an extension owns **must** be prefixed `ext_<slug>_` with dashes converted to underscores
@@ -184,8 +213,9 @@ table_prefix("devicekit-webhook-notify")  # -> "ext_devicekit_webhook_notify_"
 
 `GET /extensions/manifest-spec` returns the same rules as JSON (`manifest_spec()`): `required_fields`,
 `slug_pattern`, `module_ref_pattern`, `categories`, `known_permissions`, `contribution_kinds`, a
-`contribution_points` description map, and `devicekit_version`. Because it comes from the same
-constants the validator uses, it never drifts from this table. Validate locally with the scaffolder:
+`contribution_points` description map (including `device_requirements`), `provision_modes`, and
+`devicekit_version`. Because it comes from the same constants the validator uses, it never drifts from
+this table. Validate locally with the scaffolder:
 
 ```bash
 python scripts/new_extension.py --validate builtin-extensions/devicekit-webhook-notify

@@ -48,6 +48,7 @@ the two agree.
 | `ExtensionUnavailable` | `class ExtensionUnavailable(RuntimeError)` | Raised by an `extension(slug)` call when the sibling is not installed or not active. |
 | `jobs` | *(singleton)* | Background-work seam — see [jobs](#jobs). |
 | `notify` | *(singleton)* | Notification-bus seam — see [notify](#notify). |
+| `appdriver` | *(module)* | App-driver framework: provision + version adapters + policy — see [appdriver](#appdriver-app-driver-framework-plan-18). |
 | `require_permission` | `require_permission(slug, capability) -> True` | Alias of `permissions.require`. Raises `PermissionDenied` unless declared. |
 | `permissions` | *(module)* | The permission gate — see [permissions](#permissions). |
 | `PermissionDenied` | `class PermissionDenied(PermissionError)` | Raised when an extension uses an undeclared capability. |
@@ -102,6 +103,9 @@ the gate checks *your* declared permissions.
 | `shell` | `shell(command)` — runs `adb shell <command>` | `adb` |
 | `forward` | `forward(local_port, remote="localabstract:chrome_devtools_remote")` — `adb forward tcp:<local_port> → <remote>` (default the Chrome DevTools socket), returns adb stdout | `adb` |
 | `remove_forward` | `remove_forward(local_port)` — tears down the forward | `adb` |
+| `install_apk` | `install_apk(apk_path) -> (ok, output)` — `adb install -r` a local APK (the app-driver provisioning primitive) | `adb` |
+| `uninstall_app` | `uninstall_app(package)` — `adb uninstall` (used by the gated reprovision) | `adb` |
+| `app_version` | `app_version(package) -> str | None` — installed `versionName` via `dumpsys package`, `None` if absent (the cheap per-call read the version-adapter resolver uses) | `device.control` |
 
 ```python
 dc = devicekit_sdk.device_control("my-ext", device_id)
@@ -253,3 +257,64 @@ def send(text, url=None):
 The five capabilities and what each grants are documented in the
 [Manifest Reference](manifest-reference.md#permissions) and the
 [Guide's permission section](guide.md#permissions--the-gate).
+
+---
+
+## `appdriver` (app-driver framework, plan 18)
+
+`devicekit_sdk.appdriver` is the reusable core for extensions that **provision and drive a
+third-party app** across version drift. Pair it with a `device_requirements` manifest key. The
+worked consumer is `devicekit-vpn`.
+
+**Provisioning** — install a user-supplied, hash-pinned APK and record the result in the
+extension-owned `ext_<slug>_provisioned` table:
+
+| Member | Signature | What it does |
+| --- | --- | --- |
+| `provision` | `provision(slug, device_id, *, package, apk_b64=None, apk_bytes=None, expected_sha256=None, expected_version=None, serial="") -> dict` | Verify the pinned sha256, `adb install -r`, read back `versionName`, record (`ok` / `version_mismatch` / `install_failed`). Raises `ProvisionError` on a checksum mismatch or failed install. |
+| `reprovision` | `reprovision(slug, device_id, *, package, ...)` | Destructive: uninstall then `provision` the pin (a downgrade Play won't do). Gate it in your extension. |
+| `installed_version` | `installed_version(slug, device_id, package) -> str | None` | The device's installed `versionName` (permission-gated read). |
+| `provisioned_table` / `record_provision` / `get_provision` / `list_provisions` | | Define/query the `ext_<slug>_provisioned` ledger (namespaced, dropped on `uninstall --purge`). |
+
+**Version adapters** — a flow bound to a version range as an *ordered list of steps* (adapters can
+add/remove/reorder steps, not just swap selectors):
+
+| Member | Signature | What it does |
+| --- | --- | --- |
+| `VersionAdapter` | `VersionAdapter(version_range, steps, name=None)` | One flow implementation for one version range. `steps` are `step(ctx) -> str` callables. |
+| `resolve_adapter` | `resolve_adapter(adapters, version) -> VersionAdapter` | First range that matches; raises `NoAdapterError` (no fallback — never a blind tap). |
+| step helpers | `open_app(pkg=None)`, `tap(text)`, `tap_if_present(text)`, `wait_for(text)`, `assert_absent(text)`, `press(key)`, `sleep(s)`, `shell(cmd)` | Build adapter step lists that read like the flow. `tap_if_present` is the "a new version added an optional dialog" primitive. |
+| `AppDriver` | `AppDriver(slug, package, adapters, supported_versions=None, ceiling_for=None)` | `.run(flow, device_id)` resolves the adapter for *this device's* installed version and runs its steps. |
+
+**Version policy** — a per-device ceiling:
+
+| Member | Signature | What it does |
+| --- | --- | --- |
+| `make_ceiling_resolver` | `make_ceiling_resolver(config_getter, *, global_key="max_app_version", per_device_key="device_max_versions")` | Build a `ceiling_for(device_id)` from config (per-device override wins, else global). |
+| `exceeds_ceiling` / `over_ceiling` | | Compare a version to a ceiling *at the ceiling's precision* (so `12` pins the whole 12.x line). |
+
+**Fail-loud, never tap.** `AppDriver.run` runs a three-gate funnel and raises a *distinct*
+`AppDriverError` subclass for each unsupported outcome, before any step runs:
+
+| Exception | When |
+| --- | --- |
+| `AppNotInstalled` | The app isn't on the device — provision first. |
+| `AppVersionUnsupported` | Installed version is outside the extension's `supported_versions`. |
+| `VersionPolicyError` | Installed version exceeds this device's `max_app_version` ceiling (policy, not drift). |
+| `NoAdapterError` | No adapter's range matches this version for the flow. |
+| `ProvisionError` | Checksum mismatch or install failure during `provision`. |
+
+```python
+import devicekit_sdk
+from devicekit_sdk.appdriver import VersionAdapter, AppDriver, open_app, tap, tap_if_present, wait_for
+
+ADAPTERS = {"connect": [
+    VersionAdapter(">=12.0.0 <13.0.0", [open_app(), tap("Connect"), wait_for("Connected")], name="12.x"),
+    VersionAdapter(">=13.0.0 <14.0.0", [open_app(), tap("Connect"),
+                                        tap_if_present("Allow"),           # 13.x consent dialog
+                                        wait_for("Connected")], name="13.x"),
+]}
+driver = AppDriver("my-vpn", "com.example.vpn", ADAPTERS, supported_versions=">=12.0.0 <14.0.0",
+                   ceiling_for=devicekit_sdk.appdriver.make_ceiling_resolver(lambda: devicekit_sdk.config("my-vpn")))
+driver.run("connect", device_id)   # picks the right adapter for THIS device; raises loud if drifted
+```

@@ -84,6 +84,27 @@
       "homepage": "https://github.com/jhd3197/devicekit"
     },
     {
+      "slug": "devicekit-vpn",
+      "display_name": "VPN (ExpressVPN Driver)",
+      "description": "Drive ExpressVPN across your fleet: provision a user-supplied, hash-pinned APK, then connect/disconnect/status through version-keyed UI adapters that absorb the app's drift (a 13.x per-connect consent dialog is just an extra adapter step). Validates every exit country against an allowlist and verifies the real egress with a device-side geo-IP check — the app UI can't reveal a wrong-country connection. The worked example for plan 18's app-driver model (device_requirements + adapters + version policy).",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": true,
+      "permissions": ["device.control", "adb", "network"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "device_requirements": {
+        "package": "com.expressvpn.vpn",
+        "supported_versions": ">=12.0.0 <14.0.0",
+        "provision": "user_supplied_apk"
+      },
+      "sha256": "ea4ed179b283fc770048dc9ed2bbbf859dad7caf83792de867cfeac2a559b96d",
+      "repo": "https://github.com/jhd3197/devicekit",
+      "homepage": "https://github.com/jhd3197/devicekit"
+    },
+    {
       "slug": "devicekit-appium",
       "display_name": "Appium Bridge",
       "description": "Drive devices through an Appium server: contributes an appium.run step type and appium.session_count fleet-query field.",

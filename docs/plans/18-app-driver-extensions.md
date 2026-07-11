@@ -1,6 +1,8 @@
 # Plan 18 — App-Driver Extensions (provisioning + version drift)
 
-**Status:** proposed
+**Status:** ✅ shipped (2026-07-11) — all 5 phases. Framework lives in
+`backend/devicekit_sdk/appdriver.py` (provision + version adapters + policy); the worked example is
+the bundled `devicekit-vpn` extension. 33 tests (`test_app_driver.py` + `test_vpn_extension.py`).
 **Inspired by:** the original ExpressVPN-style vision that opened the extension design
 conversation — install an extension, have it put an app on the device, then drive that
 app through automations. Plan 15 deferred it with two named prerequisites:
@@ -156,16 +158,27 @@ so it's the UI-automation case; that's what makes it the honest stress test.
 
 ## Phases
 
-| Phase | Delivers | Proves |
-|---|---|---|
-| 1 | `device_requirements` manifest key + consent-card surfacing + `provision()` (pinned APK push/install/verify + `ext_*_provisioned` table) | declare + install a 3rd-party app safely |
-| 2 | Version-adapter framework: `VersionAdapter`, per-device resolution, three distinct unsupported outcomes | drift handled per device, fails loud |
-| 3 | Device version policy: `max_app_version`, over-ceiling refusal, optional gated `reprovision` | "this device can't go above X" |
-| 4 | `devicekit-vpn`: adapters + config + gated tools + verify-egress automation template | the whole model on a real drifting app |
-| 5 | registry entry + EXTENSIONS.md "app-driver extensions" section (provisioning, adapters, policy) | others can author drivers |
+| Phase | Delivers | Proves | Status |
+|---|---|---|---|
+| 1 | `device_requirements` manifest key + consent-card surfacing + `provision()` (pinned APK push/install/verify + `ext_*_provisioned` table) | declare + install a 3rd-party app safely | ✅ |
+| 2 | Version-adapter framework: `VersionAdapter`, per-device resolution, three distinct unsupported outcomes | drift handled per device, fails loud | ✅ |
+| 3 | Device version policy: `max_app_version`, over-ceiling refusal, optional gated `reprovision` | "this device can't go above X" | ✅ |
+| 4 | `devicekit-vpn`: adapters + config + gated tools + verify-egress automation template | the whole model on a real drifting app | ✅ |
+| 5 | registry entry + EXTENSIONS.md "app-driver extensions" section (provisioning, adapters, policy) | others can author drivers | ✅ |
 
 Phases 1→2→3 are sequential (each builds the prior's concept); phase 4 needs all three;
 phase 5 last.
+
+**Deviations (as shipped):** the framework is a reusable SDK module (`devicekit_sdk.appdriver`,
+re-exported), not vpn-only, so any extension can author a driver — that's what makes phase 5's
+"others can author drivers" real. `provision` uses the atomic `adb install -r` (push+install in one)
+rather than a separate file-push then install. The verify-egress template uses a `screenshot`
+evidence step (not `screenshot_assert`, which needs a per-device baseline the user captures first),
+and folds status-check → verify → remediate → re-verify into a `vpn_ensure_egress` step so the
+linear automation engine can express the "only reconnect if wrong" loop. "Wrong adapter/version →
+alert, don't tap" is realized by the driver raising a distinct `AppDriverError`, which fails the run
+loud → `automation.run.failed` on the plan-06 notification bus (no hard dependency on
+`devicekit-webhook-notify`).
 
 ## Out of scope
 
