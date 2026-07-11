@@ -454,3 +454,14 @@ See [docs/plans/14-devicekit-python-package.md](docs/plans/14-devicekit-python-p
 - [x] Published to PyPI as [`droidlink` 0.1.0](https://pypi.org/project/droidlink/) — `pip install droidlink`
 - [x] PyPI Trusted Publishing workflow on `v*` tags (activate by adding the publisher on pypi.org + a `pypi` environment on the repo)
 - [x] PyPI README quickstart; monorepo README/docs/CI now install `droidlink` from PyPI
+
+### Phase 35: Extension Pack One
+**Goal**: The first device-facing extensions — prove every contribution point the platform claims with things a fleet actually wants.
+See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
+
+- [ ] Wire `automation_templates` manifest key (validated since plan 03, connected to nothing) + scaffold the three extensions
+- [ ] `devicekit-browser`: CDP-over-adb driver for device Chrome (goto/content/evaluate/screenshot API, gated AI tools, browser step types)
+- [ ] `devicekit-browser` pool routing: round-robin fetch across selected devices (explicit list / FQL / all), busy-skip + failover, sticky sessions for multi-step flows
+- [ ] `devicekit-explorer`: dashboard file manager — backend delete/mkdir/rename/preview verbs + builtin frontend Files tab/page (first real builtin-frontend user)
+- [ ] `devicekit-notification-capture`: poll agent notification listener → capture table → `wait_for_notification` step type (OTP extraction) → plan-06 bus forwarding
+- [ ] Registry entries with real sha256s + EXTENSIONS.md device-scoped API convention + stale jobs/notify doc fix

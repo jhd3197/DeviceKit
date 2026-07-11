@@ -22,6 +22,7 @@ architecture. ServerKit is also Flask + React, so most backend patterns port nea
 | 12 | [Settings view & theming](12-settings-and-theming.md) | URL-driven tabs, accent theming, extension settings panels | — |
 | 13 | [AI confirmation gate](13-ai-confirmation-gate.md) | Human-in-the-loop approval for write tools, tool registry filtering | — |
 | 14 | [Python package publishing](14-devicekit-python-package.md) | ✅ Resolved — published as [`droidlink`](https://pypi.org/project/droidlink/) from its own repo (bare `devicekit` is blocked by PyPI's similarity rule) | — |
+| 15 | [Extension pack one](15-extension-pack-one.md) | ServerKit's "validate the platform with real builtin plugins" — browser (CDP), file explorer (builtin frontend), notification capture (jobs + bus) | 03, 04, 13 |
 
 ## Executing a plan
 
@@ -50,6 +51,7 @@ Features:            ├──► 06 notifications
 Frontend:      09 foundations ──► 10 palette, 11 widgets, 12 settings   (parallel track)
 AI:            13 confirmation gate                                      (independent)
 Packaging:     14 python package ✅ done — droidlink 0.1.0 on PyPI       (independent)
+Extensions:    03/04 ──► 15 extension pack one (browser, explorer, notification capture)
 ```
 
 Plans 09–13 have no hard backend dependencies and can proceed in parallel with the
