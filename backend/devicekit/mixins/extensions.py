@@ -311,9 +311,15 @@ class ExtensionsMixin:
             "source": extension_registry.source_label(),
         }
 
-    def install_extension_from_registry(self, slug, *, force=False):
+    def install_extension_from_registry(self, slug, *, force=False, install_deps=True):
         """Install a registry entry: bundled entries come from ``builtin-extensions/``,
-        others download from the entry's pinned ``source`` + ``sha256``."""
+        others download from the entry's pinned ``source`` + ``sha256``.
+
+        With ``install_deps`` (default), any required siblings the entry declares (registry
+        ``requires`` → manifest ``requires_extensions``) that aren't already present+compatible
+        are installed first from the registry — the "install the chain" UX (plan 17). The
+        install-time gate still enforces the requirement, so a dep that can't be resolved from
+        the registry produces the same clear "install X first" error."""
         from devicekit import extension_registry
         entry = extension_registry.get_entry(slug)
         if not entry:
@@ -324,6 +330,8 @@ class ExtensionsMixin:
             "min_devicekit_version": entry.get("min_devicekit_version"),
             "max_devicekit_version": entry.get("max_devicekit_version"),
         })
+        if install_deps:
+            self._install_required_chain(entry, force=force, _seen=set())
         if entry.get("bundled"):
             return self.install_builtin_extension(slug, force=force or True)
         if not entry.get("source"):
@@ -331,6 +339,33 @@ class ExtensionsMixin:
         return self.install_extension_from_url(
             entry["source"], expected_sha256=entry.get("sha256"),
             force=force, source="registry")
+
+    def _install_required_chain(self, entry, *, force, _seen):
+        """Install (from the registry) every required sibling of ``entry`` that isn't already
+        present+compatible — depth-first so transitive deps land first. Cycle-guarded by
+        ``_seen``; a dep absent from the registry is left for the install gate to report."""
+        from devicekit import extension_registry
+        requires = entry.get("requires")
+        if not isinstance(requires, dict):
+            return
+        for dep_slug, dep_range in requires.items():
+            if dep_slug in _seen:
+                continue
+            _seen.add(dep_slug)
+            current = self.get_extension(dep_slug)
+            if current and range_satisfies(current["version"], dep_range):
+                continue  # already satisfied
+            dep_entry = extension_registry.get_entry(dep_slug)
+            if not dep_entry:
+                continue  # unresolvable — assert_required_extensions will raise a clear error
+            self._install_required_chain(dep_entry, force=force, _seen=_seen)  # transitive first
+            logger.info(f"Installing required dependency '{dep_slug}' before '{entry['slug']}'")
+            if dep_entry.get("bundled"):
+                self.install_builtin_extension(dep_slug, force=True)
+            elif dep_entry.get("source"):
+                self.install_extension_from_url(
+                    dep_entry["source"], expected_sha256=dep_entry.get("sha256"),
+                    force=force, source="registry")
 
     def check_extension_updates(self, force=False):
         """Compare installed versions against the registry."""

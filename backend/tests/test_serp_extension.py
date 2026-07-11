@@ -232,6 +232,40 @@ def test_serp_step_parse_failure_fails_step(fresh_db):
     assert "could not parse" in str(ei.value)
 
 
+# --------------------------------------------------------------------------- registry chain (ph4)
+@pytest.fixture
+def _bundled_registry(monkeypatch):
+    # set-but-empty ⇒ bundled index only (offline, deterministic).
+    monkeypatch.setenv("DEVICEKIT_REGISTRY_URL", "")
+    from devicekit import extension_registry
+    extension_registry._reset_cache()
+    yield
+    extension_registry._reset_cache()
+
+
+def test_registry_entry_exposes_requires(_bundled_registry):
+    from devicekit import extension_registry
+    assert extension_registry.get_entry(SERP)["requires"] == {"devicekit-browser": ">=0.1.0"}
+    # An extension with no deps normalizes to an empty map (not missing).
+    assert extension_registry.get_entry(BROWSER)["requires"] == {}
+
+
+def test_serp_installs_from_registry_with_chain(fresh_db, _bundled_registry):
+    client = _client()
+    # Installing serp from the registry pulls in its dependency (devicekit-browser) first.
+    ext = client.install_extension_from_registry(SERP)
+    assert ext["status"] == "active"
+    assert client.get_extension(BROWSER)["status"] == "active"  # chain installed the dependency
+
+
+def test_serp_registry_install_without_chain_is_gated(fresh_db, _bundled_registry):
+    client = _client()
+    # Opting out of the chain leaves the dependency unmet, so the install gate refuses.
+    with pytest.raises(ValueError) as ei:
+        client.install_extension_from_registry(SERP, install_deps=False)
+    assert BROWSER in str(ei.value)
+
+
 # --------------------------------------------------------------------------- lifecycle graph
 def test_browser_uninstall_blocked_while_serp_active(fresh_db):
     client = _client()

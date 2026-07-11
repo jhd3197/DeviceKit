@@ -386,6 +386,66 @@ an "open, assert, screenshot"; notification-capture ships the OTP-login skeleton
 
 ---
 
+## Extension dependencies — compose, don't reimplement (plan 17)
+
+An extension can depend on **and call** another. That's how `devicekit-serp` is ~150 lines: it owns
+no device code and runs its searches through `devicekit-browser`'s pool-routed `fetch`. Without the
+dependency mechanism it would have to re-implement CDP-over-adb — the exact duplication this
+prevents.
+
+**1. Declare the dependency — `requires_extensions`** (consumer side). A map of sibling slug →
+loose version range (`>=`, `>`, `<=`, `<`, `==`, bare ⇒ `>=`, `*`/empty ⇒ any; space/comma-joined
+constraints are ANDed):
+
+```jsonc
+"requires_extensions": { "devicekit-browser": ">=0.1.0" }
+```
+
+Enforced at **install and update** (`assert_required_extensions`): install is refused, before
+anything is written, if the sibling is missing or its version is out of range — a loud, early
+failure instead of a mystery `503` mid-automation. Preview folds any unmet dependency into its
+`warnings`, and installing from the registry pulls the chain in first.
+
+**2. Expose a surface — `provides`** (provider side). A `module:attr` whose function gets an
+`sdk.provides(slug)` binder and registers the curated callables siblings may use — separate from
+`ai_tools`, so you choose exactly what siblings can reach:
+
+```python
+# backend/api.py                      # manifest: "provides": "api:register"
+def fetch(pool="default", url=None, fmt="html"):
+    ...
+    return {"device_id": device_id, "url": url, fmt: body}
+
+def register(api):
+    api.method(fetch)
+```
+
+**3. Call it — `sdk.extension(slug)`** (consumer side):
+
+```python
+import devicekit_sdk
+
+browser = devicekit_sdk.extension("devicekit-browser")
+result = browser.fetch(pool="default", url=search_url)   # in-process; no HTTP hop
+html, served_by = result["html"], result["device_id"]
+```
+
+The call dispatches **in-process** but through a lookup that respects the sibling's status guard:
+if `devicekit-browser` is disabled at runtime, the call raises `ExtensionUnavailable` — the
+dependent should catch that and degrade, not crash. `extension(slug).available()` is a cheap
+pre-check. It is *not* a raw module import — the sibling's internals stay private (this is why it's
+a seam, not an `import`; see [ADR 0001](../adr/0001-in-process-extensions.md)).
+
+**Lifecycle graph.** Uninstalling a depended-on extension is **blocked** while an active dependent
+still requires it (`DELETE /extensions/<slug>` → `409`; `?force=1` overrides). Disabling one only
+**warns** — dependents keep running and degrade via `ExtensionUnavailable`. Uninstall the dependents
+first, or force.
+
+Full field rules: [Manifest Reference](manifest-reference.md#extension-dependencies). SDK
+signatures: [SDK Reference](sdk-reference.md#sibling-extensions-plan-17).
+
+---
+
 ## Frontend contributions (nav, routes, widgets)
 
 Extensions declare UI **declaratively** in the manifest's `contributions` block. The backend
@@ -732,10 +792,13 @@ current data came from (`remote` / `cache` / `bundled`).
 
 Each registry entry surfaces a fixed field set: `slug`, `display_name`,
 `description`, `version`, `category`, `author`, `first_party`, `bundled`,
-`permissions`, `min/max_devicekit_version`, `source`, `sha256`, `repo`, `homepage`,
-`logo`, `screenshots` (anything else is stripped). Entries flagged `bundled` install
-from `builtin-extensions/`; the rest download from the entry's pinned `source` and
-are verified against its `sha256`.
+`permissions`, `min/max_devicekit_version`, `requires`, `source`, `sha256`, `repo`,
+`homepage`, `logo`, `screenshots` (anything else is stripped). Entries flagged
+`bundled` install from `builtin-extensions/`; the rest download from the entry's
+pinned `source` and are verified against its `sha256`. `requires` mirrors the
+manifest's [`requires_extensions`](#extension-dependencies--compose-dont-reimplement-plan-17)
+so the marketplace shows "requires devicekit-browser" and a registry install pulls the
+whole chain in first (`install_deps=True`, on by default).
 
 ---
 

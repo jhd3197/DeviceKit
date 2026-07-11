@@ -14,6 +14,7 @@ import devicekit_sdk
 from devicekit_sdk import (
     db, logger, config, broadcast, devices, device_control,
     register_step_type, register_fql_field, ai, jobs, notify,
+    extension, provides, ExtensionUnavailable,
     require_permission, permissions, PermissionDenied, devicekit_version,
 )
 ```
@@ -42,6 +43,9 @@ the two agree.
 | `register_step_type` | `register_step_type(type_name, spec) -> None` | Register an automation step type (tracked for teardown). Usually via the `step_types` contribution. |
 | `register_fql_field` | `register_fql_field(name, spec) -> None` | Register a fleet-query field (tracked for teardown). Usually via the `fql_fields` contribution. |
 | `ai` | `ai(slug) -> _AiBinder` | The AI-tool binder — see [ai](#ai). |
+| `extension` | `extension(slug) -> _ExtensionClient` | A client for a **sibling** extension's provided surface — see [sibling extensions](#sibling-extensions-plan-17). |
+| `provides` | `provides(slug) -> _ProvidesBinder` | The binder for your own sibling-callable surface — see [sibling extensions](#sibling-extensions-plan-17). |
+| `ExtensionUnavailable` | `class ExtensionUnavailable(RuntimeError)` | Raised by an `extension(slug)` call when the sibling is not installed or not active. |
 | `jobs` | *(singleton)* | Background-work seam — see [jobs](#jobs). |
 | `notify` | *(singleton)* | Notification-bus seam — see [notify](#notify). |
 | `require_permission` | `require_permission(slug, capability) -> True` | Alias of `permissions.require`. Raises `PermissionDenied` unless declared. |
@@ -136,6 +140,53 @@ def register(ai):
         """Return the last delivery status."""
         ...
 ```
+
+---
+
+## Sibling extensions (plan 17)
+
+One extension can depend on and call another instead of reimplementing it. Declare the dependency
+with the `requires_extensions` manifest key (enforced at install); expose a surface with the
+`provides` key; call it with `extension(slug)`.
+
+| Member | Signature | What it does |
+| --- | --- | --- |
+| `extension` | `extension(slug) -> _ExtensionClient` | A thin client for a sibling's provided surface. |
+| `_ExtensionClient.<method>` | `<method>(*args, **kwargs)` | Dispatches **in-process** to the sibling's registered method. Raises `ExtensionUnavailable` if the sibling isn't installed/active, `AttributeError` if it provides no such method. Resolved fresh per call, so a runtime disable is caught. |
+| `_ExtensionClient.available` | `available() -> bool` | `True` if the sibling is installed and active *right now* — a cheap pre-check to branch without catching the exception. |
+| `provides` | `provides(slug) -> _ProvidesBinder` | The binder passed to your `provides` register function. |
+| `provides(slug).method` | `method(func=None, *, name=None)` | Register a callable siblings may invoke. Bare (`api.method(fetch)`) or named (`api.method(fetch, name="get")`). |
+
+Calls dispatch in-process (no HTTP hop, no serialization) but through a lookup that **honours the
+status guard** — a disabled or errored provider raises `ExtensionUnavailable`, so a dependent
+degrades cleanly instead of hitting a mystery `503` mid-flow. It is *not* a raw import of the
+sibling's module: internals stay private.
+
+```python
+# provider (devicekit-browser/backend/api.py)
+def fetch(pool="default", url=None, fmt="html"):
+    ...
+    return {"device_id": device_id, "url": url, fmt: body}
+
+def register(api):                     # manifest: "provides": "api:register"
+    api.method(fetch)
+```
+
+```python
+# consumer (devicekit-serp)  —  manifest: "requires_extensions": {"devicekit-browser": ">=0.1.0"}
+import devicekit_sdk
+
+browser = devicekit_sdk.extension("devicekit-browser")
+if not browser.available():
+    raise devicekit_sdk.ExtensionUnavailable("devicekit-browser is disabled")
+result = browser.fetch(pool="default", url="https://www.google.com/search?q=cats")
+html, served_by = result["html"], result["device_id"]
+```
+
+**Lifecycle.** Install refuses when a required sibling is absent/incompatible; uninstalling a
+depended-on extension is **blocked** while an active dependent needs it (force to override);
+disabling one only warns and lets dependents degrade. See the
+[Manifest Reference](manifest-reference.md#extension-dependencies).
 
 ---
 

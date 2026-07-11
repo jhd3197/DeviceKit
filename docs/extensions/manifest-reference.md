@@ -31,6 +31,8 @@ The manifest is the only required file, and it must sit at the **archive root**.
 | `step_types` | No | `module:attr` — returns `{type_name: {label, category, config, execute}}`. | — |
 | `fql_fields` | No | `module:attr` — returns `{field_name: spec}`. | — |
 | `ai_tools` | No | `module:attr` — registers Prompture tools. | — |
+| `provides` | No | `module:attr` — registers a sibling-callable surface (see [Extension dependencies](#extension-dependencies)). | — |
+| `requires_extensions` | No | Object of `sibling-slug -> version range` (see [Extension dependencies](#extension-dependencies)). | `{}` |
 | `lifecycle` | No | Object of `phase -> "module:func"`. | — |
 | `jobs` | No | List of `{kind, handler: "module:func"}`. | — |
 | `schedules` | No | List of `{name, kind, ...}`. | — |
@@ -117,6 +119,53 @@ reference — see [ADR 0002](../adr/0002-no-third-party-frontend-code.md).
 
 Seed widget slots: `dashboard.top`, `node-detail.tabs`, `run-detail.panels`, `settings.panels`.
 `icon` is an inline SVG string, sanitized before injection.
+
+---
+
+## Extension dependencies
+
+An extension can depend on — and call — another extension (plan 17). Two manifest keys, one on
+each side of the relationship:
+
+**Consumer side — `requires_extensions`.** A map of sibling slug → loose version range, ANDed:
+
+```json
+"requires_extensions": { "devicekit-browser": ">=0.1.0" }
+```
+
+Ranges accept `>=`, `>`, `<=`, `<`, `==`/`=`, a bare version (treated as `>=`), `*`/empty (any),
+and space/comma-separated constraints (`">=1.0 <2.0"`). The matcher (`range_satisfies`) reuses the
+same loose numeric parse as the version gate. Enforced by `assert_required_extensions` **at install
+and update**: if a required sibling is missing or its installed version is out of range, the install
+is refused with `<name> requires '<slug>' ...` before anything is written. Preview
+(`POST /extensions/preview`) returns `requires_extensions` and folds any unmet dependency into its
+`warnings`, so the consent UI can offer to install the chain.
+
+**Provider side — `provides`.** A `module:attr` whose function receives an `sdk.provides(slug)`
+binder and registers the curated callables siblings may invoke:
+
+```json
+"provides": "api:register"
+```
+
+```python
+# api.py
+def fetch(pool="default", url=None, fmt="html"):
+    ...
+def register(api):
+    api.method(fetch)              # exposes devicekit-browser's fetch to siblings
+```
+
+A consumer reaches it with `devicekit_sdk.extension("<slug>").<method>(...)` — dispatched
+**in-process** (no HTTP hop) but gated on the provider being *active*, so a disabled provider raises
+`ExtensionUnavailable` rather than failing deep in a call. See the
+[SDK Reference](sdk-reference.md#sibling-extensions-plan-17).
+
+**Lifecycle.** Uninstalling an extension is **blocked** while an active dependent still requires it
+(`DELETE /extensions/<slug>` → `409`; pass `?force=1` to override). Disabling a depended-on
+extension only *warns* — dependents keep running and degrade via `ExtensionUnavailable`. The registry
+mirrors `requires_extensions` as a `requires` field so the marketplace can show "requires
+devicekit-browser" and installing from the registry pulls the chain in first.
 
 ---
 

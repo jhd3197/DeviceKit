@@ -67,6 +67,23 @@
       "homepage": "https://github.com/jhd3197/devicekit"
     },
     {
+      "slug": "devicekit-serp",
+      "display_name": "SERP (Device Search)",
+      "description": "Search the web from your fleet's real Chrome — not a key-based SERP API. Runs google/bing/duckduckgo queries through devicekit-browser's device pool: real-device fingerprint, residential IP, fleet rotation, no per-query cost. Owns no device code — the first extension to depend on another (plan 17).",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": true,
+      "permissions": ["network"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "requires": { "devicekit-browser": ">=0.1.0" },
+      "sha256": "162662f394c3ad19b441327f580c20d749716ea12f61ff38097ca903958665da",
+      "repo": "https://github.com/jhd3197/devicekit",
+      "homepage": "https://github.com/jhd3197/devicekit"
+    },
+    {
       "slug": "devicekit-appium",
       "display_name": "Appium Bridge",
       "description": "Drive devices through an Appium server: contributes an appium.run step type and appium.session_count fleet-query field.",

@@ -461,14 +461,14 @@ See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md)
 - [x] `ai-agent.md` + `droidlink.md` + five ADRs (in-process extensions, no 3rd-party frontend, SQLAlchemy source of truth, droidlink naming, AI tools always gated)
 - [x] *(optional)* Static docs site (MkDocs Material) + dead-link CI check
 
-### Phase 37: Extension Dependencies + SERP
+### Phase 37: Extension Dependencies + SERP ✅
 **Goal**: Extensions compose — one plugin calls another's surface instead of reimplementing it.
 See [docs/plans/17-extension-dependencies-and-serp.md](docs/plans/17-extension-dependencies-and-serp.md).
 
 - [x] `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement
 - [x] `sdk.extension(slug)` in-process dispatch seam + `ExtensionUnavailable` + lifecycle graph (block/warn uninstall, disable degradation)
 - [x] `devicekit-serp`: per-engine adapters → `search()` over `devicekit-browser` pool fetch → AI tool + `serp_search` step type
-- [ ] Registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section
+- [x] Registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section
 
 ### Phase 38: App-Driver Extensions
 **Goal**: Install an extension, have it provision a third-party app, and drive it through UI drift across a fleet.

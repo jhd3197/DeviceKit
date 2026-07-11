@@ -1,6 +1,6 @@
 # Plan 17 — Extension Dependencies + `devicekit-serp`
 
-**Status:** 🚧 in progress (phases 1–3 ✅)
+**Status:** ✅ complete (phases 1–4)
 **Inspired by:** ServerKit's plugins compose — one plugin calls another's service rather
 than reimplementing it. DeviceKit's plan 15 deliberately shipped `devicekit-browser`
 first and deferred SERP with a named prerequisite: extensions can't yet depend on, or
@@ -110,7 +110,7 @@ re-implement CDP-over-adb — the exact duplication the mechanism prevents.
 | 1 ✅ | `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement | dependencies declared and checked |
 | 2 ✅ | `sdk.extension(slug)` seam (in-process dispatch + `ExtensionUnavailable`) + lifecycle graph (block/warn on uninstall, disable degradation) | siblings can call siblings safely |
 | 3 ✅ | `devicekit-serp`: per-engine adapters → `search()` over `browser.fetch` → AI tool + step type | the mechanism works end-to-end on a real consumer |
-| 4 | registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section | marketplace understands dependency graphs |
+| 4 ✅ | registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section | marketplace understands dependency graphs |
 
 **Phase 1 — shipped.** `requires_extensions` (map of `slug → loose-semver range`) validated in
 `validate_manifest`; `range_satisfies()` added to `extension_manifest.py` (reuses `_parse_version`,
@@ -148,6 +148,30 @@ automation chains `serp_search → browser_goto {{serp_top_url}} → browser_scr
 `test_serp_extension.py` (canned per-engine HTML; live Chrome scraping verified on hardware).
 Deviation: parsing uses `beautifulsoup4` (already a core backend dep) with real CSS selectors —
 no server-side regex — so a Google layout change is a one-function edit in `engines.py`.
+
+**Phase 4 — shipped.** Registry `_FIELDS` gains `requires` (dict), normalized on every entry
+(empty map when absent). `registry_index.json` adds the bundled first-party `devicekit-serp` entry
+(real content sha256, `requires: {devicekit-browser: ">=0.1.0"}`; the browser entry's sha256 was
+refreshed for its `provides`/`api.py` change). `install_extension_from_registry(..., install_deps=
+True)` grows `_install_required_chain`: depth-first, cycle-guarded, it installs any missing/out-of-
+range required siblings from the registry *before* the requested extension (bundled → local tree,
+else pinned `source`+`sha256`); the install gate still enforces the requirement, so an unresolvable
+dep yields the same clear error. Docs: dependency sections added to the extension **guide**,
+**manifest-reference** (`requires_extensions` + `provides` rows + full section), and **sdk-reference**
+(`extension`/`provides`/`ExtensionUnavailable` + "Sibling extensions" section); the split-doc guide
+is the live home of the old `EXTENSIONS.md`. Dead-link check passes. Tests: registry-chain cases in
+`test_serp_extension.py`.
+
+## Verification
+
+- `pytest` (full backend suite): **240 passed**. New: `test_extension_dependencies.py` (28),
+  `test_serp_extension.py` (18).
+- `python scripts/check_docs_links.py`: 21 files, no broken links.
+- `python -c "from app import *"` boots clean; `npm run build` (frontend) succeeds.
+- **Not machine-verified (needs a phone):** live SERP scraping — `serp_search` driving real Google/
+  Bing/DuckDuckGo through `devicekit-browser` on a device pool. The parsing, dependency gate,
+  in-process dispatch, lifecycle graph, and registry chain are all covered offline with a stubbed
+  `browser.fetch` + canned per-engine HTML.
 
 Phase 3 depends on 1+2; phases 1 and 2 are sequential (2 builds on 1's manifest key).
 
