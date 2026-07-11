@@ -163,16 +163,32 @@ class IdentityMixin:
         return session.query(User).filter(User.role == "admin",
                                           User.is_active.is_(True)).count()
 
-    def verify_credentials(self, username, password):
-        """Return the user dict on a correct, active login; else ``None``."""
+    def check_password(self, username, password):
+        """Return the user dict when username+password match an active user, else ``None``.
+
+        Side-effect-free — does *not* stamp ``last_login_at``, so a 2FA step (plan 20 part 6) can
+        gate before the login is considered complete."""
         with session_scope() as s:
             user = s.query(User).filter(User.username == (username or "").strip()).first()
             if not user or not user.is_active:
                 return None
             if not verify_password(password, user.password_hash):
                 return None
-            user.last_login_at = time.time()
             return user.to_dict()
+
+    def touch_last_login(self, user_id):
+        with session_scope() as s:
+            user = s.get(User, user_id)
+            if user:
+                user.last_login_at = time.time()
+
+    def verify_credentials(self, username, password):
+        """Return the user dict on a correct, active login (and stamp ``last_login_at``); else
+        ``None``. The single-factor path used where 2FA isn't in play."""
+        user = self.check_password(username, password)
+        if user:
+            self.touch_last_login(user["id"])
+        return user
 
     # -----------------------------------------------------------------
     # Login sessions

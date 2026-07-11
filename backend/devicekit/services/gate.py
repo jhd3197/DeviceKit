@@ -17,13 +17,22 @@ PUBLIC_PATHS = ('/health', '/auth/login', '/auth/logout', '/auth/session')
 _WRITE_METHODS = ('POST', 'PUT', 'DELETE', 'PATCH')
 
 
+def _is_public_invitation(request):
+    """The invitation preview/accept flow runs before the user has an account, so it is public.
+    Admin invitation management (list/create/revoke) is NOT — it lacks these suffixes."""
+    path = request.path
+    return path.startswith('/invitations/') and (
+        path.endswith('/preview') or path.endswith('/accept'))
+
+
 def authorize(client, request):
     """Resolve the principal and authorize the request.
 
     Returns ``(principal, error)``. ``error`` is ``None`` when the request may proceed, else an
     ``({'error': msg}, status_code)`` pair. ``principal`` is always set except on a hard auth
     failure (``None`` with a 401)."""
-    if request.path in PUBLIC_PATHS or request.method == 'OPTIONS':
+    if request.path in PUBLIC_PATHS or request.method == 'OPTIONS' \
+            or _is_public_invitation(request):
         return client.anonymous_principal(), None
 
     # Agent-device endpoints authenticate on the machine token, orthogonal to human RBAC.

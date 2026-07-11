@@ -505,7 +505,7 @@ See [docs/plans/20-identity-rbac-and-secrets.md](docs/plans/20-identity-rbac-and
 - [x] User-attributed `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog`
 - [x] `Workspace` + `WorkspaceMember` scoping devices (born-in-workspace) + automations; capability fold + `ResourceGrant`
 - [x] Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection
-- [ ] (optional) invitations + TOTP + lockout + require-2FA-with-grace policy
+- [x] (optional) invitations + TOTP + lockout + require-2FA-with-grace policy
 
 ### Phase 41: Public API `/api/v1` + OpenAPI + MCP Server
 **Goal**: A versioned, scope-gated public API with auto-generated OpenAPI, and an MCP server so Claude can drive the fleet through the same gated surface.

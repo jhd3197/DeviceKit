@@ -11,6 +11,8 @@ from flask_limiter.util import get_remote_address
 
 from devicekit.mixins.identity import IdentityMixin
 from devicekit.mixins.auth import AuthMixin
+from devicekit.mixins.account_security import AccountSecurityMixin
+from devicekit.mixins.settings import SettingsMixin
 from devicekit.services.gate import authorize
 from devicekit.services.permissions import (
     resolve_permissions, validate_overrides, PermissionError,
@@ -18,12 +20,14 @@ from devicekit.services.permissions import (
 from devicekit.routes import auth as auth_routes
 
 
-class _IdentityClient(IdentityMixin, AuthMixin):
-    """Minimal composite: identity + token validation, no devices/DB-heavy mixins."""
+class _IdentityClient(AccountSecurityMixin, IdentityMixin, SettingsMixin, AuthMixin):
+    """Composite mirroring the real Client's identity stack: identity + account security
+    (the login route delegates to ``authenticate``) + settings + token validation."""
 
     def __init__(self, api_key=""):
         self.configure_auth(api_key, [])
         self._has_users_flag = None
+        self._login_attempts = {}
 
 
 @pytest.fixture

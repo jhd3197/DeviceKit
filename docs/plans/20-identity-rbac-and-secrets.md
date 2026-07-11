@@ -124,7 +124,7 @@ passkeys are heavier (L) — defer until there are real teams.
 | 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ✅ |
 | 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ✅ |
 | 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ✅ |
-| 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security | ⏳ |
+| 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security | ✅ |
 
 ### Phase 1 — shipped (backend)
 
@@ -194,6 +194,22 @@ hook automation runs (plan 22) will call to turn a vault into a `{ENV_VAR: value
 audited action, vault listing narrows to the active workspace. Migration `a4b5c6d7e001`. Verified: 7 new tests
 (ciphertext-at-rest asserted, reveal round-trip, workspace scoping), full suite 350 green. The crypto module's
 dev-fallback-key warning already covers the "don't lose the key on reinstall" gotcha.
+
+### Phase 6 — shipped (backend)
+
+Delivered the opt-in account-security layer. `services/totp.py` (pyotp wrappers: secret, provisioning URI,
+verify with ±30s window, single-use backup codes). `models/invitation.py` (`Invitation` — token stored hashed,
+role/permission preset, optional workspace membership). `User` gained `totp_secret` (Fernet-encrypted),
+`totp_enabled`, `backup_codes` (hashes). `mixins/account_security.py`: **invitations** (create/preview/accept —
+copy-link, no SMTP; accept creates the user + optional workspace membership), **TOTP 2FA** (staged enroll →
+confirm-with-first-code → backup codes; verify consumes a backup code single-use; disable), **progressive
+lockout** (5 failures → 5/15/60-min escalating, in-memory), **`authenticate`** (the composed lockout → password
+→ 2FA → session login), and **require-2FA-with-grace** (settings-backed, grace anchored on
+`max(created_at, policy_enabled_at)` so enabling never insta-locks a veteran). `routes/auth.py` grew
+`/auth/2fa/{setup,confirm,disable}` (self-service), `/invitations` CRUD (admin) + `/invitations/<token>/{preview,accept}`
+(public); `/auth/login` now renders the typed `authenticate` result (200 / 429 locked / 401 mfa_required);
+`/auth/session` surfaces the 2FA policy status. Migration `b5c6d7e8f001`. Verified: 9 new tests + full-app
+invite→accept→enroll→2FA-login flow, full suite 359 green.
 
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.

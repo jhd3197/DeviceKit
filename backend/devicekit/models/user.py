@@ -30,6 +30,11 @@ class User(Base):
     updated_at = Column(Float, nullable=True)
     last_login_at = Column(Float, nullable=True)
 
+    # --- plan 20 part 6: TOTP 2FA ---
+    totp_secret = Column(String, nullable=True)                     # enc:-prefixed when enabled
+    totp_enabled = Column(Boolean, nullable=False, default=False)
+    backup_codes = Column(JSON, nullable=True)                      # list of sha256 hashes
+
     def effective_permissions(self):
         """The resolved {feature: {read, write}} matrix (role template + override)."""
         return resolve_permissions(self.role, self.permissions)
@@ -44,6 +49,7 @@ class User(Base):
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "last_login_at": self.last_login_at,
+            "totp_enabled": bool(self.totp_enabled),
         }
         if include_permissions:
             d["permissions"] = self.permissions or {}

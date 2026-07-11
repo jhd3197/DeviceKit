@@ -39,6 +39,7 @@ from devicekit.mixins.api_keys import ApiKeysMixin
 from devicekit.mixins.audit import AuditMixin
 from devicekit.mixins.workspaces import WorkspacesMixin
 from devicekit.mixins.vault import VaultMixin
+from devicekit.mixins.account_security import AccountSecurityMixin
 
 
 class Client(
@@ -72,6 +73,7 @@ class Client(
     AuditMixin,
     WorkspacesMixin,
     VaultMixin,
+    AccountSecurityMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,

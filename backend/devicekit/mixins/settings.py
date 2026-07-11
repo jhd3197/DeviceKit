@@ -47,6 +47,10 @@ SETTINGS_DEFAULTS = {
     # Appearance
     "appearance.theme": "dark",
     "appearance.accent": "#10b981",            # emerald — DeviceKit's historical accent
+    # Account security (plan 20 part 6)
+    "security.require_2fa": False,             # require TOTP 2FA for all users
+    "security.require_2fa_enabled_at": None,   # stamped when the policy is turned on (grace anchor)
+    "security.twofa_grace_days": 7,            # grace window before an un-enrolled user is required
 }
 
 # Keys whose values are secret-ish (never echo the raw value back to the client). Dict
