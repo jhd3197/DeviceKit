@@ -141,6 +141,22 @@ def test_audit_skips_reads_and_5xx(client):
     assert client.get_audit_logs() == []  # GET not audited, 500 not audited
 
 
+def test_audit_skips_agent_machine_axis(client):
+    app = Flask(__name__)
+
+    @app.after_request
+    def _audit(resp):
+        client.audit_request(request, resp, None)
+        return resp
+
+    @app.route("/agent-device/heartbeat", methods=["POST"])
+    def _hb():
+        return jsonify({"ok": True})
+
+    app.test_client().post("/agent-device/heartbeat", json={"x": 1})
+    assert client.get_audit_logs() == []   # machine heartbeats aren't in the durable trail
+
+
 # --------------------------------------------------------------- HTTP route (admin-only)
 def test_audit_route_admin_only(client):
     client.record_audit("seed")

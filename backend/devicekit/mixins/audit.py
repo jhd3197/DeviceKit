@@ -50,8 +50,14 @@ class AuditMixin:
             return None
 
     def audit_request(self, request, response, principal=None):
-        """Fold the request-level audit: durable attributed row + in-memory activity feed."""
+        """Fold the request-level audit: durable attributed row + in-memory activity feed.
+
+        The machine axis (``/agent-device/*`` heartbeats/state) is intentionally skipped for the
+        durable trail — it is high-frequency and not a human action; meaningful agent lifecycle
+        events (register/claim/rotate) are logged explicitly by their routes."""
         if request.method not in _AUDIT_METHODS or response.status_code >= 500:
+            return
+        if request.path.startswith("/agent-device/"):
             return
         user_id = getattr(principal, "user_id", None)
         username = getattr(principal, "username", None)

@@ -1,6 +1,6 @@
 # Plan 20 — Identity, RBAC, Scoped API Keys, Audit & Secrets Vault
 
-**Status:** in progress
+**Status:** shipped (all 6 phases + UI; backend `main`-ready, verified end-to-end)
 **Inspired by:** ServerKit added multi-user tenancy to an *already-shipped single-tenant app
 without a rewrite* — the whole retrofit turns on one `scope_query()` helper where **no
 workspace context in the request = byte-for-byte the old behavior**
