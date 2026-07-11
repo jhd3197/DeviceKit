@@ -123,7 +123,7 @@ passkeys are heavier (L) — defer until there are real teams.
 | 2 | Hashed scoped multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single key | programmatic auth, per-scope | ✅ |
 | 3 | `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog` | who-did-what | ✅ |
 | 4 | `Workspace` + `WorkspaceMember` + opt-in narrow-only `scope_query()` (devices born-in-workspace, children derive) + capability fold + `ResourceGrant` | multi-tenant, no big-bang | ✅ |
-| 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ⏳ |
+| 5 | Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection | credentials out of `.env` | ✅ |
 | 6 | (optional) invitations + TOTP + lockout + require-2FA-with-grace | team onboarding + account security | ⏳ |
 
 ### Phase 1 — shipped (backend)
@@ -182,6 +182,18 @@ Migration `f3a4b5c6d001`. Verified: 9 new tests, app-boot scoping flow, full sui
 `/devices` merge (ADB + agent registry) is left unscoped for now — device rows carry `workspace_id` and the
 scope helper is available, but rewiring the multi-source merge is deferred to avoid destabilizing fleet listing;
 automation scoping is the shipped proof of the pattern.
+
+### Phase 5 — shipped (backend)
+
+Delivered: `models/secret_vault.py` (`Vault` groups `Secret` rows; `workspace_id`-scoped), `mixins/vault.py`
+reusing `notifications/crypto.py` (same `DEVICEKIT_SECRET_KEY`) — vault + secret CRUD with values
+Fernet-encrypted at rest (`enc:` tokens), a **masked list** (`••••••••` + `has_value`) and a **separate
+`reveal_secret`** decryption path, rotation (upsert), expiry, and `resolve_env_dict(vault_id)` — the injection
+hook automation runs (plan 22) will call to turn a vault into a `{ENV_VAR: value}` map (expired secrets skipped).
+`routes/vault.py` (`/vault/vaults` + `/secrets` + `.../reveal`): admin-gated, reveal is a POST so it's a distinct
+audited action, vault listing narrows to the active workspace. Migration `a4b5c6d7e001`. Verified: 7 new tests
+(ciphertext-at-rest asserted, reveal round-trip, workspace scoping), full suite 350 green. The crypto module's
+dev-fallback-key warning already covers the "don't lose the key on reinstall" gotcha.
 
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.
