@@ -109,6 +109,54 @@ def apply_ai_backend(backend, hub_url=None, hub_key=None):
         return "hub"
 
 
+def hub_admin_token():
+    """The hub admin token (``HUB_ADMIN_TOKEN``), read from the environment. Deliberately
+    NOT a durable setting: it grants key-creation/revocation on the hub and should only
+    ever live in DeviceKit's server-side env, mirroring how the hub itself holds it."""
+    import os
+    return os.environ.get("HUB_ADMIN_TOKEN") or None
+
+
+def create_hub_key(hub_url, admin_token, name, allowed_models=None,
+                   daily_spend_cap_usd=1.0, timeout=10.0):
+    """Create a scoped, metered hub key via the hub's admin API. Returns the response
+    dict (``id`` + plaintext ``key`` — shown once by the hub, so the caller must persist
+    it). Raises on any failure; callers decide whether that's fatal."""
+    url = (hub_url or DEFAULT_HUB_URL).rstrip("/")
+    resp = requests.post(
+        f"{url}/admin/keys",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "name": name,
+            "allowed_models": list(allowed_models or []),
+            "daily_spend_cap_usd": float(daily_spend_cap_usd),
+        },
+        timeout=timeout,
+    )
+    if resp.status_code != 201:
+        raise RuntimeError(f"hub /admin/keys returned {resp.status_code}: {resp.text[:200]}")
+    return resp.json()
+
+
+def revoke_hub_key(hub_url, admin_token, key_id, timeout=10.0):
+    """Soft-revoke a hub key by id. Returns True when the hub confirmed (204/404 —
+    already-gone counts as revoked). Raises on transport errors."""
+    url = (hub_url or DEFAULT_HUB_URL).rstrip("/")
+    resp = requests.delete(
+        f"{url}/admin/keys/{key_id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        timeout=timeout,
+    )
+    return resp.status_code in (204, 404)
+
+
+def make_extension_driver(hub_url, ext_key, model):
+    """A HubDriver bound to an extension's own hub key. ``model`` keeps its full
+    ``provider/model`` shape — the hub routes it."""
+    driver_cls = _hub_driver_class()
+    return driver_cls(api_key=ext_key, model=model, base_url=hub_base_url(hub_url))
+
+
 def probe_hub(hub_url, hub_key=None, timeout=3.0, models_timeout=15.0):
     """Probe a prompture-hub instance: ``GET /health`` for liveness, then ``GET
     /v1/models`` (key-scoped) for the allowed-model list. Never raises — the Settings

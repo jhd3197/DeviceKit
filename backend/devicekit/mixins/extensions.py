@@ -525,6 +525,15 @@ class ExtensionsMixin:
                     row.error = str(e)
             raise
 
+        # llm extensions get their own scoped hub key at install time when the hub
+        # backend is active (plan 19). Best-effort: a hub hiccup must not fail install —
+        # the key is also (re)ensured lazily on first sdk.ai use.
+        if "llm" in (manifest.get("permissions") or []) and hasattr(self, "ensure_extension_hub_key"):
+            try:
+                self.ensure_extension_hub_key(slug)
+            except Exception as e:
+                logger.warning(f"Issuing hub key for '{slug}' at install failed: {e}")
+
         logger.info(f"Installed extension '{slug}' v{manifest['version']} ({source})")
         return self.get_extension(slug)
 
@@ -939,6 +948,15 @@ class ExtensionsMixin:
 
         # Remove automations this extension seeded from its automation_templates.
         self._remove_automation_templates(slug)
+
+        # Revoke the extension's scoped hub key (plan 19) — instant LLM lockout, no
+        # provider-key rotation. Best-effort: an unreachable hub still drops the stored
+        # record, so a reinstall issues a fresh key.
+        if hasattr(self, "revoke_extension_hub_key"):
+            try:
+                self.revoke_extension_hub_key(slug)
+            except Exception as e:
+                logger.warning(f"Revoking hub key for '{slug}' failed: {e}")
 
         if purge:
             self._drop_ext_tables(slug)

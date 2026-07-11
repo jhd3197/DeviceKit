@@ -36,6 +36,7 @@ SETTINGS_DEFAULTS = {
     "ai.backend": "direct",                    # direct (provider keys in env) | hub (prompture-hub gateway)
     "ai.hub.url": "http://localhost:1984",     # prompture-hub base URL (backend probes {url}/health)
     "ai.hub.key": None,                        # scoped ph_... hub key; the only secret DeviceKit holds on hub
+    "ai.hub.extension_keys": {},               # {slug: {id, key, ...}} — server-managed, never client-writable
     # Streaming
     "streaming.default_fps": 10,
     "streaming.default_quality": 50,
@@ -50,7 +51,10 @@ SETTINGS_DEFAULTS = {
 
 # Keys whose values are secret-ish (never echo the raw value back to the client). Dict
 # values are masked to a {name: bool} presence map, scalars to a single boolean.
-_SECRET_KEYS = {"ai.provider_keys", "ai.hub.key"}
+_SECRET_KEYS = {"ai.provider_keys", "ai.hub.key", "ai.hub.extension_keys"}
+
+# Server-managed settings the client API must never write (PUT /settings skips them).
+_SERVER_MANAGED_KEYS = {"ai.hub.extension_keys"}
 
 # Settings that reconfigure Prompture's driver registry when they change.
 _AI_BACKEND_KEYS = {"ai.backend", "ai.hub.url", "ai.hub.key"}
@@ -130,7 +134,7 @@ class SettingsMixin:
         if not isinstance(data, dict):
             raise ValueError("settings payload must be an object")
         for key, value in data.items():
-            if key not in SETTINGS_DEFAULTS:
+            if key not in SETTINGS_DEFAULTS or key in _SERVER_MANAGED_KEYS:
                 continue
             if key == "ai.provider_keys" and isinstance(value, dict):
                 value = self._merge_provider_keys(value)

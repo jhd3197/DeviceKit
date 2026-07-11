@@ -219,6 +219,23 @@ class _AiBinder:
             return f
         return _register(func) if func is not None else _register
 
+    # -------------------------------------------------- LLM calls (plan 19)
+    # Requires the ``llm`` permission. On the hub backend these run on the extension's
+    # OWN scoped hub key (model whitelist + daily spend cap, revoked at uninstall); on
+    # the direct backend they fall back to the host's Prompture config with a warning.
+
+    def ask(self, prompt, model=None, system_prompt=None):
+        """One-shot LLM call. Returns the model's text response."""
+        require_permission(self._slug, "llm")
+        return _host.extension_ai_ask(
+            self._slug, prompt, model=model, system_prompt=system_prompt)
+
+    def conversation(self, model=None, system_prompt=None):
+        """A multi-turn Prompture ``Conversation`` on this extension's credentials."""
+        require_permission(self._slug, "llm")
+        return _host.extension_ai_conversation(
+            self._slug, model=model, system_prompt=system_prompt)
+
 
 def ai(slug):
     return _AiBinder(slug)

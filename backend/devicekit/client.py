@@ -29,6 +29,7 @@ from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
+from devicekit.mixins.extension_ai import ExtensionAiMixin
 from devicekit.mixins.jobs import JobsMixin
 from devicekit.mixins.notifications import NotificationsMixin
 from devicekit.mixins.metrics_history import MetricsHistoryMixin
@@ -56,6 +57,7 @@ class Client(
     AgentDeviceMixin,
     PairingMixin,
     ExtensionsMixin,
+    ExtensionAiMixin,
     JobsMixin,
     NotificationsMixin,
     MetricsHistoryMixin,
