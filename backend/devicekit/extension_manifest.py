@@ -34,6 +34,12 @@ CATEGORIES = {"automation", "monitoring", "integration", "ai", "utility"}
 # gate (declaration-based, not a sandbox — see plan 03 / ServerKit ADR 0002).
 KNOWN_PERMISSIONS = {"adb", "device.control", "filesystem", "network", "llm"}
 
+# How an app-driver extension (``device_requirements``, plan 18) puts its target app on a
+# device. ``user_supplied_apk`` is the honest default: the user uploads the APK once, the
+# extension pins its sha256 and installs it. ``play_store`` fires a ``market://`` intent and
+# lets the user finish — no pinning, weaker guarantees.
+PROVISION_MODES = {"user_supplied_apk", "play_store"}
+
 # Contribution kinds and the keys each entry must carry (frontend wiring, plan 04).
 REQUIRED_CONTRIB_KEYS = {
     "nav": ("label", "route"),
@@ -145,6 +151,25 @@ def validate_manifest(manifest):
     templates = manifest.get("automation_templates")
     if templates is not None and not isinstance(templates, list):
         problems.append("automation_templates must be a list of paths")
+
+    # device_requirements — an app-driver extension declares the third-party app it drives, the
+    # version range it has adapters for, and how the app gets onto a device (plan 18). Surfaced
+    # in the consent card and enforced at drive time (SDK appdriver), not at install (the app may
+    # legitimately be absent until the user provisions it).
+    reqs = manifest.get("device_requirements")
+    if reqs is not None:
+        if not isinstance(reqs, dict):
+            problems.append("device_requirements must be an object")
+        else:
+            if not reqs.get("package") or not isinstance(reqs.get("package"), str):
+                problems.append("device_requirements.package is required (the app's package name)")
+            sv = reqs.get("supported_versions")
+            if sv is not None and not isinstance(sv, str):
+                problems.append("device_requirements.supported_versions must be a version-range string")
+            prov = reqs.get("provision")
+            if prov is not None and prov not in PROVISION_MODES:
+                problems.append(
+                    f"device_requirements.provision must be one of {sorted(PROVISION_MODES)}, got {prov!r}")
 
     url_prefix = manifest.get("url_prefix")
     if url_prefix is not None and (not isinstance(url_prefix, str) or not url_prefix.startswith("/")):
@@ -297,6 +322,9 @@ def manifest_spec():
             "contributions": "{nav, routes, widgets, command_palette, page_titles}",
             "requires_extensions": "{sibling-slug: version range} — enforced at install",
             "provides": "module:func registering sibling-callable methods (sdk.extension(slug))",
+            "device_requirements": "{package, supported_versions, provision} — the third-party "
+                                   "app an app-driver extension drives (plan 18)",
         },
+        "provision_modes": sorted(PROVISION_MODES),
         "devicekit_version": DEVICEKIT_VERSION,
     }

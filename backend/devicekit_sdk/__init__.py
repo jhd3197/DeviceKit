@@ -141,6 +141,30 @@ class _DeviceControl:
         require_permission(self._slug, "adb")
         return _host.run_adb_command(f"shell {command}", device=self._device_id)
 
+    def install_apk(self, apk_path):
+        """Install (``adb install -r``) a local APK onto the device. Returns
+        ``(success: bool, output: str)``. Requires ``adb`` — the app-driver provisioning
+        primitive (plan 18)."""
+        require_permission(self._slug, "adb")
+        return _host.install_apk(apk_path, device=self._device_id)
+
+    def uninstall_app(self, package):
+        """Uninstall a package (``adb uninstall``). Requires ``adb``. Used by the gated
+        ``reprovision`` remediation (uninstall + reinstall the pinned build)."""
+        require_permission(self._slug, "adb")
+        return _host.run_adb_command(["uninstall", package], device=self._device_id)
+
+    def app_version(self, package):
+        """Return the installed ``versionName`` of ``package`` (via ``dumpsys package``), or
+        ``None`` if the app is not installed. Requires ``device.control`` — the cheap per-call
+        read the version-adapter resolver uses to pick the right adapter per device (plan 18)."""
+        import re
+        require_permission(self._slug, "device.control")
+        out = _host.run_adb_command(
+            ["shell", "dumpsys", "package", package], device=self._device_id) or ""
+        m = re.search(r"versionName=(\S+)", out)
+        return m.group(1) if m else None
+
     def forward(self, local_port, remote="localabstract:chrome_devtools_remote"):
         """Set up an ``adb forward`` from a local TCP port to a device socket (default the
         Chrome DevTools abstract socket). Returns adb stdout. Requires ``adb``."""
@@ -335,6 +359,11 @@ class _Notify:
 
 notify = _Notify()
 
+# App-driver framework (plan 18): provisioning + version adapters + policy. Imported last so
+# the submodule sees a fully-populated devicekit_sdk namespace (it uses ``db``/``device_control``
+# lazily inside functions, so the partial-module cache during this import is safe).
+from devicekit_sdk import appdriver  # noqa: E402
+
 __all__ = [
     "set_host", "get_host", "devicekit_version",
     "db", "logger", "config", "broadcast",
@@ -343,4 +372,5 @@ __all__ = [
     "extension", "provides", "ExtensionUnavailable",
     "jobs", "notify",
     "permissions", "require_permission", "PermissionDenied",
+    "appdriver",
 ]

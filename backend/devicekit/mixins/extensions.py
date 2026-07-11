@@ -249,6 +249,17 @@ class ExtensionsMixin:
         # Surface unmet extension dependencies as warnings so the consent UI can offer to
         # install the chain (the actual install still hard-fails on them via the gate).
         warnings.extend(self.missing_required_extensions(manifest))
+        # Surface an app-driver's device requirement up front (plan 18): the extension will drive
+        # (and, for user_supplied_apk, install) a third-party app — no surprise device changes.
+        device_reqs = manifest.get("device_requirements") or {}
+        if device_reqs.get("package"):
+            pkg = device_reqs["package"]
+            if device_reqs.get("provision", "user_supplied_apk") == "user_supplied_apk":
+                warnings.append(
+                    f"This extension drives {pkg}; you must supply its APK (installed "
+                    f"hash-pinned onto each device).")
+            else:
+                warnings.append(f"This extension drives {pkg} (installed via the Play Store).")
         return {
             "slug": manifest["name"],
             "display_name": manifest.get("display_name", manifest["name"]),
@@ -259,6 +270,7 @@ class ExtensionsMixin:
             "contributions": manifest.get("contributions", {}),
             "config_schema": manifest.get("config_schema", {}),
             "requires_extensions": manifest.get("requires_extensions", {}),
+            "device_requirements": device_reqs,
             "source_url": source_url,
             "sha256": digest,
             "warnings": warnings,

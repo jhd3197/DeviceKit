@@ -19,6 +19,7 @@ import {
   Plug,
   Bot,
   Wrench,
+  Smartphone,
 } from 'lucide-react'
 import { api } from '../api'
 import { refreshContributions } from '../extensions/contributions'
@@ -68,6 +69,36 @@ function PermissionChip({ perm }) {
       <ShieldCheck className="w-3 h-3" />
       {perm}
     </span>
+  )
+}
+
+// App-driver extensions (plan 18) declare a device_requirements block: the third-party app they
+// drive, the version range they support, and how the app gets there. Surfaced up front on the
+// consent card so installing is never a surprise device change.
+function DeviceRequirementCard({ req }) {
+  if (!req || !req.package) return null
+  const userSupplied = (req.provision || 'user_supplied_apk') === 'user_supplied_apk'
+  return (
+    <div className="rounded-lg border border-blue-500/25 bg-blue-500/5 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-blue-300 mb-1.5 flex items-center gap-1.5">
+        <Smartphone className="w-3.5 h-3.5" /> Drives a third-party app
+      </p>
+      <p className="text-xs text-zinc-300">
+        This extension automates <span className="mono text-blue-200">{req.package}</span>
+        {req.supported_versions ? (
+          <>
+            {' '}
+            (supported versions <span className="mono text-zinc-400">{req.supported_versions}</span>)
+          </>
+        ) : null}
+        .
+      </p>
+      <p className="mt-1 text-[11px] text-zinc-400">
+        {userSupplied
+          ? 'You supply the APK once; it is installed hash-pinned onto each device you provision.'
+          : 'The app is installed from the Play Store (no hash pinning).'}
+      </p>
+    </div>
   )
 }
 
@@ -553,6 +584,12 @@ function DetailModal({ entry, busy, onClose, onInstall }) {
         )}
       </div>
 
+      {entry.device_requirements?.package && (
+        <div className="mt-5">
+          <DeviceRequirementCard req={entry.device_requirements} />
+        </div>
+      )}
+
       {compatWarn && (
         <p className="mt-4 text-[11px] text-zinc-500 flex items-center gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5" /> {compatWarn}
@@ -652,6 +689,9 @@ function UrlInstallDialog({ busy, onClose, onInstall }) {
                 ))}
               </div>
             </div>
+          )}
+          {preview.device_requirements?.package && (
+            <DeviceRequirementCard req={preview.device_requirements} />
           )}
           <p className="text-[10px] mono text-zinc-600 break-all">sha256: {preview.sha256}</p>
           {(preview.warnings || []).map((w, i) => (
