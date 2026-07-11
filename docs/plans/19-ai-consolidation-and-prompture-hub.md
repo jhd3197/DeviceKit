@@ -133,7 +133,7 @@ Tie the hub into the extension `llm` permission (`devicekit_sdk/permissions.py`,
 |---|---|---|---|
 | 1 | Retire `agent.py` legacy `_ask_*` + `AI_PROVIDER`; drop `openai`/direct-`anthropic` deps | Single Prompture path; verify call sites first | ✅ |
 | 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default | ✅ |
-| 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX | ⏳ |
+| 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX | ✅ |
 | 4 | Per-extension hub keys via `/admin/*` + `sdk.ai(slug)` routing + consent-time cap/whitelist | The extension security win | ⏳ |
 
 **Phase 2 notes (the "validate, don't assume" findings):** the hub's OpenAI-compat
@@ -149,6 +149,17 @@ rather than worked around here. Hub routing re-prepends the provider prefix so t
 receives full `provider/model` ids, matching its `/v1/models` catalog. Wiring lives in
 `backend/devicekit/ai_backend.py` + `mixins/settings.py`; covered by
 `tests/test_ai_backend.py`.
+
+**Phase 3 notes:** verified live against a real hub + local Ollama: `GET /ai/hub/health`
+through DeviceKit reported reachable + the key-scoped 750-model catalog, and a real
+completion ran DeviceKit wiring → hub → `ollama/qwen2.5:1.5b` (off-whitelist models 403,
+usage metered per key). The hub's `/v1/models` is slow on its first call after hub boot
+(catalog built lazily) — the probe gives it a longer timeout than `/health`. The health
+line shows "N models allowed" (no spend-cap figure: the hub exposes caps only via the
+admin API, not to key holders). Fixed a hub boot-blocker at the source while testing
+(prompture-hub commit `e019f2e`: two `status_code=204` routes crashed FastAPI at import).
+The health status card also documents `pip install prompture-hub`, the dashboard link,
+and the run-natively caveat when unreachable.
 
 **Phase 1 deviation note:** `AgentMixin` was already dead post-Phase-16 — nothing imported
 `mixins/agent.py` (`client.py` composes `PromptureAgentMixin`), so this was pure deletion:

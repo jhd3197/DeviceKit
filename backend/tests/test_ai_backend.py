@@ -5,8 +5,10 @@ protection) and the Prompture driver-registry rerouting (hub factories per prefi
 restore-to-builtins on direct, missing-key fail-loud).
 """
 import pytest
+import requests
 
-from devicekit.ai_backend import apply_ai_backend, hub_base_url
+from devicekit import ai_backend
+from devicekit.ai_backend import apply_ai_backend, hub_base_url, probe_hub
 from devicekit.mixins.settings import SettingsMixin
 
 
@@ -140,3 +142,75 @@ def test_saving_backend_setting_applies_registry(fresh_db):
         assert type(d2).__name__ != "HubDriver"
     except Exception:
         pass
+
+
+# --------------------------------------------------------------------------- health probe
+class _FakeResp:
+    def __init__(self, status_code=200, payload=None):
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+
+def test_probe_hub_unreachable(monkeypatch):
+    def _boom(*a, **k):
+        raise requests.ConnectionError("refused")
+    monkeypatch.setattr(ai_backend.requests, "get", _boom)
+
+    health = probe_hub("http://localhost:1984", "ph_x")
+    assert health["reachable"] is False
+    assert "not reachable" in health["error"]
+    assert health["models"] == []
+
+
+def test_probe_hub_healthy_with_models(monkeypatch):
+    calls = []
+
+    def _get(url, timeout=None, headers=None):
+        calls.append((url, headers))
+        if url.endswith("/health"):
+            return _FakeResp(200, {"status": "ok"})
+        return _FakeResp(200, {"object": "list", "data": [
+            {"id": "ollama/llama3.1:8b"}, {"id": "claude/claude-sonnet-4-20250514"}]})
+    monkeypatch.setattr(ai_backend.requests, "get", _get)
+
+    health = probe_hub("http://localhost:1984/", "ph_x")
+    assert health["reachable"] is True
+    assert health["error"] is None
+    assert health["models"] == ["claude/claude-sonnet-4-20250514", "ollama/llama3.1:8b"]
+    # Model list is fetched with the scoped hub key.
+    assert calls[1][1] == {"Authorization": "Bearer ph_x"}
+
+
+def test_probe_hub_reachable_but_no_key(monkeypatch):
+    monkeypatch.setattr(ai_backend.requests, "get",
+                        lambda url, timeout=None, headers=None: _FakeResp(200, {"status": "ok"}))
+    health = probe_hub("http://localhost:1984", None)
+    assert health["reachable"] is True
+    assert health["key_set"] is False
+    assert health["models"] == []
+    assert "no hub key" in health["models_error"]
+
+
+def test_probe_hub_rejected_key(monkeypatch):
+    def _get(url, timeout=None, headers=None):
+        if url.endswith("/health"):
+            return _FakeResp(200, {"status": "ok"})
+        return _FakeResp(401)
+    monkeypatch.setattr(ai_backend.requests, "get", _get)
+
+    health = probe_hub("http://localhost:1984", "ph_revoked")
+    assert health["reachable"] is True
+    assert "401" in health["models_error"]
+
+
+def test_ai_hub_health_includes_backend(fresh_db, monkeypatch):
+    monkeypatch.setattr(ai_backend.requests, "get",
+                        lambda url, timeout=None, headers=None: _FakeResp(200, {"status": "ok"}))
+    c = _SettingsClient()
+    health = c.ai_hub_health()
+    assert health["backend"] == "direct"
+    assert health["url"] == "http://localhost:1984"
+    assert health["reachable"] is True

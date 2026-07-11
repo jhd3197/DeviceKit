@@ -24,6 +24,8 @@ so Prompture degrades gracefully instead of silently dropping tool calls.
 import logging
 import threading
 
+import requests
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_HUB_URL = "http://localhost:1984"
@@ -105,3 +107,55 @@ def apply_ai_backend(backend, hub_url=None, hub_key=None):
             f"degrade to Prompture's simulated/prompted fallbacks through the hub)"
         )
         return "hub"
+
+
+def probe_hub(hub_url, hub_key=None, timeout=3.0, models_timeout=15.0):
+    """Probe a prompture-hub instance: ``GET /health`` for liveness, then ``GET
+    /v1/models`` (key-scoped) for the allowed-model list. Never raises — the Settings
+    pane renders whatever this reports, reachable or not. The model list gets a longer
+    timeout: the hub builds its catalog lazily, so the first call after hub boot can
+    take several seconds while later ones are instant."""
+    url = (hub_url or DEFAULT_HUB_URL).rstrip("/")
+    result = {
+        "url": url,
+        "reachable": False,
+        "key_set": bool(hub_key),
+        "models": [],
+        "models_error": None,
+        "error": None,
+    }
+
+    try:
+        resp = requests.get(f"{url}/health", timeout=timeout)
+        if resp.status_code == 200:
+            result["reachable"] = True
+        else:
+            result["error"] = f"hub /health returned {resp.status_code}"
+            return result
+    except requests.RequestException as e:
+        result["error"] = f"hub not reachable at {url}: {e.__class__.__name__}"
+        return result
+
+    if not hub_key:
+        result["models_error"] = "no hub key configured"
+        return result
+
+    try:
+        resp = requests.get(
+            f"{url}/v1/models",
+            headers={"Authorization": f"Bearer {hub_key}"},
+            timeout=models_timeout,
+        )
+        if resp.status_code == 200:
+            data = resp.json().get("data") or []
+            result["models"] = sorted(m.get("id") for m in data if m.get("id"))
+        elif resp.status_code == 401:
+            result["models_error"] = "hub key rejected (401) — create a new key on the hub dashboard"
+        else:
+            result["models_error"] = f"hub /v1/models returned {resp.status_code}"
+    except requests.RequestException as e:
+        result["models_error"] = f"model list failed: {e.__class__.__name__}"
+    except ValueError:
+        result["models_error"] = "hub /v1/models returned invalid JSON"
+
+    return result

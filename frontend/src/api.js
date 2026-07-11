@@ -132,6 +132,9 @@ export const api = {
   updateSettings: (data) =>
     request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Prompture Hub (plan 19) — server-side probe of the configured hub
+  getAiHubHealth: () => request('/ai/hub/health'),
+
   // Automations
   getStepTypes: () => request('/automations/step-types'),
   getAutomations: () => request('/automations'),

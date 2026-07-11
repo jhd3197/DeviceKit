@@ -75,6 +75,14 @@ def make_blueprint(client, limiter):
         result = client.switch_agent_model(device_id, model_name)
         return jsonify(result)
 
+    # ---- Prompture Hub (plan 19) ------------------------------------------------------
+
+    @bp.route('/ai/hub/health')
+    def ai_hub_health():
+        """Proxy probe of the configured prompture-hub: liveness + key-scoped model
+        list. Frontend probes through here so the hub URL stays server-side (no CORS)."""
+        return jsonify(client.ai_hub_health())
+
     # ---- Confirmation gate (plan 13) --------------------------------------------------
 
     @bp.route('/devices/<device_id>/agent/pending')

@@ -486,5 +486,5 @@ See [docs/plans/19-ai-consolidation-and-prompture-hub.md](docs/plans/19-ai-conso
 
 - [x] Retire `agent.py` legacy `_ask_openai`/`_ask_anthropic` + `AI_PROVIDER`; drop direct `openai`/`anthropic` deps (all AI via Prompture)
 - [x] `ai.backend` = direct|hub setting + hub OpenAI-compat driver wiring (base_url `/v1`, masked `ph_` key); `direct` stays default
-- [ ] Hub health probe (`/health`, `/v1/models`) + `/ai/hub/health` route + model picker from hub + setup links (`pip install prompture-hub`, dashboard)
+- [x] Hub health probe (`/health`, `/v1/models`) + `/ai/hub/health` route + model picker from hub + setup links (`pip install prompture-hub`, dashboard)
 - [ ] Per-extension scoped hub keys via `/admin/*` (allowed-model whitelist + daily spend cap at consent) routed through `sdk.ai(slug)` — contains untrusted extension LLM use

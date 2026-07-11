@@ -190,6 +190,14 @@ class SettingsMixin:
     def ai_hub_key(self):
         return self.get_setting("ai.hub.key") or None
 
+    def ai_hub_health(self):
+        """Probe the configured hub for the Settings pane (server-side, so the hub URL
+        never has to be CORS-reachable from the browser)."""
+        from devicekit.ai_backend import probe_hub
+        health = probe_hub(self.ai_hub_url(), self.ai_hub_key())
+        health["backend"] = self.ai_backend()
+        return health
+
     # -----------------------------------------------------------
     # Typed accessors used by other mixins
     # -----------------------------------------------------------
