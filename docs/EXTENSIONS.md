@@ -99,10 +99,10 @@ they can never drift. Here is the full surface, annotated:
     "default_message": { "type": "string", "label": "Default message", "secret": false }
   }
 
-  // ---- reserved / roadmap seams (validated if present) ----
-  // "jobs":      [{ "kind": "…", "handler": "module:func" }],
-  // "schedules": [{ "name": "…", "kind": "…", "interval_seconds": 60 }],
-  // "automation_templates": ["templates/foo.json"],
+  // ---- background work + seeded automations (all wired) ----
+  // "jobs":      [{ "kind": "myext.poll", "handler": "capture:poll" }],
+  // "schedules": [{ "name": "myext-poll", "kind": "myext.poll", "interval_seconds": 60 }],
+  // "automation_templates": ["automations/foo.json"],  // relative to the backend dir
   // "contributions": { "nav": [...], "routes": [...], "widgets": [...],
   //                    "command_palette": [...], "page_titles": {...} }
 }
@@ -272,6 +272,30 @@ The host attaches a **status guard** to every blueprint automatically — see
 activation is **fatal** (it flips the extension row to `error`); everything else is
 best-effort.
 
+#### Device-scoped API convention (`/ext/<slug>/devices/<device_id>/…`)
+
+An extension that acts on a specific device should mount at **`/ext/<slug>`** (set
+`url_prefix` to `/ext/<slug>`) and address devices with a **`device_id` path
+segment**, mirroring core device routes:
+
+```
+POST   /ext/<slug>/devices/<device_id>/<verb>
+GET    /ext/<slug>/devices/<device_id>/<noun>
+```
+
+Extensions never invent their own device addressing — the `device_id` is the same
+id core routes use (`devicekit_sdk.devices.get(device_id)` resolves it), and all
+hardware access goes through the permission-gated `devicekit_sdk.device_control`
+(or, for a device with an agent, the agent's own HTTP API). This is the convention
+the pack extensions follow: `devicekit-browser`
+(`POST /ext/devicekit-browser/devices/<id>/goto`), `devicekit-explorer`
+(`DELETE /ext/devicekit-explorer/devices/<id>/files`), and
+`devicekit-notification-capture`
+(`GET /ext/devicekit-notification-capture/devices/<id>/notifications`). Fleet-level
+routes that are not about one device (e.g. browser's `/pools`) live directly under
+the prefix. The default `url_prefix` remains `/extensions/<slug>` for extensions
+that don't need device addressing (e.g. the webhook notifier's settings routes).
+
 ### `models` — owned data tables (`ext_<slug>_*`)
 
 `models` points at a function that **receives the SDK `db`** and defines the
@@ -329,6 +353,39 @@ import devicekit_sdk
 with devicekit_sdk.db.session() as s:
     s.execute(deliveries_table().insert().values(**record))
 ```
+
+### `jobs` & `schedules` — background work (plan 05)
+
+Declare durable job kinds and periodic schedules in the manifest as **inline lists**:
+
+```jsonc
+"jobs":      [{ "kind": "myext.poll", "handler": "capture:poll" }],
+"schedules": [{ "name": "myext-poll", "kind": "myext.poll",
+               "interval_seconds": 60, "startup_delay_seconds": 20, "max_attempts": 1 }]
+```
+
+Each `handler` is a `module:func` resolving to `handler(job_dict) -> result` (the dict
+carries your `payload`). A schedule enqueues its `kind` every interval; the cursor and
+timing survive restarts. Schedules are **owned by the extension**: disable pauses them,
+enable resumes them, uninstall deletes them. The scheduler tick is ~15 s, so effective
+cadence floors around 15–30 s — poll at that granularity, and for low-latency waits (e.g.
+OTP) poll the source directly inside a step/tool. You can also enqueue ad-hoc work with
+`devicekit_sdk.jobs.enqueue(kind, payload=...)`.
+
+### `automation_templates` — seeded automations
+
+List JSON automation files (paths **relative to the extracted backend dir**, so ship them
+under `backend/…`):
+
+```jsonc
+"automation_templates": ["automations/otp-login.json"]
+```
+
+Each file is an exported automation (`{name, description, steps, tags}`). At activation the
+host seeds it as a real automation tagged `ext:<slug>` for provenance — **idempotently** (safe
+on every boot/enable; it won't duplicate), left in place on disable, and **removed on
+uninstall**. Great for shipping a ready-made flow users can run or fork (the browser pack ships
+an "open, assert, screenshot"; notification-capture ships the OTP-login skeleton).
 
 ---
 
@@ -418,7 +475,8 @@ from devicekit_sdk import db, logger, config, broadcast, devices, device_control
 | `permissions` | The gate module (`has`, `require`, `declared_permissions`, `unknown_permissions`). | `permissions.has(slug, "adb")` |
 | `PermissionDenied` | Exception raised by the gate. | `except PermissionDenied: ...` |
 | `devicekit_version()` | The running DeviceKit version string (for in-extension compat checks). | `if devicekit_version() >= "1.1": ...` |
-| `jobs`, `notify` | Roadmap seams (plans 05/06). Importable today so you can code against a stable name, but **any attribute access raises `NotImplementedError`** until those platforms land. | — |
+| `jobs` | Background-work seam (plan 05, **shipped**). `jobs.enqueue(kind, payload=...)`, `jobs.register(kind, handler)` (handler is `handler(job_dict) -> result`), `jobs.schedule(name, kind, interval_seconds=...)` (owned by the extension → paused on disable, deleted on uninstall), `jobs.get`/`jobs.list`. Usually driven by the `jobs`/`schedules` manifest keys. | `jobs.schedule("poll", "myext.poll", interval_seconds=60)` |
+| `notify` | Notification-bus seam (plan 06, **shipped**). `notify.register_event(event_key, title, ...)` (tracked for teardown), `notify.send(event_key, data=...)` — persists + delivers in-app (SSE) immediately and rides the queue to any enabled webhook/email channel. | `notify.send("myext.alarm", data={...})` |
 
 ### `device_control` — the gated device surface
 
@@ -430,11 +488,16 @@ dc = devicekit_sdk.device_control("my-ext", device_id)
 dc.tap(x, y)          # requires "device.control"
 dc.press(key)         # requires "device.control"
 dc.screenshot()       # requires "device.control"
-dc.shell("pm list packages")  # requires "adb" (raw shell)
+dc.shell("pm list packages")           # requires "adb" (raw shell)
+dc.forward(9300)                       # requires "adb" — adb forward tcp:9300 -> a device socket
+dc.remove_forward(9300)                # requires "adb"
 ```
 
 `tap`/`press`/`screenshot` require the `device.control` permission; `shell` (raw
-adb shell) requires `adb`. Undeclared use raises `PermissionDenied`.
+adb shell), `forward`, and `remove_forward` require `adb`. `forward(local_port,
+remote="localabstract:chrome_devtools_remote")` sets up an `adb forward` (the CDP
+socket by default — that is exactly how `devicekit-browser` reaches Chrome).
+Undeclared use raises `PermissionDenied`.
 
 Errors from a blueprint follow the house convention:
 `return jsonify({'error': 'message'}), status`.

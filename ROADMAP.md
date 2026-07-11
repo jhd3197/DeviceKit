@@ -464,7 +464,7 @@ See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
 - [x] `devicekit-browser` pool routing: round-robin fetch across selected devices (explicit list / FQL / all), busy-skip + failover, sticky sessions for multi-step flows
 - [x] `devicekit-explorer`: dashboard file manager — backend delete/mkdir/rename/preview verbs + builtin frontend Files tab/page (first real builtin-frontend user)
 - [x] `devicekit-notification-capture`: poll agent notification listener → capture table → `wait_for_notification` step type (OTP extraction) → plan-06 bus forwarding
-- [ ] Registry entries with real sha256s + EXTENSIONS.md device-scoped API convention + stale jobs/notify doc fix
+- [x] Registry entries with real sha256s + EXTENSIONS.md device-scoped API convention + stale jobs/notify doc fix
 
 ### Phase 36: Documentation Suite
 **Goal**: A navigable docs *system* like ServerKit's — orientation, reference, and decision records, not scattered markdown.

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "updated": "2026-07-10",
+  "updated": "2026-07-11",
   "extensions": [
     {
       "slug": "devicekit-webhook-notify",
@@ -14,6 +14,55 @@
       "permissions": ["network"],
       "min_devicekit_version": "1.0.0",
       "max_devicekit_version": null,
+      "sha256": "1c081d933d43c4af8ba5460d0bfc1928ef5a1417ffe7a2b136629018767c6028",
+      "repo": "https://github.com/jhd3197/devicekit",
+      "homepage": "https://github.com/jhd3197/devicekit"
+    },
+    {
+      "slug": "devicekit-browser",
+      "display_name": "Browser (CDP Driver)",
+      "description": "Drive each device's real Chrome over the Chrome DevTools Protocol: navigate, read the DOM, evaluate JS, screenshot. Treat N devices as one browser farm with round-robin/random/LRU pools, FQL membership, busy-skip failover, and sticky sessions.",
+      "version": "1.0.0",
+      "category": "automation",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": true,
+      "permissions": ["adb", "device.control", "network"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "sha256": "cdcb69c501171f219429744a54f79e992fcf5ce8785174d4a5d5a73be2be27ad",
+      "repo": "https://github.com/jhd3197/devicekit",
+      "homepage": "https://github.com/jhd3197/devicekit"
+    },
+    {
+      "slug": "devicekit-explorer",
+      "display_name": "File Explorer",
+      "description": "A dashboard file manager for your devices: browse, upload, download, preview, rename, mkdir, and delete files over the agent's file API. Ships a real frontend page and a NodeDetail Files tab.",
+      "version": "1.0.0",
+      "category": "utility",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": true,
+      "permissions": ["filesystem", "device.control"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "sha256": "6451ee2342d5a386f0d9ef860151ce861c4331f06badcb75bdc0bfb9237c1127",
+      "repo": "https://github.com/jhd3197/devicekit",
+      "homepage": "https://github.com/jhd3197/devicekit"
+    },
+    {
+      "slug": "devicekit-notification-capture",
+      "display_name": "Notification Capture",
+      "description": "Reads each capable device's notification feed on a schedule, records it (deduped, filtered, retained), forwards matches onto the notification bus, and unlocks the wait_for_notification automation step — the OTP/2FA primitive.",
+      "version": "1.0.0",
+      "category": "monitoring",
+      "author": "Juan Denis",
+      "first_party": true,
+      "bundled": true,
+      "permissions": ["device.control", "network"],
+      "min_devicekit_version": "1.0.0",
+      "max_devicekit_version": null,
+      "sha256": "41faefb527af1aa8897a75089b04349183c8a3b5bc3aac51cdadc9e6ab408ae1",
       "repo": "https://github.com/jhd3197/devicekit",
       "homepage": "https://github.com/jhd3197/devicekit"
     },
