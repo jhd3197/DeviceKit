@@ -1,6 +1,6 @@
 # Plan 15 — Extension Pack One: Browser, File Explorer, Notification Capture
 
-**Status:** 🚧 in progress — Phase 1 ✅ (automation_templates wired + scaffolder `--full` + jobs/schedules manifest contract fixed)
+**Status:** 🚧 in progress — Phase 1 ✅, Phase 2 ✅ (`devicekit-browser` CDP driver + pool routing; live-verified on a real phone)
 **Inspired by:** ServerKit validated its plugin platform by shipping real builtin plugins
 against it; DeviceKit's platform (plans 03/04) shipped with exactly one —
 `devicekit-webhook-notify`. This plan builds the first *device-facing* extensions and, in
@@ -185,7 +185,7 @@ composing through the bus, not importing each other.
 | Phase | Delivers | Proves |
 |---|---|---|
 | 1 ✅ | `automation_templates` wiring + scaffolder `--full` mode (`scripts/new_extension.py`) | reserved manifest seam becomes real |
-| 2 | `devicekit-browser`: CDP session core → device API → pool routing (round-robin, FQL membership, sticky sessions) → AI tools + step types | wire-protocol extension; gated write tools; fleet-level dispatch |
+| 2 ✅ | `devicekit-browser`: CDP session core → device API → pool routing (round-robin, FQL membership, sticky sessions) → AI tools + step types | wire-protocol extension; gated write tools; fleet-level dispatch |
 | 3 | `devicekit-explorer`: backend verbs → frontend Files tab/page | builtin frontend path end-to-end |
 | 4 | `devicekit-notification-capture`: poller → tables → `wait_for_notification` → bus forwarding | jobs/schedules + extension tables + bus composition |
 | 5 | registry entries, EXTENSIONS.md updates, template automations | marketplace shows a real catalog |
@@ -204,6 +204,26 @@ emits the device-scoped `/ext/<slug>` blueprint plus models/ai_tools/jobs/schedu
 automation template. Proof: `backend/tests/test_automation_templates.py` (4 tests); full
 suite 178 passed. The three extensions are scaffolded fresh in their own phases (2–4) so each
 manifest and its code always match.
+
+**Phase 2 notes (as shipped).** `devicekit-browser` mounts at `/ext/devicekit-browser` and
+ships: a small CDP client (`cdp.py`, dep `websocket-client`), per-device sessions
+(`sessions.py`), pool routing (`pools.py`), the device + pool blueprint (`routes.py`), four
+`browser_*` step types, six `devicekit_browser__*` AI tools (writes gated), and the seeded
+"open, assert, screenshot" automation. Three things reality forced that the plan didn't call
+out, all verified live on the Samsung A03s: (1) **Chrome 111+ rejects CDP WebSocket handshakes
+with a disallowed `Origin` header** → the client connects with `suppress_origin=True`. (2) **A
+bare LAUNCHER intent leaves Chrome with no drivable page target, and Android freezes background
+tabs**, so a session creates and pins a *dedicated* tab via `Target.createTarget`, brings it to
+front each op, and closes it on teardown — driving an arbitrary pre-existing tab hangs. (3) Two
+small platform enhancements the pack needed: extension AI tools that declare a `device_id`
+parameter now get it injected (hidden from the LLM schema) so per-device tools work, and the
+automation engine gained run-scoped variables (`store_as` on any step + `{{name}}`
+interpolation) — the mechanism the OTP flow (phase 4) and `browser_evaluate` rely on. Pools
+resolve membership from an explicit serial list, `all`, or a live-re-evaluated FQL query;
+round-robin persists its cursor. Proof: `tests/test_browser_extension.py` (6 tests, incl.
+round-robin dispatch + AI-tool binding) + a live end-to-end run (create target → navigate →
+title/text/`evaluate`=42/PNG screenshot → reuse across ops → close). Live driving needs a phone
+with Chrome; the unit tests stub the device fleet.
 
 Phases 2–4 are independent of each other (parallelizable after phase 1); phase 5 last.
 

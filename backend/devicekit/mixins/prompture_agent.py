@@ -155,6 +155,29 @@ def _gate_write_tool(mixin, device_id, td, meta, source, always_gate=False):
     td.function = gated
 
 
+def _bind_device_id(func, device_id):
+    """If ``func`` declares a ``device_id`` parameter, return a wrapper that injects the
+    current device and hides ``device_id`` from the tool schema; otherwise return ``func``
+    unchanged."""
+    import inspect
+    import functools
+    try:
+        sig = inspect.signature(func)
+    except (TypeError, ValueError):
+        return func
+    if "device_id" not in sig.parameters:
+        return func
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        kwargs.setdefault("device_id", device_id)
+        return func(*args, **kwargs)
+
+    wrapper.__signature__ = sig.replace(
+        parameters=[p for n, p in sig.parameters.items() if n != "device_id"])
+    return wrapper
+
+
 def _register_extension_ai_tools(mixin, registry, device_id, mode="supervised"):
     ext_tools = getattr(mixin, "_ext_ai_tools", None)
     if not ext_tools:
@@ -176,8 +199,13 @@ def _register_extension_ai_tools(mixin, registry, device_id, mode="supervised"):
             if is_write and mode == "observe":
                 continue
             tool_name = f"{slug.replace('-', '_')}__{name}"
+            # Device-scoped tools: a tool that declares a ``device_id`` parameter is bound to
+            # this conversation's device, and that parameter is hidden from the LLM-facing
+            # schema (the model addresses "this device" implicitly). Fleet-level tools that
+            # omit ``device_id`` are unaffected.
+            bound = _bind_device_id(func, device_id)
             try:
-                td = registry.register(func, name=tool_name, description=description,
+                td = registry.register(bound, name=tool_name, description=description,
                                        metadata={"is_write": is_write, "category": "extension",
                                                  "label": f"{slug}: {name}"})
                 if is_write:

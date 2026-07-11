@@ -1,0 +1,10 @@
+{
+  "name": "Browser — open, assert, screenshot",
+  "description": "Open a URL in the device's real Chrome, assert expected text is present, then capture a full-page screenshot. Seeded by the devicekit-browser extension.",
+  "steps": [
+    { "type": "browser_goto", "config": { "url": "https://example.com" } },
+    { "type": "browser_assert_text", "config": { "text": "Example Domain" } },
+    { "type": "browser_screenshot", "config": { "full": true } }
+  ],
+  "tags": ["browser"]
+}
