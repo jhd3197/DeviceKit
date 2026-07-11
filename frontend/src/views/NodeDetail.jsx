@@ -45,6 +45,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { api, subscribeToEvents } from '../api'
+import ExtensionSlot from '../extensions/ExtensionSlot'
 import StreamCanvas from '../components/StreamCanvas'
 import MetricChart, { seriesColor } from '../components/ds/MetricChart'
 
@@ -1380,6 +1381,14 @@ export default function NodeDetail() {
               </div>
             </div>
           </div>
+
+          {/* Extension tabs (e.g. devicekit-explorer Files) — renders null unless contributed */}
+          <ExtensionSlot
+            name="node-detail.tabs"
+            deviceId={deviceId}
+            device={device}
+            className="flex flex-col gap-6"
+          />
         </div>
 
         {/* ADB Shell sidebar */}

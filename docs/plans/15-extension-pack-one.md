@@ -1,6 +1,6 @@
 # Plan 15 — Extension Pack One: Browser, File Explorer, Notification Capture
 
-**Status:** 🚧 in progress — Phase 1 ✅, Phase 2 ✅ (`devicekit-browser` CDP driver + pool routing; live-verified on a real phone)
+**Status:** 🚧 in progress — Phase 1 ✅, Phase 2 ✅, Phase 3 ✅ (`devicekit-explorer` backend verbs + builtin Files tab/page)
 **Inspired by:** ServerKit validated its plugin platform by shipping real builtin plugins
 against it; DeviceKit's platform (plans 03/04) shipped with exactly one —
 `devicekit-webhook-notify`. This plan builds the first *device-facing* extensions and, in
@@ -186,7 +186,7 @@ composing through the bus, not importing each other.
 |---|---|---|
 | 1 ✅ | `automation_templates` wiring + scaffolder `--full` mode (`scripts/new_extension.py`) | reserved manifest seam becomes real |
 | 2 ✅ | `devicekit-browser`: CDP session core → device API → pool routing (round-robin, FQL membership, sticky sessions) → AI tools + step types | wire-protocol extension; gated write tools; fleet-level dispatch |
-| 3 | `devicekit-explorer`: backend verbs → frontend Files tab/page | builtin frontend path end-to-end |
+| 3 ✅ | `devicekit-explorer`: backend verbs → frontend Files tab/page | builtin frontend path end-to-end |
 | 4 | `devicekit-notification-capture`: poller → tables → `wait_for_notification` → bus forwarding | jobs/schedules + extension tables + bus composition |
 | 5 | registry entries, EXTENSIONS.md updates, template automations | marketplace shows a real catalog |
 
@@ -224,6 +224,24 @@ round-robin persists its cursor. Proof: `tests/test_browser_extension.py` (6 tes
 round-robin dispatch + AI-tool binding) + a live end-to-end run (create target → navigate →
 title/text/`evaluate`=42/PNG screenshot → reuse across ops → close). Live driving needs a phone
 with Chrome; the unit tests stub the device fleet.
+
+**Phase 3 notes (as shipped).** `devicekit-explorer` mounts at `/ext/devicekit-explorer` and
+fills the file-API gaps as a pure blueprint (no host edits): `GET files` (list, with mtime),
+`DELETE files`, `POST files/mkdir`, `POST files/rename`, `GET files/preview` (2 MiB-capped,
+content-type-guessed) — each gated by `filesystem` and proxied to the on-device agent's file
+server (agent-only; a device with no online agent gets a clean 503, mirroring core's advanced
+file routes). Three gated/read AI tools (`list_files`, `read_text_file`, `delete_file`). The
+first real builtin **frontend** beyond a settings panel: `builtin-extensions/devicekit-explorer/frontend/index.jsx`
+ships a shared `FileBrowser` used by both a full-page route (`/x/explorer`, with a device
+picker) and a `FilesTab` in NodeDetail — which required **mounting the `node-detail.tabs`
+slot** in `NodeDetail.jsx` (plan 04 seeded the name but never rendered it; the slot spreads
+`deviceId`/`device` to each widget). Breadcrumbs, drag-drop upload, download, image/text
+preview modal, rename/mkdir/delete. Deviation: plan 09's `useConfirm` isn't built yet, so
+delete/rename use `window.confirm` (the current codebase pattern) — swap when `useConfirm`
+lands. Synced via `scripts/sync-builtin-frontends.mjs` (`--check` clean); `npm run build`
+passes; `tests/test_explorer_extension.py` (4 tests). Live file ops need an online agent
+(same agent endpoints core's working file routes use); verified structurally (503 path +
+contribution publish + AI-tool binding).
 
 Phases 2–4 are independent of each other (parallelizable after phase 1); phase 5 last.
 
