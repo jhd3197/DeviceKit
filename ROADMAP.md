@@ -484,7 +484,7 @@ See [docs/plans/18-app-driver-extensions.md](docs/plans/18-app-driver-extensions
 **Goal**: One AI path (Prompture, no direct provider SDKs) and an optional self-hosted `prompture-hub` backend that keeps provider keys out of DeviceKit.
 See [docs/plans/19-ai-consolidation-and-prompture-hub.md](docs/plans/19-ai-consolidation-and-prompture-hub.md).
 
-- [ ] Retire `agent.py` legacy `_ask_openai`/`_ask_anthropic` + `AI_PROVIDER`; drop direct `openai`/`anthropic` deps (all AI via Prompture)
+- [x] Retire `agent.py` legacy `_ask_openai`/`_ask_anthropic` + `AI_PROVIDER`; drop direct `openai`/`anthropic` deps (all AI via Prompture)
 - [ ] `ai.backend` = direct|hub setting + hub OpenAI-compat driver wiring (base_url `/v1`, masked `ph_` key); `direct` stays default
 - [ ] Hub health probe (`/health`, `/v1/models`) + `/ai/hub/health` route + model picker from hub + setup links (`pip install prompture-hub`, dashboard)
 - [ ] Per-extension scoped hub keys via `/admin/*` (allowed-model whitelist + daily spend cap at consent) routed through `sdk.ai(slug)` — contains untrusted extension LLM use

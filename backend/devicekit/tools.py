@@ -1,5 +1,4 @@
 import uuid
-import json
 import re
 import hashlib
 import logging
@@ -9,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolsMixin:
-    """Utility methods: data conversion, text processing, JSON extraction."""
+    """Utility methods: data conversion and text processing."""
 
     def generate_guid(self):
         return str(uuid.uuid4())
@@ -50,26 +49,3 @@ class ToolsMixin:
             minutes = int((elapsed % 3600) // 60)
             seconds = elapsed % 60
             return f"{hours} hour(s), {minutes} minute(s), {seconds:.2f} second(s)"
-
-    def remove_json_extras(self, text: str) -> str:
-        cleaned = text.strip()
-        cleaned = cleaned.replace("null", '""')
-        json_match = re.search(r"\{.*\}|\[.*\]", cleaned, re.DOTALL)
-        if not json_match:
-            return ""
-        json_content = json_match.group()
-        json_content = json_content.replace("\u201c", '"').replace("\u201d", '"')
-        json_content = json_content.replace("\u2018", "'").replace("\u2019", "'")
-        json_content = json_content.replace('"null"', '""').replace("'null'", '""')
-        json_content = json_content.replace("null", '""').replace('""""', '""')
-        return json_content
-
-    def extract_json_from_text(self, response: str) -> dict:
-        json_content = self.remove_json_extras(response)
-        if not json_content:
-            return {}
-        try:
-            return json.loads(json_content)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON from text")
-            return {}

@@ -1,6 +1,6 @@
 # Plan 19 — AI Provider Consolidation + Prompture Hub Integration
 
-**Status:** proposed
+**Status:** 🚧 in progress — phase 1 shipped
 **Inspired by:** DeviceKit already standardized its AI on **Prompture** (Phase 16) — the
 per-device conversational agent, NL automation, visual-diff analysis, and debug-bundle
 summaries all go through `prompture`. But two loose ends remain: a legacy *direct*
@@ -129,12 +129,19 @@ Tie the hub into the extension `llm` permission (`devicekit_sdk/permissions.py`,
 
 ## Phases
 
-| Phase | Delivers | Notes |
-|---|---|---|
-| 1 | Retire `agent.py` legacy `_ask_*` + `AI_PROVIDER`; drop `openai`/direct-`anthropic` deps | Single Prompture path; verify call sites first |
-| 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default |
-| 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX |
-| 4 | Per-extension hub keys via `/admin/*` + `sdk.ai(slug)` routing + consent-time cap/whitelist | The extension security win |
+| Phase | Delivers | Notes | Status |
+|---|---|---|---|
+| 1 | Retire `agent.py` legacy `_ask_*` + `AI_PROVIDER`; drop `openai`/direct-`anthropic` deps | Single Prompture path; verify call sites first | ✅ |
+| 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default | ⏳ |
+| 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX | ⏳ |
+| 4 | Per-extension hub keys via `/admin/*` + `sdk.ai(slug)` routing + consent-time cap/whitelist | The extension security win | ⏳ |
+
+**Phase 1 deviation note:** `AgentMixin` was already dead post-Phase-16 — nothing imported
+`mixins/agent.py` (`client.py` composes `PromptureAgentMixin`), so this was pure deletion:
+the file, plus `extract_json_from_text`/`remove_json_extras` in `tools.py` (agent.py was
+their only caller). `openai`/`anthropic` were never in `requirements.txt` (they were lazy
+imports inside the dead methods), so there was nothing to drop — the deletion itself
+removed DeviceKit's last direct provider-SDK imports.
 
 Phase 1 is independent and can land first (pure consolidation). Phases 2→3 are
 sequential; phase 4 depends on 2.
