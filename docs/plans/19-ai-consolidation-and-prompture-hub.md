@@ -132,9 +132,23 @@ Tie the hub into the extension `llm` permission (`devicekit_sdk/permissions.py`,
 | Phase | Delivers | Notes | Status |
 |---|---|---|---|
 | 1 | Retire `agent.py` legacy `_ask_*` + `AI_PROVIDER`; drop `openai`/direct-`anthropic` deps | Single Prompture path; verify call sites first | ✅ |
-| 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default | ⏳ |
+| 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default | ✅ |
 | 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX | ⏳ |
 | 4 | Per-extension hub keys via `/admin/*` + `sdk.ai(slug)` routing + consent-time cap/whitelist | The extension security win | ⏳ |
+
+**Phase 2 notes (the "validate, don't assume" findings):** the hub's OpenAI-compat
+`/v1/chat/completions` (v0.0.2 source, verified) accepts **no `tools` or
+`response_format` fields** and flattens messages to plain text — so through the hub,
+Prompture's ToolRegistry degrades to its *simulated* tool path and structured output to
+prompted-repair extraction; vision content is unavailable. SSE **streaming IS
+implemented** hub-side (the README roadmap saying otherwise is stale). `HubDriver`'s
+capability flags encode exactly this so Prompture degrades gracefully instead of
+silently dropping tool calls. `OpenAIDriver` in Prompture had no `base_url` hook — fixed
+at the source (prompture commit `e0d83b2`: `base_url` param + `OPENAI_BASE_URL` env)
+rather than worked around here. Hub routing re-prepends the provider prefix so the hub
+receives full `provider/model` ids, matching its `/v1/models` catalog. Wiring lives in
+`backend/devicekit/ai_backend.py` + `mixins/settings.py`; covered by
+`tests/test_ai_backend.py`.
 
 **Phase 1 deviation note:** `AgentMixin` was already dead post-Phase-16 — nothing imported
 `mixins/agent.py` (`client.py` composes `PromptureAgentMixin`), so this was pure deletion:
