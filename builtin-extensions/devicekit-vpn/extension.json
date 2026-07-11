@@ -1,0 +1,39 @@
+{
+  "name": "devicekit-vpn",
+  "display_name": "VPN (ExpressVPN Driver)",
+  "version": "1.0.0",
+  "category": "integration",
+  "description": "Drive ExpressVPN across your fleet: provision a user-supplied, hash-pinned APK onto each device, then connect/disconnect/status through version-keyed UI adapters that absorb the app's drift (a 13.x per-connect consent dialog is just an extra adapter step). Validates every requested exit country against an allowlist — even the AI can't route to a non-approved country — and verifies the real egress with a device-side geo-IP check, because the app UI alone can't reveal a wrong-country connection. The worked example for plan 18's app-driver model; app-agnostic underneath.",
+  "author": "Juan Denis",
+  "permissions": ["device.control", "adb", "network"],
+  "min_devicekit_version": "1.0.0",
+
+  "device_requirements": {
+    "package": "com.expressvpn.vpn",
+    "supported_versions": ">=12.0.0 <14.0.0",
+    "provision": "user_supplied_apk"
+  },
+
+  "entry_point": "routes:bp",
+  "url_prefix": "/ext/devicekit-vpn",
+  "models": "models:register",
+  "step_types": "steps:register",
+  "ai_tools": "tools:register",
+  "lifecycle": { "install": "lifecycle:on_install", "uninstall": "lifecycle:on_uninstall" },
+
+  "config_schema": {
+    "package": { "type": "text", "label": "App package (override the default com.expressvpn.vpn)", "secret": false },
+    "allowed_countries": { "type": "text", "label": "Allowed exit countries (ISO codes, comma-separated — empty = any)", "secret": false },
+    "preferred_location": { "type": "text", "label": "Preferred location (country code or 'Country - City')", "secret": false },
+    "apk_b64": { "type": "text", "label": "ExpressVPN APK, base64-encoded (upload once)", "secret": true },
+    "apk_sha256": { "type": "text", "label": "APK sha256 pin (verified before install)", "secret": false },
+    "apk_version": { "type": "text", "label": "Pinned versionName (verified after install)", "secret": false },
+    "max_app_version": { "type": "text", "label": "Global version ceiling (e.g. 12 pins the whole 12.x line)", "secret": false },
+    "device_max_versions": { "type": "text", "label": "Per-device ceilings (JSON map: serial -> version)", "secret": false },
+    "geo_endpoint": { "type": "text", "label": "Geo-IP endpoint for the egress check", "secret": false },
+    "check_interval": { "type": "number", "label": "Status/egress check interval (seconds)", "secret": false },
+    "allow_reprovision": { "type": "boolean", "label": "Allow reprovision (destructive: uninstall + reinstall the pinned build)", "secret": false }
+  },
+
+  "automation_templates": ["automations/vpn-egress-check.json"]
+}
