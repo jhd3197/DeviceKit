@@ -211,6 +211,21 @@ lockout** (5 failures → 5/15/60-min escalating, in-memory), **`authenticate`**
 `/auth/session` surfaces the 2FA policy status. Migration `b5c6d7e8f001`. Verified: 9 new tests + full-app
 invite→accept→enroll→2FA-login flow, full suite 359 green.
 
+### Frontend — shipped (plan 20 UI)
+
+Delivered without touching `App.jsx` (which carried unrelated WIP): the login gate lives at the entry point.
+`api.js` now sends `X-Session-Token` + `X-Workspace-Id` from localStorage on every request (plus SSE query
+params) and exposes the full plan-20 surface (auth/session, users, api-keys, workspaces+members+grants, vault,
+audit, invitations, 2FA). `auth/AuthContext` loads `GET /auth/session` on boot; `auth/AuthGate` (wired in
+`index.jsx`) shows `auth/Login` when the instance is login-required (solo mode passes straight through). Login
+handles the two-step 2FA flow and lockout messaging, and an `?invite=<token>` URL renders the invite-accept
+account-creation form. Six new Settings panes under an "Access & Security" section (admin-only ones hidden from
+non-admins via `useAuth`): **Users** (roster + role/active/password + per-user permission matrix + invitations
+with copy-link), **API Keys** (scoped `dk_` create/rotate/revoke, raw key shown once), **Workspaces**
+(list/create + active-workspace switcher driving `X-Workspace-Id` + member management), **Secrets Vault**
+(vaults + masked secrets + reveal), **Audit Log** (filterable trail), **Account & 2FA** (TOTP enroll/confirm/
+backup-codes/disable + sign-out). Verified: `npm run build` succeeds (1700 modules).
+
 Phases 1→2→3 are sequential (2 and 3 need the `User` from 1). Phase 4 is the biggest; it needs 1.
 Phase 5 needs 1 (owner attribution) but is otherwise independent. Phase 6 is opt-in polish.
 

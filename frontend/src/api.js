@@ -1,16 +1,47 @@
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:7317'
 const API_KEY = import.meta.env.VITE_API_KEY || localStorage.getItem('devicekit_api_key') || ''
 
-async function request(url, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...options.headers }
+// Identity/RBAC (plan 20): the login-session token + active workspace live in localStorage.
+const SESSION_LS = 'devicekit_session'
+const WORKSPACE_LS = 'devicekit_workspace'
+
+export function getSessionToken() {
+  return localStorage.getItem(SESSION_LS) || ''
+}
+export function setSessionToken(token) {
+  if (token) localStorage.setItem(SESSION_LS, token)
+  else localStorage.removeItem(SESSION_LS)
+}
+export function getActiveWorkspace() {
+  return localStorage.getItem(WORKSPACE_LS) || ''
+}
+export function setActiveWorkspace(id) {
+  if (id) localStorage.setItem(WORKSPACE_LS, id)
+  else localStorage.removeItem(WORKSPACE_LS)
+}
+
+function authHeaders() {
+  const headers = {}
   if (API_KEY) headers['X-API-Key'] = API_KEY
+  const token = getSessionToken()
+  if (token) headers['X-Session-Token'] = token
+  const ws = getActiveWorkspace()
+  if (ws) headers['X-Workspace-Id'] = ws
+  return headers
+}
+
+async function request(url, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers }
   const res = await fetch(`${API}${url}`, {
     headers,
     ...options,
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText)
+    const e = new Error(err.error || res.statusText)
+    e.status = res.status
+    e.body = err
+    throw e
   }
   if (res.status === 204) return null
   return res.json()
@@ -42,8 +73,7 @@ export const api = {
   uploadFile: (id, file, remotePath) => {
     const form = new FormData()
     form.append('file', file)
-    const headers = {}
-    if (API_KEY) headers['X-API-Key'] = API_KEY
+    const headers = authHeaders()
     return fetch(`${API}/devices/${id}/files/upload?path=${encodeURIComponent(remotePath)}`, {
       method: 'POST',
       headers,
@@ -402,8 +432,7 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     if (force) form.append('force', '1')
-    const headers = {}
-    if (API_KEY) headers['X-API-Key'] = API_KEY
+    const headers = authHeaders()
     return fetch(`${API}/extensions/install-upload`, { method: 'POST', headers, body: form })
       .then((r) => {
         if (!r.ok) return r.json().then((e) => { throw new Error(e.error || 'Upload failed') })
@@ -534,12 +563,104 @@ export const api = {
     request(`/metrics/alert-rules/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteMetricAlertRule: (id) =>
     request(`/metrics/alert-rules/${id}`, { method: 'DELETE' }),
+
+  // ===== Identity, RBAC, API keys, workspaces, vault, audit (plan 20) =====
+  // Auth / session
+  getAuthSession: () => request('/auth/session'),
+  login: (username, password, code) =>
+    request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, ...(code ? { code } : {}) }),
+    }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+  getPermissionSchema: () => request('/auth/permissions/schema'),
+
+  // Users (admin)
+  getUsers: () => request('/users'),
+  getUser: (id) => request(`/users/${id}`),
+  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
+  updateUser: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
+
+  // TOTP 2FA (self-service)
+  setup2fa: () => request('/auth/2fa/setup', { method: 'POST' }),
+  confirm2fa: (code) =>
+    request('/auth/2fa/confirm', { method: 'POST', body: JSON.stringify({ code }) }),
+  disable2fa: () => request('/auth/2fa/disable', { method: 'POST' }),
+
+  // Invitations
+  getInvitations: () => request('/invitations'),
+  createInvitation: (data) =>
+    request('/invitations', { method: 'POST', body: JSON.stringify(data) }),
+  revokeInvitation: (id) => request(`/invitations/${id}`, { method: 'DELETE' }),
+  previewInvitation: (token) => request(`/invitations/${encodeURIComponent(token)}/preview`),
+  acceptInvitation: (token, username, password) =>
+    request(`/invitations/${encodeURIComponent(token)}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
+  // API keys (admin)
+  getApiKeys: () => request('/api-keys'),
+  getApiKeyScopes: () => request('/api-keys/scopes'),
+  createApiKey: (data) => request('/api-keys', { method: 'POST', body: JSON.stringify(data) }),
+  revokeApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
+  rotateApiKey: (id) => request(`/api-keys/${id}/rotate`, { method: 'POST' }),
+
+  // Workspaces + members + grants
+  getWorkspaces: () => request('/workspaces'),
+  getWorkspace: (id) => request(`/workspaces/${id}`),
+  createWorkspace: (data) => request('/workspaces', { method: 'POST', body: JSON.stringify(data) }),
+  updateWorkspace: (id, data) =>
+    request(`/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteWorkspace: (id) => request(`/workspaces/${id}`, { method: 'DELETE' }),
+  getWorkspaceMembers: (id) => request(`/workspaces/${id}/members`),
+  addWorkspaceMember: (id, data) =>
+    request(`/workspaces/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  updateWorkspaceMember: (id, userId, role) =>
+    request(`/workspaces/${id}/members/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    }),
+  removeWorkspaceMember: (id, userId) =>
+    request(`/workspaces/${id}/members/${userId}`, { method: 'DELETE' }),
+  getGrants: (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/grants${q ? `?${q}` : ''}`)
+  },
+  createGrant: (data) => request('/grants', { method: 'POST', body: JSON.stringify(data) }),
+  revokeGrant: (id) => request(`/grants/${id}`, { method: 'DELETE' }),
+
+  // Secrets vault
+  getVaults: () => request('/vault/vaults'),
+  getVault: (id) => request(`/vault/vaults/${id}`),
+  createVault: (data) => request('/vault/vaults', { method: 'POST', body: JSON.stringify(data) }),
+  deleteVault: (id) => request(`/vault/vaults/${id}`, { method: 'DELETE' }),
+  getVaultSecrets: (id) => request(`/vault/vaults/${id}/secrets`),
+  setVaultSecret: (id, data) =>
+    request(`/vault/vaults/${id}/secrets`, { method: 'POST', body: JSON.stringify(data) }),
+  revealVaultSecret: (id, key) =>
+    request(`/vault/vaults/${id}/secrets/${encodeURIComponent(key)}/reveal`, { method: 'POST' }),
+  deleteVaultSecret: (id, key) =>
+    request(`/vault/vaults/${id}/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  // Audit trail (admin)
+  getAuditLog: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString()
+    return request(`/audit${q ? `?${q}` : ''}`)
+  },
 }
 
 export function subscribeToEvents(handlers = {}) {
-  const url = API_KEY
-    ? `${API}/events/stream?api_key=${encodeURIComponent(API_KEY)}`
-    : `${API}/events/stream`
+  // EventSource can't set headers, so pass auth as query params (backend accepts both).
+  const params = new URLSearchParams()
+  if (API_KEY) params.set('api_key', API_KEY)
+  const token = getSessionToken()
+  if (token) params.set('session_token', token)
+  const qs = params.toString()
+  const url = qs ? `${API}/events/stream?${qs}` : `${API}/events/stream`
   const es = new EventSource(url)
 
   es.addEventListener('device_state', (e) => {
