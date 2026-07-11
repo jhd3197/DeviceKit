@@ -459,7 +459,7 @@ See [docs/plans/14-devicekit-python-package.md](docs/plans/14-devicekit-python-p
 **Goal**: The first device-facing extensions — prove every contribution point the platform claims with things a fleet actually wants.
 See [docs/plans/15-extension-pack-one.md](docs/plans/15-extension-pack-one.md).
 
-- [ ] Wire `automation_templates` manifest key (validated since plan 03, connected to nothing) + scaffold the three extensions
+- [x] Wire `automation_templates` manifest key (validated since plan 03, connected to nothing) + scaffold the three extensions
 - [ ] `devicekit-browser`: CDP-over-adb driver for device Chrome (goto/content/evaluate/screenshot API, gated AI tools, browser step types)
 - [ ] `devicekit-browser` pool routing: round-robin fetch across selected devices (explicit list / FQL / all), busy-skip + failover, sticky sessions for multi-step flows
 - [ ] `devicekit-explorer`: dashboard file manager — backend delete/mkdir/rename/preview verbs + builtin frontend Files tab/page (first real builtin-frontend user)

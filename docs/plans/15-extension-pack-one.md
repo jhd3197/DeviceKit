@@ -1,6 +1,6 @@
 # Plan 15 — Extension Pack One: Browser, File Explorer, Notification Capture
 
-**Status:** proposed
+**Status:** 🚧 in progress — Phase 1 ✅ (automation_templates wired + scaffolder `--full` + jobs/schedules manifest contract fixed)
 **Inspired by:** ServerKit validated its plugin platform by shipping real builtin plugins
 against it; DeviceKit's platform (plans 03/04) shipped with exactly one —
 `devicekit-webhook-notify`. This plan builds the first *device-facing* extensions and, in
@@ -184,11 +184,26 @@ composing through the bus, not importing each other.
 
 | Phase | Delivers | Proves |
 |---|---|---|
-| 1 | `automation_templates` wiring + three scaffolds (`scripts/new_extension.py`) | reserved manifest seam becomes real |
+| 1 ✅ | `automation_templates` wiring + scaffolder `--full` mode (`scripts/new_extension.py`) | reserved manifest seam becomes real |
 | 2 | `devicekit-browser`: CDP session core → device API → pool routing (round-robin, FQL membership, sticky sessions) → AI tools + step types | wire-protocol extension; gated write tools; fleet-level dispatch |
 | 3 | `devicekit-explorer`: backend verbs → frontend Files tab/page | builtin frontend path end-to-end |
 | 4 | `devicekit-notification-capture`: poller → tables → `wait_for_notification` → bus forwarding | jobs/schedules + extension tables + bus composition |
 | 5 | registry entries, EXTENSIONS.md updates, template automations | marketplace shows a real catalog |
+
+**Phase 1 notes (as shipped).** `automation_templates` is now seeded at activation
+(`extensions.py:_register_automation_templates`) — each template JSON (relative to the
+extracted backend dir) becomes an automation tagged `ext:<slug>`, idempotently (safe on every
+boot/enable), removed on uninstall (`_remove_automation_templates`), left in place on disable.
+Two platform fixes rode along, both required by the pack: (a) the `jobs`/`schedules` manifest
+keys were *validated* as inline lists but *activated* as `module:func` strings — an
+unusable contradiction; activation now consumes the documented inline-list form
+(`[{kind, handler}]` / `[{name, kind, interval_seconds, …}]`), which phase 4 depends on;
+(b) the SDK's `device_control` gained permission-gated `forward()`/`remove_forward()` (adb
+port-forward), which phase 2's CDP driver needs. The scaffolder grew a `--full` mode that
+emits the device-scoped `/ext/<slug>` blueprint plus models/ai_tools/jobs/schedules/an
+automation template. Proof: `backend/tests/test_automation_templates.py` (4 tests); full
+suite 178 passed. The three extensions are scaffolded fresh in their own phases (2–4) so each
+manifest and its code always match.
 
 Phases 2–4 are independent of each other (parallelizable after phase 1); phase 5 last.
 

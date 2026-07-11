@@ -134,6 +134,19 @@ class _DeviceControl:
         require_permission(self._slug, "adb")
         return _host.run_adb_command(f"shell {command}", device=self._device_id)
 
+    def forward(self, local_port, remote="localabstract:chrome_devtools_remote"):
+        """Set up an ``adb forward`` from a local TCP port to a device socket (default the
+        Chrome DevTools abstract socket). Returns adb stdout. Requires ``adb``."""
+        require_permission(self._slug, "adb")
+        return _host.run_adb_command(
+            ["forward", f"tcp:{local_port}", remote], device=self._device_id)
+
+    def remove_forward(self, local_port):
+        """Tear down a previously created ``adb forward`` for ``local_port``. Requires ``adb``."""
+        require_permission(self._slug, "adb")
+        return _host.run_adb_command(
+            ["forward", "--remove", f"tcp:{local_port}"], device=self._device_id)
+
 
 def device_control(slug, device_id):
     return _DeviceControl(slug, device_id)

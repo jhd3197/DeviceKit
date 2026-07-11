@@ -525,25 +525,88 @@ class ExtensionsMixin:
             if ai_ref:
                 self._import_ext_ref(slug, ai_ref)(devicekit_sdk.ai(slug))
 
-            # Jobs — func returns {kind: handler(job_dict) -> result} (plan 05).
-            jobs_ref = manifest.get("jobs")
-            if jobs_ref:
-                specs = self._import_ext_ref(slug, jobs_ref)()
-                for kind, fn in (specs or {}).items():
-                    devicekit_sdk.jobs.register(kind, fn)
+            # Jobs — a list of {kind, handler: "module:func"} (matches the manifest spec).
+            # Each handler is handler(job_dict) -> result (plan 05).
+            for job in (manifest.get("jobs") or []):
+                kind = job.get("kind")
+                handler_ref = job.get("handler")
+                if kind and handler_ref:
+                    handler = self._import_ext_ref(slug, handler_ref)
+                    devicekit_sdk.jobs.register(kind, handler)
 
-            # Schedules — func returns a list of dicts:
-            # {name, kind, interval_seconds|cron, payload?, max_attempts?}.
-            schedules_ref = manifest.get("schedules")
-            if schedules_ref:
-                specs = self._import_ext_ref(slug, schedules_ref)()
-                for spec in (specs or []):
-                    devicekit_sdk.jobs.schedule(
-                        spec["name"], spec["kind"],
-                        interval_seconds=spec.get("interval_seconds"),
-                        cron=spec.get("cron"), payload=spec.get("payload"),
-                        max_attempts=spec.get("max_attempts", 1),
-                        startup_delay_seconds=spec.get("startup_delay_seconds", 0))
+            # Schedules — a list of {name, kind, interval_seconds|cron, payload?,
+            # max_attempts?, startup_delay_seconds?}. Owned by the extension so disable/enable
+            # pauses/resumes them and uninstall deletes them.
+            for spec in (manifest.get("schedules") or []):
+                devicekit_sdk.jobs.schedule(
+                    spec["name"], spec["kind"],
+                    interval_seconds=spec.get("interval_seconds"),
+                    cron=spec.get("cron"), payload=spec.get("payload"),
+                    max_attempts=spec.get("max_attempts", 1),
+                    startup_delay_seconds=spec.get("startup_delay_seconds", 0))
+
+        # Automation templates — ready-made automations shipped by the extension. Registered
+        # outside the _activating scope: teardown is by provenance tag (on uninstall), not the
+        # per-slug contribution tracker, because these are durable rows the user may edit.
+        self._register_automation_templates(slug, manifest)
+
+    _AUTOMATION_SOURCE_TAG = "ext:{slug}"
+
+    def _register_automation_templates(self, slug, manifest):
+        """Seed the extension's ``automation_templates`` (a list of JSON paths, relative to the
+        extracted backend dir) as real automations, tagged ``ext:<slug>`` for provenance.
+
+        Idempotent: skips any template whose automation (same tag + name) already exists, so it
+        is safe to re-run on every boot and on enable. No-op if the host composite lacks the
+        AutomationMixin."""
+        templates = manifest.get("automation_templates")
+        if not templates or not hasattr(self, "create_automation"):
+            return
+        source_tag = self._AUTOMATION_SOURCE_TAG.format(slug=slug)
+        try:
+            existing_names = {
+                a["name"] for a in self.list_automations()
+                if source_tag in (a.get("tags") or [])
+            }
+        except Exception as e:
+            logger.warning(f"Could not list automations for template seeding ('{slug}'): {e}")
+            existing_names = set()
+
+        base = self._ext_dir(slug)
+        for rel in templates:
+            try:
+                path = safe_extract_path(base, str(rel))
+                if not os.path.isfile(path):
+                    logger.warning(f"Extension '{slug}' automation_template not found: {rel}")
+                    continue
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                name = data.get("name") or os.path.splitext(os.path.basename(str(rel)))[0]
+                if name in existing_names:
+                    continue
+                tags = list(dict.fromkeys((data.get("tags") or []) + [source_tag]))
+                self.create_automation(
+                    name=name,
+                    description=data.get("description", ""),
+                    steps=data.get("steps") or [],
+                    tags=tags)
+                existing_names.add(name)
+                logger.info(f"Seeded automation template '{name}' from extension '{slug}'")
+            except Exception as e:
+                logger.warning(f"Failed to seed automation_template {rel!r} for '{slug}': {e}")
+
+    def _remove_automation_templates(self, slug):
+        """Delete automations this extension seeded (tagged ``ext:<slug>``). Called on uninstall
+        so the marketplace round-trips cleanly; disable leaves them in place."""
+        if not hasattr(self, "list_automations") or not hasattr(self, "delete_automation"):
+            return
+        source_tag = self._AUTOMATION_SOURCE_TAG.format(slug=slug)
+        try:
+            for a in self.list_automations():
+                if source_tag in (a.get("tags") or []):
+                    self.delete_automation(a["id"])
+        except Exception as e:
+            logger.warning(f"Failed to remove seeded automations for '{slug}': {e}")
 
     def _import_ext_ref(self, slug, ref):
         """Resolve a ``module:attr`` manifest reference under ``devicekit.extensions.<slug>``."""
@@ -717,6 +780,9 @@ class ExtensionsMixin:
                     self.delete_scheduled_job(sch["id"])
             except Exception as e:
                 logger.warning(f"Removing schedules for '{slug}' failed: {e}")
+
+        # Remove automations this extension seeded from its automation_templates.
+        self._remove_automation_templates(slug)
 
         if purge:
             self._drop_ext_tables(slug)
