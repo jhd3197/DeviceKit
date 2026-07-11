@@ -30,6 +30,7 @@ from devicekit.models import InstalledExtension
 from devicekit.models.extension import STATUS_ACTIVE, STATUS_DISABLED, STATUS_ERROR
 from devicekit.extension_manifest import (
     validate_manifest, safe_extract_path, assert_devicekit_compatible, table_prefix,
+    range_satisfies,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,6 +155,50 @@ class ExtensionsMixin:
             return e.to_dict()["config"]
 
     # ------------------------------------------------------------------
+    # Dependency graph (requires_extensions — plan 17)
+    # ------------------------------------------------------------------
+    def missing_required_extensions(self, manifest):
+        """Return a list of unmet dependency problems for ``manifest`` — one per required
+        sibling that is not installed or whose installed version is out of range. Empty list
+        means every dependency is satisfied. Read-only; used by both preview and the install
+        gate so the consent UI and the hard failure agree."""
+        requires = manifest.get("requires_extensions") or {}
+        if not isinstance(requires, dict):
+            return []
+        problems = []
+        for dep_slug, dep_range in requires.items():
+            dep = self.get_extension(dep_slug)
+            if not dep:
+                problems.append(
+                    f"requires '{dep_slug}' ({dep_range or 'any'}), which is not installed — "
+                    f"install {dep_slug} first")
+            elif not range_satisfies(dep["version"], dep_range):
+                problems.append(
+                    f"requires '{dep_slug}' {dep_range}, but v{dep['version']} is installed")
+        return problems
+
+    def assert_required_extensions(self, manifest):
+        """Refuse install when a ``requires_extensions`` dependency is missing or version-
+        incompatible. Mirrors :func:`assert_devicekit_compatible`, one level down
+        (extension→extension instead of extension→host)."""
+        problems = self.missing_required_extensions(manifest)
+        if problems:
+            name = manifest.get("display_name") or manifest.get("name")
+            raise ValueError(f"{name} " + "; ".join(problems) + ".")
+
+    def active_dependents(self, slug):
+        """Slugs of currently-active extensions that declare ``slug`` in their
+        ``requires_extensions`` — i.e. who would break if ``slug`` went away."""
+        dependents = []
+        for ext in self.list_extensions():
+            if ext["slug"] == slug or ext.get("status") != STATUS_ACTIVE:
+                continue
+            requires = (ext.get("manifest") or {}).get("requires_extensions") or {}
+            if isinstance(requires, dict) and slug in requires:
+                dependents.append(ext["slug"])
+        return dependents
+
+    # ------------------------------------------------------------------
     # Preview (consent flow) — resolves sha256 without installing
     # ------------------------------------------------------------------
     def preview_extension(self, *, url=None, path=None, zip_bytes=None):
@@ -171,6 +216,9 @@ class ExtensionsMixin:
         existing = self.get_extension(manifest["name"])
         if existing:
             warnings.append(f"'{manifest['name']}' is already installed (v{existing['version']}).")
+        # Surface unmet extension dependencies as warnings so the consent UI can offer to
+        # install the chain (the actual install still hard-fails on them via the gate).
+        warnings.extend(self.missing_required_extensions(manifest))
         return {
             "slug": manifest["name"],
             "display_name": manifest.get("display_name", manifest["name"]),
@@ -180,6 +228,7 @@ class ExtensionsMixin:
             "permissions": manifest.get("permissions", []),
             "contributions": manifest.get("contributions", {}),
             "config_schema": manifest.get("config_schema", {}),
+            "requires_extensions": manifest.get("requires_extensions", {}),
             "source_url": source_url,
             "sha256": digest,
             "warnings": warnings,
@@ -352,6 +401,7 @@ class ExtensionsMixin:
         manifest, prefix = self._read_manifest(buf)
         validate_manifest(manifest)
         assert_devicekit_compatible(manifest)
+        self.assert_required_extensions(manifest)
 
         slug = manifest["name"]
         existing = self.get_extension(slug)

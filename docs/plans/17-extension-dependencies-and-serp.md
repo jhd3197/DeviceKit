@@ -1,6 +1,6 @@
 # Plan 17 — Extension Dependencies + `devicekit-serp`
 
-**Status:** proposed
+**Status:** 🚧 in progress (phase 1 ✅)
 **Inspired by:** ServerKit's plugins compose — one plugin calls another's service rather
 than reimplementing it. DeviceKit's plan 15 deliberately shipped `devicekit-browser`
 first and deferred SERP with a named prerequisite: extensions can't yet depend on, or
@@ -107,10 +107,18 @@ re-implement CDP-over-adb — the exact duplication the mechanism prevents.
 
 | Phase | Delivers | Proves |
 |---|---|---|
-| 1 | `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement | dependencies declared and checked |
+| 1 ✅ | `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement | dependencies declared and checked |
 | 2 | `sdk.extension(slug)` seam (in-process dispatch + `ExtensionUnavailable`) + lifecycle graph (block/warn on uninstall, disable degradation) | siblings can call siblings safely |
 | 3 | `devicekit-serp`: per-engine adapters → `search()` over `browser.fetch` → AI tool + step type | the mechanism works end-to-end on a real consumer |
 | 4 | registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section | marketplace understands dependency graphs |
+
+**Phase 1 — shipped.** `requires_extensions` (map of `slug → loose-semver range`) validated in
+`validate_manifest`; `range_satisfies()` added to `extension_manifest.py` (reuses `_parse_version`,
+supports `>= > <= < == =` and bare/`*`, ANDed). Install-time gate `assert_required_extensions()` in
+`ExtensionsMixin` refuses install with a specific "install `<slug>` first" / version-mismatch message
+(mirrors `assert_devicekit_compatible`); `missing_required_extensions()` + `active_dependents()` back
+the gate, preview warnings, and (later) the lifecycle graph. Preview now returns `requires_extensions`
+and folds unmet deps into `warnings`. Tests: `test_extension_dependencies.py`.
 
 Phase 3 depends on 1+2; phases 1 and 2 are sequential (2 builds on 1's manifest key).
 
