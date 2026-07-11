@@ -1,6 +1,6 @@
 # Plan 17 — Extension Dependencies + `devicekit-serp`
 
-**Status:** 🚧 in progress (phases 1–2 ✅)
+**Status:** 🚧 in progress (phases 1–3 ✅)
 **Inspired by:** ServerKit's plugins compose — one plugin calls another's service rather
 than reimplementing it. DeviceKit's plan 15 deliberately shipped `devicekit-browser`
 first and deferred SERP with a named prerequisite: extensions can't yet depend on, or
@@ -109,7 +109,7 @@ re-implement CDP-over-adb — the exact duplication the mechanism prevents.
 |---|---|---|
 | 1 ✅ | `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement | dependencies declared and checked |
 | 2 ✅ | `sdk.extension(slug)` seam (in-process dispatch + `ExtensionUnavailable`) + lifecycle graph (block/warn on uninstall, disable degradation) | siblings can call siblings safely |
-| 3 | `devicekit-serp`: per-engine adapters → `search()` over `browser.fetch` → AI tool + step type | the mechanism works end-to-end on a real consumer |
+| 3 ✅ | `devicekit-serp`: per-engine adapters → `search()` over `browser.fetch` → AI tool + step type | the mechanism works end-to-end on a real consumer |
 | 4 | registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section | marketplace understands dependency graphs |
 
 **Phase 1 — shipped.** `requires_extensions` (map of `slug → loose-semver range`) validated in
@@ -132,6 +132,22 @@ returns `{device_id, url, <fmt>}`) — its content sha256 + registry entry were 
 graph: **block** (logged decision, not warn-and-cascade) uninstalling an extension while an active
 dependent requires it (`force=True` / `?force=` overrides → route 409); disable only warns and lets
 dependents degrade via `ExtensionUnavailable`. Tests extend `test_extension_dependencies.py`.
+
+**Phase 3 — shipped.** `builtin-extensions/devicekit-serp/` (`integration`, `network`, requires
+`devicekit-browser >=0.1.0`, **no blueprint / no frontend** — step type + AI tool only). Every
+device touch is `sdk.extension("devicekit-browser").fetch(pool, url, fmt="html")`. `engines.py`
+holds the per-engine adapters (google/bing/duckduckgo = search-URL template + bs4 result selectors
++ a `ParseError` when the *container* is absent, so DOM drift/block pages surface an explicit
+"couldn't parse" instead of a fake empty list). `search()` returns `{query, engine, device_id,
+count, results:[{title,url,snippet}]}`, or `{error, html_sample, results:[]}` on parse failure.
+AI tool `devicekit_serp__search` is a **read** tool (the browser fetch is the gated write, gated
+once, there); step type `serp_search` returns the structured dict. To make "search → open first
+result → screenshot" real, `AutomationMixin._store_step_var` now flattens a dict/list step output
+into `{{name}}` (JSON) + `{{name}}_<scalar-key>` + `{{name}}_top_url`; the seeded `serp-demo.json`
+automation chains `serp_search → browser_goto {{serp_top_url}} → browser_screenshot`. Tests:
+`test_serp_extension.py` (canned per-engine HTML; live Chrome scraping verified on hardware).
+Deviation: parsing uses `beautifulsoup4` (already a core backend dep) with real CSS selectors —
+no server-side regex — so a Google layout change is a one-function edit in `engines.py`.
 
 Phase 3 depends on 1+2; phases 1 and 2 are sequential (2 builds on 1's manifest key).
 

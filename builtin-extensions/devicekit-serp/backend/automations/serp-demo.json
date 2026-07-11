@@ -1,0 +1,31 @@
+{
+  "name": "SERP Demo: search and open the first result",
+  "description": "Search the web on a real device via devicekit-browser, then open the top result and screenshot it. Demonstrates cross-extension chaining: a serp_search step stores the results, and browser_goto opens {{serp_top_url}} (the first result's URL captured by store_as).",
+  "tags": ["serp", "demo"],
+  "steps": [
+    {
+      "id": "serp-1",
+      "type": "serp_search",
+      "label": "Search Google",
+      "config": {
+        "query": "android device automation",
+        "engine": "google",
+        "count": 5,
+        "pool": "default",
+        "store_as": "serp"
+      }
+    },
+    {
+      "id": "serp-2",
+      "type": "browser_goto",
+      "label": "Open the first result",
+      "config": { "url": "{{serp_top_url}}" }
+    },
+    {
+      "id": "serp-3",
+      "type": "browser_screenshot",
+      "label": "Screenshot the page",
+      "config": {}
+    }
+  ]
+}

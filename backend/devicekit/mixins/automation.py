@@ -788,10 +788,40 @@ class AutomationMixin:
     @staticmethod
     def _store_step_var(variables, step, output):
         """If a step's config declares ``store_as``, capture its output into the run's
-        variable bag so later steps can reference it as ``{{name}}``."""
+        variable bag so later steps can reference it as ``{{name}}``.
+
+        Scalars store verbatim as ``str(output)`` (unchanged). A **structured** output (dict or
+        list — e.g. ``serp_search``'s ``{results: [...]}``) is stored as JSON under ``{name}``,
+        and, for a dict, each scalar top-level value is also exposed as ``{name}_{key}`` so an
+        automation can chain on it (``{{serp_device_id}}``); a ``{results:[{url:...}]}`` shape
+        additionally yields ``{name}_top_url`` — the "open first result" primitive. The run's
+        ``{{name}}`` interpolation is flat-string only, so these derived keys are how structured
+        data becomes referenceable without a nested-path variable system."""
+        import json as _json
+
         name = (step.get("config") or {}).get("store_as")
-        if name:
-            variables[str(name)] = "" if output is None else str(output)
+        if not name:
+            return
+        name = str(name)
+        if isinstance(output, dict):
+            try:
+                variables[name] = _json.dumps(output, default=str)
+            except Exception:
+                variables[name] = str(output)
+            for key, val in output.items():
+                if isinstance(val, (str, int, float, bool)):
+                    variables[f"{name}_{key}"] = str(val)
+            results = output.get("results")
+            if (isinstance(results, list) and results
+                    and isinstance(results[0], dict) and results[0].get("url")):
+                variables[f"{name}_top_url"] = str(results[0]["url"])
+        elif isinstance(output, list):
+            try:
+                variables[name] = _json.dumps(output, default=str)
+            except Exception:
+                variables[name] = str(output)
+        else:
+            variables[name] = "" if output is None else str(output)
 
     # ---------------------------------------------------------------
     # Run management
