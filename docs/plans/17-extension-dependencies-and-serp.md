@@ -1,6 +1,6 @@
 # Plan 17 — Extension Dependencies + `devicekit-serp`
 
-**Status:** 🚧 in progress (phase 1 ✅)
+**Status:** 🚧 in progress (phases 1–2 ✅)
 **Inspired by:** ServerKit's plugins compose — one plugin calls another's service rather
 than reimplementing it. DeviceKit's plan 15 deliberately shipped `devicekit-browser`
 first and deferred SERP with a named prerequisite: extensions can't yet depend on, or
@@ -108,7 +108,7 @@ re-implement CDP-over-adb — the exact duplication the mechanism prevents.
 | Phase | Delivers | Proves |
 |---|---|---|
 | 1 ✅ | `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement | dependencies declared and checked |
-| 2 | `sdk.extension(slug)` seam (in-process dispatch + `ExtensionUnavailable`) + lifecycle graph (block/warn on uninstall, disable degradation) | siblings can call siblings safely |
+| 2 ✅ | `sdk.extension(slug)` seam (in-process dispatch + `ExtensionUnavailable`) + lifecycle graph (block/warn on uninstall, disable degradation) | siblings can call siblings safely |
 | 3 | `devicekit-serp`: per-engine adapters → `search()` over `browser.fetch` → AI tool + step type | the mechanism works end-to-end on a real consumer |
 | 4 | registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section | marketplace understands dependency graphs |
 
@@ -119,6 +119,19 @@ supports `>= > <= < == =` and bare/`*`, ANDed). Install-time gate `assert_requir
 (mirrors `assert_devicekit_compatible`); `missing_required_extensions()` + `active_dependents()` back
 the gate, preview warnings, and (later) the lifecycle graph. Preview now returns `requires_extensions`
 and folds unmet deps into `warnings`. Tests: `test_extension_dependencies.py`.
+
+**Phase 2 — shipped.** Chose in-process dispatch (not internal HTTP). New SDK seam
+`sdk.extension(slug)` returns a thin `_ExtensionClient` whose attribute access dispatches to the
+sibling's registered method via `host.invoke_extension_api`, resolved fresh per call and gated on
+the sibling being `active` — a disabled sibling raises `ExtensionUnavailable`, an unknown method
+raises `AttributeError`. Provider side: manifest key `provides: "module:func"`, whose func gets an
+`sdk.provides(slug)` binder (`api.method(fn)`), mirroring the `ai_tools` pattern; the surface is
+tracked in `host._ext_extension_api[slug]`, reset on activation and torn down on
+disable/uninstall. `devicekit-browser` now `provides` `fetch(pool, url, fmt)` (new `api.py`,
+returns `{device_id, url, <fmt>}`) — its content sha256 + registry entry were updated. Lifecycle
+graph: **block** (logged decision, not warn-and-cascade) uninstalling an extension while an active
+dependent requires it (`force=True` / `?force=` overrides → route 409); disable only warns and lets
+dependents degrade via `ExtensionUnavailable`. Tests extend `test_extension_dependencies.py`.
 
 Phase 3 depends on 1+2; phases 1 and 2 are sequential (2 builds on 1's manifest key).
 

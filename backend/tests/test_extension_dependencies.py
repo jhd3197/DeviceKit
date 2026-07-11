@@ -181,3 +181,88 @@ def test_preview_surfaces_missing_dependency(fresh_db):
     preview = client.preview_extension(zip_bytes=_consumer_zip())
     assert preview["requires_extensions"] == {"dep-ext": ">=1.0.0"}
     assert any("not installed" in w and "dep-ext" in w for w in preview["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: sdk.extension(slug) in-process dispatch + provider surface
+# ---------------------------------------------------------------------------
+def test_sdk_extension_dispatch(fresh_db):
+    import devicekit_sdk
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    devicekit_sdk.set_host(client)
+    dep = devicekit_sdk.extension("dep-ext")
+    assert dep.available() is True
+    assert dep.echo("hi") == {"echoed": "hi"}
+    assert dep.add(2, 3) == 5
+    assert dep.add(2) == 2  # kwargs default honoured
+
+
+def test_consumer_route_calls_sibling(fresh_db):
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    client.install_extension_from_zip(_consumer_zip())
+    c = client._flask_app.test_client()
+    assert c.get("/extensions/consumer-ext/call").get_json() == {"echoed": "hi"}
+
+
+def test_sdk_extension_unavailable_when_disabled(fresh_db):
+    import devicekit_sdk
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    devicekit_sdk.set_host(client)
+    client.disable_extension("dep-ext")
+    dep = devicekit_sdk.extension("dep-ext")
+    assert dep.available() is False
+    with pytest.raises(devicekit_sdk.ExtensionUnavailable):
+        dep.echo("hi")
+
+
+def test_sdk_extension_unavailable_when_absent(fresh_db):
+    import devicekit_sdk
+    client = _client()
+    devicekit_sdk.set_host(client)
+    with pytest.raises(devicekit_sdk.ExtensionUnavailable):
+        devicekit_sdk.extension("nope-ext").echo("x")
+
+
+def test_sdk_extension_unknown_method_raises(fresh_db):
+    import devicekit_sdk
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    devicekit_sdk.set_host(client)
+    with pytest.raises(AttributeError):
+        devicekit_sdk.extension("dep-ext").no_such_method()
+
+
+def test_disable_then_reenable_restores_api(fresh_db):
+    import devicekit_sdk
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    devicekit_sdk.set_host(client)
+    client.disable_extension("dep-ext")
+    client.enable_extension("dep-ext")
+    assert devicekit_sdk.extension("dep-ext").echo("x") == {"echoed": "x"}
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: lifecycle graph — uninstall guard
+# ---------------------------------------------------------------------------
+def test_uninstall_blocked_by_active_dependent(fresh_db):
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    client.install_extension_from_zip(_consumer_zip())
+    with pytest.raises(ValueError) as ei:
+        client.uninstall_extension("dep-ext")
+    assert "consumer-ext" in str(ei.value)
+    # force overrides the guard.
+    assert client.uninstall_extension("dep-ext", force=True) is True
+
+
+def test_uninstall_allowed_when_dependent_disabled(fresh_db):
+    client = _client()
+    client.install_extension_from_zip(_provider_zip())
+    client.install_extension_from_zip(_consumer_zip())
+    client.disable_extension("consumer-ext")  # dependent no longer active
+    assert client.active_dependents("dep-ext") == []
+    assert client.uninstall_extension("dep-ext") is True

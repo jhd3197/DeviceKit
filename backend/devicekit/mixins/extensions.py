@@ -77,6 +77,10 @@ class ExtensionsMixin:
         # (bound per-device; write tools are always gated, plan 13).
         if not hasattr(self, "_ext_ai_tools"):
             self._ext_ai_tools = {}
+        # slug -> {method_name: callable} — the sibling-callable surface an extension exposes
+        # via its ``provides`` register func, dispatched by sdk.extension(slug) (plan 17).
+        if not hasattr(self, "_ext_extension_api"):
+            self._ext_extension_api = {}
         os.makedirs(_EXTENSIONS_PKG_DIR, exist_ok=True)
 
         # Let the SDK façade route extension calls back to this live host.
@@ -91,6 +95,32 @@ class ExtensionsMixin:
 
     def _register_ai_tool(self, slug, name, func, description, is_write=True):
         self._ext_ai_tools.setdefault(slug, []).append((name, func, description, is_write))
+
+    # ------------------------------------------------------------------
+    # Sibling-callable API surface (sdk.extension / sdk.provides — plan 17)
+    # ------------------------------------------------------------------
+    def _register_extension_api(self, slug, name, func):
+        """Record a callable an extension exposes to siblings via its ``provides`` func."""
+        self._ext_extension_api.setdefault(slug, {})[name] = func
+
+    def invoke_extension_api(self, slug, name, args=(), kwargs=None):
+        """Dispatch ``sdk.extension(slug).<name>(*args, **kwargs)`` in-process. Raises
+        :class:`devicekit_sdk.ExtensionUnavailable` if the sibling is not installed or not
+        active (so a runtime disable degrades a dependent cleanly), and ``AttributeError`` if
+        the method isn't part of the sibling's provided surface."""
+        import devicekit_sdk
+        kwargs = kwargs or {}
+        row = self.get_extension(slug)
+        if not row:
+            raise devicekit_sdk.ExtensionUnavailable(
+                f"extension '{slug}' is not installed")
+        if row.get("status") != STATUS_ACTIVE:
+            raise devicekit_sdk.ExtensionUnavailable(
+                f"extension '{slug}' is not active (status: {row.get('status')})")
+        func = (self._ext_extension_api.get(slug) or {}).get(name)
+        if func is None:
+            raise AttributeError(f"extension '{slug}' provides no method '{name}'")
+        return func(*args, **kwargs)
 
     # ------------------------------------------------------------------
     # Queries
@@ -543,8 +573,9 @@ class ExtensionsMixin:
         best-effort so a partial contribution set still yields a usable extension."""
         import devicekit_sdk
 
-        # Fresh AI-tool list on (re-)activation so we don't double-bind.
+        # Fresh AI-tool list + provided-API surface on (re-)activation so we don't double-bind.
         self._ext_ai_tools[slug] = []
+        self._ext_extension_api[slug] = {}
         self._ext_contributions.setdefault(slug, {})
 
         with devicekit_sdk._activating(slug):
@@ -574,6 +605,12 @@ class ExtensionsMixin:
             ai_ref = manifest.get("ai_tools")
             if ai_ref:
                 self._import_ext_ref(slug, ai_ref)(devicekit_sdk.ai(slug))
+
+            # Provided API — func receives a binder and registers the curated set of callables
+            # siblings may reach through sdk.extension(slug) (plan 17).
+            provides_ref = manifest.get("provides")
+            if provides_ref:
+                self._import_ext_ref(slug, provides_ref)(devicekit_sdk.provides(slug))
 
             # Jobs — a list of {kind, handler: "module:func"} (matches the manifest spec).
             # Each handler is handler(job_dict) -> result (plan 05).
@@ -776,6 +813,15 @@ class ExtensionsMixin:
             logger.warning(f"Deregister on disable failed for '{slug}': {e}")
         if slug in self._extensions:
             self._extensions[slug]["status"] = STATUS_DISABLED
+        # Warn (don't block) if active dependents rely on this extension — their
+        # sdk.extension(slug) calls now raise ExtensionUnavailable until it's re-enabled. This
+        # is the intended graceful-degradation path (plan 17), not an error.
+        dependents = self.active_dependents(slug)
+        if dependents:
+            logger.warning(
+                f"Disabled extension '{slug}' is still required by active extension(s) "
+                f"{', '.join(dependents)}; their sdk.extension('{slug}') calls will raise "
+                f"ExtensionUnavailable until it is re-enabled.")
         logger.info(f"Disabled extension '{slug}'")
         return result
 
@@ -807,15 +853,28 @@ class ExtensionsMixin:
                 logger.warning(f"Pausing schedules for '{slug}' failed: {e}")
         self._ext_contributions.pop(slug, None)
         self._ext_ai_tools.pop(slug, None)
+        # Drop the sibling-callable surface; sdk.extension(slug) then raises ExtensionUnavailable
+        # (the status guard also blocks it, but clearing keeps the map honest).
+        self._ext_extension_api.pop(slug, None)
 
     # ------------------------------------------------------------------
     # Uninstall (keep-data default; purge drops ext_<slug>_* tables)
     # ------------------------------------------------------------------
-    def uninstall_extension(self, slug, purge=False):
+    def uninstall_extension(self, slug, purge=False, force=False):
         row = self.get_extension(slug)
         if not row:
             return False
         manifest = row["manifest"]
+
+        # Dependency graph (plan 17): block uninstall while an active dependent still requires
+        # this extension. Decision (logged here): block rather than warn-and-cascade — cascading
+        # uninstalls is surprising and hard to undo; the user disables/uninstalls dependents
+        # first, or passes force=True to override.
+        dependents = self.active_dependents(slug)
+        if dependents and not force:
+            raise ValueError(
+                f"Cannot uninstall '{slug}': still required by active extension(s) "
+                f"{', '.join(dependents)}. Uninstall or disable them first, or force.")
 
         # Best-effort lifecycle hook + contribution teardown before removing files.
         self._run_lifecycle_hook(slug, manifest, "uninstall", purge=purge)

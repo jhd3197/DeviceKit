@@ -30,7 +30,7 @@
       "permissions": ["adb", "device.control", "network"],
       "min_devicekit_version": "1.0.0",
       "max_devicekit_version": null,
-      "sha256": "3174ea3a01e03d2c56df773bf331393abe2d4dc7f71fc72057b229ab0bd4930a",
+      "sha256": "3809a3cc008383c0f0ada28b96a085c620ba8edb3d20380924851cf0e085f8b1",
       "repo": "https://github.com/jhd3197/devicekit",
       "homepage": "https://github.com/jhd3197/devicekit"
     },

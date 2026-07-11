@@ -13,6 +13,7 @@
   "models": "models:register",
   "step_types": "steps:register",
   "ai_tools": "tools:register",
+  "provides": "api:register",
   "lifecycle": { "install": "lifecycle:on_install", "uninstall": "lifecycle:on_uninstall" },
 
   "config_schema": {

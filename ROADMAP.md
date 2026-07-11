@@ -466,7 +466,7 @@ See [docs/plans/16-documentation-suite.md](docs/plans/16-documentation-suite.md)
 See [docs/plans/17-extension-dependencies-and-serp.md](docs/plans/17-extension-dependencies-and-serp.md).
 
 - [x] `requires_extensions` manifest key + `validate_manifest` support + install-time enforcement
-- [ ] `sdk.extension(slug)` in-process dispatch seam + `ExtensionUnavailable` + lifecycle graph (block/warn uninstall, disable degradation)
+- [x] `sdk.extension(slug)` in-process dispatch seam + `ExtensionUnavailable` + lifecycle graph (block/warn uninstall, disable degradation)
 - [ ] `devicekit-serp`: per-engine adapters → `search()` over `devicekit-browser` pool fetch → AI tool + `serp_search` step type
 - [ ] Registry `requires` field + install-the-chain UX + EXTENSIONS.md dependency section
 

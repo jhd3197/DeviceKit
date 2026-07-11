@@ -89,7 +89,7 @@ def validate_manifest(manifest):
                 f"unknown permissions {unknown} (known: {sorted(KNOWN_PERMISSIONS)})")
 
     # module:attr references
-    for field in ("entry_point", "models", "step_types", "fql_fields", "ai_tools"):
+    for field in ("entry_point", "models", "step_types", "fql_fields", "ai_tools", "provides"):
         val = manifest.get(field)
         if val is not None and not _is_module_ref(val):
             problems.append(f"{field} must be a 'module:attr' string (got {val!r})")
