@@ -257,3 +257,60 @@ def test_wait_for_timeout_fails_loud(fresh_db):
     with pytest.raises(appdriver.AppDriverError) as ei:
         d.run("connect", "dev-A")
     assert "Connected" in str(ei.value)
+
+
+# --------------------------------------------------------------- device version policy (Part 3)
+def test_over_ceiling_refuses_distinct_from_no_adapter(fresh_db):
+    host = _make_host()
+    host.set_installed("dev-A", "13.2.0")               # a version the driver HAS an adapter for
+    host.present |= {("dev-A", "Connected")}
+    # Pin this device to the 12.x line; 13.2 exceeds it -> policy refusal, NOT a missing adapter.
+    d = _driver(ceiling_for=lambda dev: "12")
+    with pytest.raises(appdriver.VersionPolicyError) as ei:
+        d.run("connect", "dev-A")
+    assert "ceiling" in str(ei.value) and "13.2.0" in str(ei.value)
+    assert host.taps == []                              # policy refusal never taps
+    # Same device, no ceiling -> drives fine with the 13.x adapter (proves it was policy, not drift).
+    assert _driver().run("connect", "dev-A")["adapter"] == "13.x"
+
+
+def test_ceiling_allows_within_line(fresh_db):
+    host = _make_host()
+    host.set_installed("dev-A", "12.9.0")               # still on the 12.x line
+    host.present |= {("dev-A", "Connected")}
+    d = _driver(ceiling_for=lambda dev: "12")           # ceiling '12' pins the whole 12.x line
+    assert d.run("connect", "dev-A")["adapter"] == "12.x"
+
+
+def test_config_ceiling_resolver_per_device_beats_global(fresh_db):
+    cfg = {"max_app_version": "13", "device_max_versions": {"pinned-dev": "12"}}
+    resolver = appdriver.make_ceiling_resolver(lambda: cfg)
+    assert resolver("pinned-dev") == "12"               # per-device override wins
+    assert resolver("other-dev") == "13"                # falls back to the global ceiling
+    cfg2 = appdriver.make_ceiling_resolver(lambda: {})
+    assert cfg2("any") is None                          # no ceiling configured
+
+
+def test_over_ceiling_helper(fresh_db):
+    host = _make_host()
+    host.set_installed("dev-A", "13.4.0")
+    assert appdriver.over_ceiling(SLUG, "dev-A", PKG, "12") is True
+    assert appdriver.over_ceiling(SLUG, "dev-A", PKG, "13") is False
+    assert appdriver.over_ceiling(SLUG, "dev-A", PKG, None) is False
+
+
+def test_reprovision_uninstalls_then_installs_pinned(fresh_db):
+    host = _make_host()
+    host.set_installed("dev-A", "13.9.0")               # drifted above the pinned build
+    # Reprovision downgrades: uninstall removes the drifted version, install lands the pin (12.5).
+    host.versions[("dev-A", PKG)] = "13.9.0"
+
+    def _install(apk_path, device=None):
+        host.versions[(device, PKG)] = "12.5.0"         # the pinned build lands after install
+        return (True, "Success")
+    host.install_apk = _install
+
+    rec = appdriver.reprovision(SLUG, "dev-A", package=PKG, apk_bytes=APK,
+                                expected_sha256=APK_SHA, expected_version="12.5.0")
+    assert PKG in host.uninstalled                       # old build removed first
+    assert rec["status"] == "ok" and rec["version_name"] == "12.5.0"

@@ -437,3 +437,35 @@ class AppDriver:
             "adapter": adapter.name or adapter.version_range,
             "steps": results, "vars": ctx.vars,
         }
+
+
+# --------------------------------------------------------------------------- version policy (Part 3)
+def make_ceiling_resolver(config_getter, *, global_key="max_app_version",
+                          per_device_key="device_max_versions"):
+    """Build a ``ceiling_for(device_id)`` from an extension's config so :class:`AppDriver` can
+    enforce "this device can't go above X" (plan 18 Part 3).
+
+    A per-device override map (``config[per_device_key][device_id]``) wins; otherwise the global
+    ceiling (``config[global_key]``) applies to every device; ``None`` means no ceiling.
+    ``config_getter`` is called **fresh on every check** (pass ``lambda: sdk.config(slug)``) so an
+    operator can change a ceiling without restarting the driver. The ceiling is *declared* policy
+    the driver enforces — it does not, and can't, block an OS-level update; it refuses to *drive*
+    an over-ceiling app rather than silently using a newer adapter."""
+    def ceiling_for(device_id):
+        cfg = config_getter() or {}
+        per = cfg.get(per_device_key) or {}
+        if isinstance(per, dict) and per.get(device_id):
+            return str(per[device_id])
+        g = cfg.get(global_key)
+        return str(g) if g else None
+    return ceiling_for
+
+
+def over_ceiling(slug, device_id, package, ceiling):
+    """True if ``package``'s installed version on ``device_id`` exceeds ``ceiling`` — the cheap
+    check a scheduled monitor uses to decide whether a device needs reprovisioning. ``False`` when
+    the app isn't installed or no ceiling is set."""
+    if not ceiling:
+        return False
+    v = installed_version(slug, device_id, package)
+    return bool(v) and exceeds_ceiling(v, ceiling)
