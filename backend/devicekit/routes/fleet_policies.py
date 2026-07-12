@@ -60,6 +60,22 @@ def make_blueprint(client, limiter):
             return jsonify({"error": str(e)}), status
         return jsonify({"plan": plan})
 
+    @bp.route("/fleet-policies/<policy_id>/apply", methods=["POST"])
+    def apply_policy(policy_id):
+        """Apply the stored policy. Blockers refuse with 409 (no --force); an unchanged
+        hash or already-converged fleet short-circuits without a job."""
+        try:
+            result = client.apply_fleet_policy(policy_id, triggered_by="manual")
+        except ValueError as e:
+            status = 404 if "not found" in str(e) else 400
+            return jsonify({"error": str(e)}), status
+        if result.get("refused"):
+            return jsonify({"error": "plan has blockers; apply refused",
+                            "blockers": result["plan"]["blockers"],
+                            "plan": result["plan"]}), 409
+        status = 202 if result.get("job") else 200
+        return jsonify(result), status
+
     @bp.route("/fleet-policies/<policy_id>", methods=["GET"])
     def get_policy(policy_id):
         policy = client.get_fleet_policy(policy_id)

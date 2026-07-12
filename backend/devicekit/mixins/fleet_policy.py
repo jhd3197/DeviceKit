@@ -22,12 +22,38 @@ from devicekit.services.workspace import scope_query
 
 _VERSION_NAME_RE = re.compile(r"versionName=(\S+)")
 
+POLICY_APPLY_KIND = "policy.apply"
+POLICY_APPLY_DEVICE_KIND = "policy.apply.device"
+# Per-device apply budget inside the fan-out (mirrors plan 22's fan-out default).
+POLICY_DEVICE_TIMEOUT_SECONDS = 600
+POLICY_FANOUT_CONCURRENCY = 3
+
 logger = logging.getLogger(__name__)
 
 
 class FleetPolicyMixin:
     """Desired-state policies: declare what a device/group should look like; DeviceKit
     plans the diff, applies it as a job, and watches for drift."""
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+    def init_fleet_policy(self):
+        """Register the apply job kinds + notification events. Called from ``Client.__init__``
+        after the job system is up; idempotent."""
+        if hasattr(self, "register_job_kind"):
+            self.register_job_kind(POLICY_APPLY_KIND, self._job_apply_policy)
+            self.register_job_kind(POLICY_APPLY_DEVICE_KIND, self._job_apply_policy_device)
+        if hasattr(self, "register_notification_event"):
+            try:
+                self.register_notification_event(
+                    "policy.apply.succeeded", "Fleet policy applied",
+                    severity="info", category="fleet")
+                self.register_notification_event(
+                    "policy.apply.failed", "Fleet policy apply failed",
+                    severity="error", category="fleet")
+            except Exception as e:
+                logger.warning(f"Policy notification events not registered: {e}")
 
     # ------------------------------------------------------------------
     # CRUD (part 2)
@@ -248,18 +274,19 @@ class FleetPolicyMixin:
                     except ValueError:
                         live["secrets"][key] = {"found": False, "value": None}
 
+    def _find_vault_id(self, vault_ref):
+        for v in self.list_vaults():
+            if vault_ref in (v.get("id"), v.get("slug")):
+                return v["id"]
+        return None
+
     def _resolve_secret_ref(self, ref):
         """``fromSecret: {vault, key}`` — vault accepted by id or slug. Raises ValueError
         when either half is missing."""
-        vault_ref, key = ref["vault"], ref["key"]
-        vault_id = None
-        for v in self.list_vaults():
-            if vault_ref in (v.get("id"), v.get("slug")):
-                vault_id = v["id"]
-                break
+        vault_id = self._find_vault_id(ref["vault"])
         if not vault_id:
-            raise ValueError(f"vault not found: {vault_ref}")
-        return self.reveal_secret(vault_id, key)["value"]
+            raise ValueError(f"vault not found: {ref['vault']}")
+        return self.reveal_secret(vault_id, ref["key"])["value"]
 
     def _automation_live_state(self, ref, device_id):
         automation = self._resolve_automation_ref(ref)
@@ -295,6 +322,268 @@ class FleetPolicyMixin:
                                    device=device_id)
         out = (out or "").strip()
         return None if out in ("", "null") else out
+
+    # ------------------------------------------------------------------
+    # Apply (part 4): blockers refuse, empty converges, else a snapshotted job
+    # ------------------------------------------------------------------
+    def apply_fleet_policy(self, policy_id, triggered_by="manual"):
+        """Gate + enqueue. Returns one of: ``{applied, short_circuit}`` (unchanged hash),
+        ``{refused, plan}`` (blockers — the honesty rule, no --force), ``{applied, empty}``
+        (already converged), or ``{job, plan}`` (parent job enqueued)."""
+        policy = self.get_fleet_policy(policy_id)
+        if not policy:
+            raise ValueError("policy not found")
+        if policy["status"] == STATUS_APPLIED and \
+                policy["applied_hash"] == policy["policy_hash"]:
+            return {"applied": True, "short_circuit": True, "policy": policy}
+        plan = self.plan_fleet_policy(policy_id)
+        if plan["blockers"]:
+            return {"refused": True, "plan": plan}
+        if not plan["steps"]:
+            out = self._set_policy_status(policy_id, STATUS_APPLIED, detail={
+                "summary": "already converged", "triggered_by": triggered_by})
+            return {"applied": True, "empty": True, "policy": out}
+        # The plan snapshot rides in the payload so a mid-flight edit can't change the run;
+        # the handler re-checks the hash before touching anything.
+        job = self.enqueue_job(
+            POLICY_APPLY_KIND,
+            payload={"policy_id": policy_id, "policy_hash": plan["policy_hash"],
+                     "plan": plan, "triggered_by": triggered_by},
+            max_attempts=1, owner_type="fleet_policy", owner_id=policy_id)
+        return {"applied": False, "job": job, "plan": plan}
+
+    def _job_apply_policy(self, job):
+        """Parent apply job: global extension steps inline, then per-device fan-out as
+        concurrency-capped child jobs (plan 22's pattern)."""
+        payload = job.get("payload") or {}
+        policy_id = payload.get("policy_id")
+        plan = payload.get("plan") or {}
+        policy = self.get_fleet_policy(policy_id)
+        if not policy:
+            return {"skipped": "policy deleted"}
+        if policy["policy_hash"] != payload.get("policy_hash"):
+            return {"skipped": "policy edited since enqueue"}
+
+        result = {"policy_id": policy_id, "global_steps": [], "devices": {}}
+        failed_global = False
+        for step in [s for s in plan.get("steps", []) if s.get("device_id") is None]:
+            result["global_steps"].append(
+                self._run_policy_step(step, None, policy_id, skip=failed_global))
+            if result["global_steps"][-1]["status"] == "error":
+                failed_global = True
+        if failed_global:
+            detail = {"summary": "global step failed", "global_steps": result["global_steps"],
+                      "triggered_by": payload.get("triggered_by")}
+            self._set_policy_status(policy_id, STATUS_ERROR, detail=detail)
+            self._notify_policy("policy.apply.failed", policy, detail["summary"])
+            return result
+
+        device_steps = {}
+        for step in plan.get("steps", []):
+            if step.get("device_id") is not None:
+                device_steps.setdefault(step["device_id"], []).append(step)
+        result["devices"] = self._fan_out_policy_devices(
+            policy_id, payload.get("policy_hash"), device_steps)
+
+        failures = {did: r for did, r in result["devices"].items() if not r.get("ok")}
+        if failures:
+            detail = {"summary": f"{len(failures)}/{len(device_steps)} device(s) failed",
+                      "devices": {did: {"ok": r.get("ok", False),
+                                        "error": r.get("error")}
+                                  for did, r in result["devices"].items()},
+                      "triggered_by": payload.get("triggered_by")}
+            self._set_policy_status(policy_id, STATUS_ERROR, detail=detail)
+            self._notify_policy("policy.apply.failed", policy, detail["summary"])
+        else:
+            detail = {"summary": f"applied to {len(device_steps)} device(s)",
+                      "triggered_by": payload.get("triggered_by")}
+            self._set_policy_status(policy_id, STATUS_APPLIED, detail=detail,
+                                    applied_hash=payload.get("policy_hash"))
+            self._notify_policy("policy.apply.succeeded", policy, detail["summary"])
+        return result
+
+    def _fan_out_policy_devices(self, policy_id, policy_hash, device_steps):
+        """Bounded fan-out: at most ``min(POLICY_FANOUT_CONCURRENCY, JOB_WORKERS - 1)``
+        child jobs in flight, so the waiting parent always leaves a worker free."""
+        from devicekit.jobs.service import JobService
+        from devicekit.mixins.jobs import JOB_WORKERS
+
+        concurrency = max(1, min(POLICY_FANOUT_CONCURRENCY, JOB_WORKERS - 1))
+        queue = sorted(device_steps.items())
+        pending, results = {}, {}
+        while queue or pending:
+            while queue and len(pending) < concurrency:
+                did, steps = queue.pop(0)
+                child = self.enqueue_job(
+                    POLICY_APPLY_DEVICE_KIND,
+                    payload={"policy_id": policy_id, "policy_hash": policy_hash,
+                             "device_id": did, "steps": steps},
+                    max_attempts=1, owner_type="fleet_policy", owner_id=policy_id)
+                pending[child["id"]] = (did, time.time() + POLICY_DEVICE_TIMEOUT_SECONDS)
+            time.sleep(0.2)
+            for job_id, (did, deadline) in list(pending.items()):
+                row = JobService.get(job_id)
+                status = (row or {}).get("status")
+                if status in ("succeeded", "failed", "cancelled"):
+                    res = (row or {}).get("result") or {}
+                    if status != "succeeded" or not res:
+                        res = {"device_id": did, "ok": False,
+                               "error": (row or {}).get("error_message") or status}
+                    results[did] = res
+                    pending.pop(job_id)
+                elif time.time() > deadline:
+                    try:
+                        JobService.cancel(job_id)
+                    except Exception:
+                        pass
+                    results[did] = {"device_id": did, "ok": False, "error": "timeout"}
+                    pending.pop(job_id)
+        return results
+
+    def _job_apply_policy_device(self, job):
+        """Child job: one device — before snapshot, ordered steps with stop-on-first-failure
+        (remaining steps ``skipped``), after snapshot. Failure is data (``ok: False``), not a
+        job crash, so the parent aggregates cleanly."""
+        payload = job.get("payload") or {}
+        policy_id = payload.get("policy_id")
+        did = payload.get("device_id")
+        steps = payload.get("steps") or []
+        policy = self.get_fleet_policy(policy_id)
+        eff = (effective_spec_for_device(policy["normalized"], did)
+               if policy else None)
+        before = self._policy_device_snapshot(eff, did) if eff else {}
+        step_results, failed = [], False
+        for step in steps:
+            outcome = self._run_policy_step(step, did, policy_id, skip=failed)
+            step_results.append(outcome)
+            if outcome["status"] == "error":
+                failed = True
+        after = self._policy_device_snapshot(eff, did) if eff else {}
+        return {"device_id": did, "ok": not failed, "steps": step_results,
+                "before": before, "after": after,
+                "error": next((s.get("error") for s in step_results
+                               if s["status"] == "error"), None)}
+
+    def _run_policy_step(self, step, device_id, policy_id, skip=False):
+        """Execute one step → ``{id, kind, status: ok|error|skipped, ...}``, broadcasting
+        progress on the ``policy`` SSE channel."""
+        outcome = {"id": step.get("id"), "kind": step.get("kind")}
+        if skip:
+            outcome["status"] = "skipped"
+        else:
+            try:
+                detail = self._exec_policy_step(step, device_id)
+                outcome.update({"status": "ok", "detail": detail})
+            except Exception as e:
+                outcome.update({"status": "error", "error": str(e)})
+        try:
+            self.broadcast("policy", {"event": "apply_step", "policy_id": policy_id,
+                                      "device_id": device_id, "step": outcome})
+        except Exception:
+            pass
+        return outcome
+
+    def _exec_policy_step(self, step, device_id):
+        kind = step["kind"]
+        if kind == "attach_extension":
+            slug = step["extension"]
+            if step["action"] == "enable":
+                self.enable_extension(slug)
+            else:
+                self.install_extension_from_registry(slug)
+            ext = self.get_extension(slug)
+            if not ext or ext.get("status") != "active":
+                raise RuntimeError(f"extension {slug} is not active after "
+                                   f"{step['action']}")
+            return {"extension": slug, "action": step["action"]}
+        if kind == "provision_app":
+            from devicekit_sdk import appdriver
+            slug = step["extension"]
+            config = self.get_extension_config_raw(slug)
+            if not config.get("apk_b64"):
+                raise RuntimeError(f"no APK configured on {slug} to provision "
+                                   f"{step['package']}")
+            record = appdriver.provision(
+                slug, device_id, package=step["package"],
+                apk_b64=config["apk_b64"],
+                expected_sha256=config.get("apk_sha256"),
+                expected_version=config.get("apk_version"),
+                serial=device_id)
+            version = record.get("version_name") if isinstance(record, dict) else None
+            return {"package": step["package"], "version": version}
+        if kind == "configure_setting":
+            ns, key = step["namespace"], step["key"]
+            if step.get("secret"):
+                value = self._resolve_or_generate_secret(step)
+            else:
+                value = step["value"]
+            self.run_adb_command(["shell", "settings", "put", ns, key, str(value)],
+                                 device=device_id)
+            actual = self._adb_get_setting(device_id, ns, key)
+            if actual != str(value):
+                raise RuntimeError(
+                    f"settings put verification failed for {ns}.{key} (got {actual!r})")
+            return {"namespace": ns, "key": key, "secret": bool(step.get("secret"))}
+        if kind == "enable_automation":
+            action = step["action"]
+            if action == "create":
+                schedule = self.create_schedule(step["automation_id"], device_id,
+                                                step["interval_minutes"], enabled=True)
+                return {"action": action, "schedule_id": schedule["id"]}
+            updates = ({"enabled": False} if action == "disable"
+                       else {"interval_minutes": step["interval_minutes"], "enabled": True})
+            if not self.update_schedule(step["schedule_id"], updates):
+                raise RuntimeError(f"schedule {step['schedule_id']} vanished")
+            return {"action": action, "schedule_id": step["schedule_id"]}
+        raise ValueError(f"unknown step kind: {kind}")
+
+    def _resolve_or_generate_secret(self, step):
+        """Re-resolve the ``fromSecret`` ref at execution time (never trust a value smuggled
+        through a job payload). ``generate: true`` mints + stores the value on first use."""
+        import secrets as pysecrets
+        ref = step["from_secret"]
+        try:
+            return self._resolve_secret_ref(ref)
+        except ValueError:
+            if not step.get("generate"):
+                raise
+            vault_id = self._find_vault_id(ref["vault"])
+            if not vault_id:
+                raise RuntimeError(f"cannot generate {ref['key']}: vault "
+                                   f"{ref['vault']} does not exist")
+            value = pysecrets.token_urlsafe(24)
+            self.set_secret(vault_id, ref["key"], value,
+                            description="generated by fleet policy apply")
+            return value
+
+    def _policy_device_snapshot(self, eff, device_id):
+        """Before/after evidence for the apply record: only what the policy governs."""
+        snap = {"apps": {}, "settings": {}, "automations": {}}
+        try:
+            for app in eff.get("apps") or []:
+                snap["apps"][app["package"]] = self._adb_installed_version(
+                    device_id, app["package"])
+            for ns, kv in (eff.get("settings") or {}).items():
+                for key in kv:
+                    snap["settings"][f"{ns}.{key}"] = self._adb_get_setting(
+                        device_id, ns, key)
+            for auto in eff.get("automations") or []:
+                state = self._automation_live_state(auto["automation"], device_id)
+                snap["automations"][auto["automation"]] = state.get("schedule")
+        except Exception as e:
+            snap["error"] = str(e)
+        return snap
+
+    def _notify_policy(self, event_key, policy, summary):
+        if not hasattr(self, "notify_event"):
+            return
+        try:
+            self.notify_event(event_key,
+                              data={"policy_id": policy["id"], "name": policy["name"],
+                                    "summary": summary},
+                              subject_type="fleet_policy", subject_id=policy["id"])
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Shared internals

@@ -125,6 +125,13 @@ class Client(
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Metrics history init skipped: {e}")
 
+        # Fleet policies (plan 23): register the apply job kinds + notification events, and
+        # ensure the periodic drift-check schedule (after jobs + notifications are live).
+        try:
+            self.init_fleet_policy()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Fleet policy init skipped: {e}")
+
         # Apply any persisted AI provider keys to the environment so Prompture picks them
         # up without a restart (plan 12 settings).
         try:
