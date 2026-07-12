@@ -1,6 +1,6 @@
 # Plan 27 — Brand Identity: the Purple Phone Logo, Everywhere
 
-**Status:** 🚧 in progress — Phases 1–2 ✅ (web mark + purple default accent), Phase 3 pending
+**Status:** ✅ shipped — all 3 phases (web mark + purple default accent + Android gradient icon)
 **Inspired by:** ServerKit's branding pipeline — one master SVG
 (`frontend/src/assets/ServerKitLogo.svg`: 2048 viewBox, white squircle tile, diagonal
 indigo gradient `#6366f1 → #4f46e5`), a JSX twin (`components/ServerKitLogo.jsx`) whose
@@ -115,14 +115,17 @@ properly as one master SVG in ServerKit's style, and roll it out to every surfac
 |---|---|---|
 | 1 ✅ | Master SVG + `Logo.jsx` + sidebar/login/About swap + favicon + manifest | one mark everywhere on web; changing the accent re-tints the sidebar logo live |
 | 2 ✅ | Purple default accent (`#6d7cff`), presets updated, settings default | a fresh install boots purple; an existing user's chosen accent survives |
-| 3 🚧 | Android adaptive-icon gradient + glyph alignment + APK rebuild | the launcher icon on a real device matches the web favicon family |
+| 3 ✅ | Android adaptive-icon gradient + glyph alignment + APK rebuild | the launcher icon on a real device matches the web favicon family |
 
 **Phase 3 notes:** `ic_launcher_background.xml` solid `#6366F1` → aapt `<gradient>` diagonal
 `#6366f1 → #4f46e5` (matches the master). `ic_launcher_foreground.xml` redrawn to the master's
 proportions — white phone frame, see-through screen (reveals the gradient), home-indicator pill,
 and the green `#3DDC97` LED. `ic_notification.xml` left as-is (system alpha-masks + tints
 notification icons, so color/LED is dropped; the existing phone glyph is the same family — no
-drift). APK rebuild/flash tracked below.
+drift). APK rebuilt via the `build-agent-apk` skill (Gradle `assembleDebug`, BUILD SUCCESSFUL
+in 51s — the aapt `<gradient>` + evenOdd VectorDrawables parse cleanly) and flashed to both
+phones (Samsung A03s + Moto G Play 2023). Verified on the Samsung A03s: App-info renders the
+purple gradient squircle + white phone glyph — same family as the web favicon.
 
 **Phase 1 notes (shipped):** `Logo.jsx` wires stop 1 → `--accent`, stop 2 → `--accent-dim`
 (not `--accent-hover` as the plan sketched — DeviceKit's `--accent-hover` is *brighter* than
