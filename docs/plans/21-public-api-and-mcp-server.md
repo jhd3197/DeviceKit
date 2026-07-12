@@ -1,6 +1,6 @@
 # Plan 21 — Public API `/api/v1`, Scoped Keys, OpenAPI & MCP Server
 
-**Status:** proposed
+**Status:** in progress (phases 1–2 ✅)
 **Inspired by:** ServerKit serves everything under `/api/v1` with **dual auth** — session/JWT for
 the UI, `X-API-Key: sk_…` for machines — and **auto-generates** its OpenAPI 3.0 spec by walking
 the Flask `url_map` (`backend/app/services/openapi_service.py`: blueprint → tag, view docstring →
@@ -69,12 +69,27 @@ tools already annotated read vs write — the MCP tool gate reuses that annotati
 
 ## Phases
 
-| Phase | Delivers | Proves |
-|---|---|---|
-| 1 | `/api/v1` mount + dual auth (session or `dk_` key) + `require_scope` (pass-through for session) + device scope catalog | one endpoint serves UI + machines |
-| 2 | Auto-OpenAPI generator over the blueprint `url_map` + `/api/v1/openapi.json` + docs page | spec stays in sync, no hand-maintenance |
-| 3 | MCP server (stdio + HTTP) over the scoped API: curated tools, per-tool scope gating, plan-13 gate on writes | Claude can drive the fleet, safely |
-| 4 | Generated client + `devicekit` CLI (token auth, completions) | external + human consumers |
+| Phase | Delivers | Proves | Status |
+|---|---|---|---|
+| 1 | `/api/v1` mount + dual auth (session or `dk_` key) + `require_scope` (pass-through for session) + device scope catalog | one endpoint serves UI + machines | ✅ `d727033` |
+| 2 | Auto-OpenAPI generator over the blueprint `url_map` + `/api/v1/openapi.json` + docs page | spec stays in sync, no hand-maintenance | ✅ `dd1549e` |
+| 3 | MCP server (stdio + HTTP) over the scoped API: curated tools, per-tool scope gating, plan-13 gate on writes | Claude can drive the fleet, safely | ✅ |
+| 4 | Generated client + `devicekit` CLI (token auth, completions) | external + human consumers | 🚧 |
+
+**Deviation notes (as shipped):**
+- Phase 1: scope enforcement is central (the auth gate maps path→scope for `dk_` keys, reads
+  *and* writes) **plus** `require_scope` decorators on the high-value routes — uniform across
+  the bare and `/api/v1` mounts, so a key behaves identically on both. `<feature>:write`
+  implies the feature's narrower verbs (`read`, `command`, `run`, `admin`); `fleet:admin` is
+  standalone. `routes/devices.py` carries no decorators (unrelated uncommitted work in the
+  tree) — the central gate covers it. Also fixed en route: the FQL bulk `run_automation`
+  action called a nonexistent `client.run_automation`.
+- Phase 2: the docs page is a self-contained dark-theme renderer served at `/api/v1/docs`
+  (no CDN/plan-16 dependency); `require_scope` stamps surface as `x-required-scope`.
+- Phase 3: writes flow through `POST /api/v1/actions/invoke`, which wraps the plan-13 gate
+  (`source="api"`); `provision_app` was dropped — plan 18 shipped provisioning as an
+  extension-SDK concern with no core endpoint to wrap. Autonomous auto-approval is the
+  exact-match `mcp:autonomous` key scope (wildcards deliberately don't grant it).
 
 Phase 1 needs plan 20's keys. Phases 2→3→4 are sequential-ish (3 curates over the surface 1
 exposes; 4 rides 2's spec).

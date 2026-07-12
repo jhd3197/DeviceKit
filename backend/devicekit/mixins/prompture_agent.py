@@ -24,13 +24,20 @@ class DeviceAction(BaseModel):
     wait_seconds: float = Field(default=2.0, ge=0, le=30)
 
 
-def build_device_tools(mixin, device_id, mode="supervised"):
+def build_device_tools(mixin, device_id, mode="supervised", source="core",
+                       always_gate_core=False):
     """Create a tool registry bound to a specific device, annotated for the safety gate.
 
     Every tool carries ``metadata`` (``is_write`` + ``category`` + a human ``label``).
     Read tools run unmediated. Write tools are wrapped so their execution routes through
     ``mixin.gate_tool_call`` (the ConfirmationGate). In ``observe`` mode write tools are
     filtered out of the registry entirely — the model never even sees them (plan 13).
+
+    ``source`` labels the pending-action/audit rows (``core`` for the in-app agent; the
+    gated ``/actions/invoke`` API passes ``api``). ``always_gate_core=True`` forces core
+    write tools through human confirmation even in ``autonomous`` mode — how external
+    callers without the ``mcp:autonomous`` opt-in are kept always-gated (plan 21).
+    Extension tools are always-gated regardless.
     """
     from prompture import ToolRegistry
 
@@ -44,7 +51,8 @@ def build_device_tools(mixin, device_id, mode="supervised"):
         tool_name = name or fn.__name__
         td = registry.register(fn, name=tool_name, metadata=meta)
         if is_write:
-            _gate_write_tool(mixin, device_id, td, meta, source="core")
+            _gate_write_tool(mixin, device_id, td, meta, source=source,
+                             always_gate=always_gate_core)
 
     # ---------------------------------------------------------------- read tools (no gate)
     def get_battery() -> str:

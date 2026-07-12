@@ -13,6 +13,7 @@ same auth gate (which version-strips paths), so one endpoint serves the UI and m
 from devicekit.services.scopes import API_V1_PREFIX
 from devicekit.routes import (
     api_v1,
+    actions,
     health,
     auth,
     api_keys,
@@ -48,6 +49,7 @@ from devicekit.routes import (
 # but this mirrors the section order of the original api_app.py for readability.
 BLUEPRINT_MODULES = [
     api_v1,
+    actions,
     health,
     auth,
     api_keys,

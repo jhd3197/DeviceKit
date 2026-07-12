@@ -40,12 +40,18 @@ PSEUDO_FEATURES = {
     "fleet": ("admin",),
 }
 
+# Explicit-opt-in scopes: assignable, but never implied by ``*`` or ``<feature>:*`` — hold
+# the exact token or you don't have it. Check with ``has_exact_scope``, not the matcher.
+EXPLICIT_SCOPES = ("mcp:autonomous",)
+
 SCOPE_DESCRIPTIONS = {
     "*": "Full access to every feature (master key).",
     "devices:command": "Send commands to devices (tap/press/swipe/adb/reboot/files) without general device writes.",
     "automations:run": "Run or cancel automations without editing them.",
     "extensions:admin": "Install, remove, enable/disable, and configure extensions.",
     "fleet:admin": "Fleet groups and bulk actions (fleet-wide blast radius; never implied by devices:write).",
+    "mcp:autonomous": "Opt-in: gated invokes from this key may auto-approve when the device's "
+                      "agent mode is 'autonomous'. Without it every write invoke waits for a human.",
 }
 _ACTION_BLURBS = {
     "read": "Read {feature} state.",
@@ -64,7 +70,13 @@ def available_scopes():
     for f, actions in PSEUDO_FEATURES.items():
         scopes.append(f"{f}:*")
         scopes.extend(f"{f}:{a}" for a in actions)
+    scopes.extend(EXPLICIT_SCOPES)
     return scopes
+
+
+def has_exact_scope(scopes, scope):
+    """Exact-token check for the explicit-opt-in scopes (wildcards deliberately don't count)."""
+    return scope in (scopes or [])
 
 
 def describe_scopes():
