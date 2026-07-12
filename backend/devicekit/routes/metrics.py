@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request
 
 from devicekit.mixins.metrics_history import QUERYABLE_METRICS
 from devicekit.models.metric_alert import MetricAlertRule
+from devicekit.services.scopes import require_scope
 
 
 def make_blueprint(client, limiter):
@@ -23,6 +24,7 @@ def make_blueprint(client, limiter):
         return metric in QUERYABLE_METRICS or (metric or '').startswith('extra.')
 
     @bp.route('/devices/<device_id>/metrics')
+    @require_scope('metrics:read')
     def device_metrics(device_id):
         metric = request.args.get('metric', 'battery_pct')
         period = request.args.get('period', '24h')
@@ -31,6 +33,7 @@ def make_blueprint(client, limiter):
         return jsonify(client.get_device_metrics(device_id, metric=metric, period=period))
 
     @bp.route('/devices/<device_id>/metrics/sparkline')
+    @require_scope('metrics:read')
     def device_metrics_sparkline(device_id):
         metric = request.args.get('metric', 'battery_pct')
         period = request.args.get('period', '24h')
@@ -40,6 +43,7 @@ def make_blueprint(client, limiter):
         return jsonify({'device_id': device_id, 'metric': metric, 'values': values})
 
     @bp.route('/fleet/metrics')
+    @require_scope('metrics:read')
     def fleet_metrics():
         metric = request.args.get('metric', 'battery_pct')
         period = request.args.get('period', '24h')
@@ -51,6 +55,7 @@ def make_blueprint(client, limiter):
             metric=metric, device_ids=device_ids, period=period))
 
     @bp.route('/fleet/metrics/sparklines')
+    @require_scope('metrics:read')
     def fleet_sparklines():
         metric = request.args.get('metric', 'battery_pct')
         period = request.args.get('period', '24h')
@@ -62,18 +67,21 @@ def make_blueprint(client, limiter):
             metric=metric, device_ids=device_ids, period=period))
 
     @bp.route('/metrics/catalog')
+    @require_scope('metrics:read')
     def metrics_catalog():
         """Discoverable list of queryable metrics for the UI selectors."""
         return jsonify({'metrics': sorted(QUERYABLE_METRICS)})
 
     # ── Threshold alert rules ──
     @bp.route('/metrics/alert-rules')
+    @require_scope('metrics:read')
     def alert_rules_list():
         device_id = request.args.get('device_id')
         rules = client.list_metric_alert_rules(device_id=device_id)
         return jsonify({'rules': rules, 'count': len(rules)})
 
     @bp.route('/metrics/alert-rules', methods=['POST'])
+    @require_scope('metrics:write')
     def alert_rules_create():
         data = request.get_json(silent=True) or {}
         for field in ('metric', 'op', 'value', 'event_key'):
@@ -91,6 +99,7 @@ def make_blueprint(client, limiter):
         return jsonify(rule), 201
 
     @bp.route('/metrics/alert-rules/<rule_id>', methods=['PUT'])
+    @require_scope('metrics:write')
     def alert_rules_update(rule_id):
         data = request.get_json(silent=True) or {}
         try:
@@ -102,12 +111,14 @@ def make_blueprint(client, limiter):
         return jsonify(rule)
 
     @bp.route('/metrics/alert-rules/<rule_id>', methods=['DELETE'])
+    @require_scope('metrics:write')
     def alert_rules_delete(rule_id):
         if not client.delete_metric_alert_rule(rule_id):
             return jsonify({'error': 'Rule not found'}), 404
         return jsonify({'status': 'deleted'})
 
     @bp.route('/metrics/alert-rules/ops')
+    @require_scope('metrics:read')
     def alert_rules_ops():
         return jsonify({'ops': list(MetricAlertRule.OPS)})
 

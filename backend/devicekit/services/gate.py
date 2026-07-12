@@ -6,9 +6,13 @@ Factored out of ``api_app``'s ``before_request`` so the real app and the test-su
 caller turns into a JSON response.
 
 The order of checks: public paths → the agent-token machine axis → principal resolution → the
-per-feature write gate.
+per-feature write gate (users) or per-scope gate (``dk_`` keys, plan 21).
+
+Paths are version-stripped first, so the ``/api/v1`` mirror (plan 21) authorizes exactly like
+the bare mount — one decision function for both surfaces.
 """
 from devicekit.services.principal import feature_for_path
+from devicekit.services.scopes import scope_allows, scope_for_request, strip_version
 
 # Reachable without an authenticated principal: health for liveness, and the auth-discovery
 # endpoints so the SPA can learn *whether* login is required before it has a token.
@@ -17,10 +21,9 @@ PUBLIC_PATHS = ('/health', '/auth/login', '/auth/logout', '/auth/session')
 _WRITE_METHODS = ('POST', 'PUT', 'DELETE', 'PATCH')
 
 
-def _is_public_invitation(request):
+def _is_public_invitation(path):
     """The invitation preview/accept flow runs before the user has an account, so it is public.
     Admin invitation management (list/create/revoke) is NOT — it lacks these suffixes."""
-    path = request.path
     return path.startswith('/invitations/') and (
         path.endswith('/preview') or path.endswith('/accept'))
 
@@ -31,12 +34,13 @@ def authorize(client, request):
     Returns ``(principal, error)``. ``error`` is ``None`` when the request may proceed, else an
     ``({'error': msg}, status_code)`` pair. ``principal`` is always set except on a hard auth
     failure (``None`` with a 401)."""
-    if request.path in PUBLIC_PATHS or request.method == 'OPTIONS' \
-            or _is_public_invitation(request):
+    path = strip_version(request.path)
+    if path in PUBLIC_PATHS or request.method == 'OPTIONS' \
+            or _is_public_invitation(path):
         return client.anonymous_principal(), None
 
     # Agent-device endpoints authenticate on the machine token, orthogonal to human RBAC.
-    if request.path.startswith('/agent-device/'):
+    if path.startswith('/agent-device/'):
         token = request.headers.get('X-Agent-Token', '')
         if not client.validate_agent_token(token):
             return None, ({'error': 'Invalid agent token'}, 401)
@@ -52,8 +56,15 @@ def authorize(client, request):
     if resolver is not None:
         principal.workspace_id = resolver(request, principal)
 
-    if request.method in _WRITE_METHODS:
-        feature = feature_for_path(request.path)
+    if principal.scopes is not None and not principal.full_access:
+        # Scoped ``dk_`` keys (plan 21): reads need ``<feature>:read``, writes the catalog
+        # verb for the path (``devices:command``, ``automations:run``, …). Uniform across
+        # the bare and /api/v1 mounts.
+        required = scope_for_request(path, request.method)
+        if required and not scope_allows(principal.scopes, required):
+            return principal, ({'error': f'Missing required scope: {required}'}, 403)
+    elif request.method in _WRITE_METHODS:
+        feature = feature_for_path(path)
         if feature and not principal.can(feature, 'write'):
             return principal, ({'error': 'Insufficient permissions'}, 403)
 

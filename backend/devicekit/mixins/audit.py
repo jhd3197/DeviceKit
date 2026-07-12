@@ -12,6 +12,7 @@ import logging
 from devicekit.db import session_scope
 from devicekit.models.audit_log import AuditLog
 from devicekit.services.audit import redact, client_ip, user_agent as _ua
+from devicekit.services.scopes import strip_version
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class AuditMixin:
         events (register/claim/rotate) are logged explicitly by their routes."""
         if request.method not in _AUDIT_METHODS or response.status_code >= 500:
             return
-        if request.path.startswith("/agent-device/"):
+        if strip_version(request.path).startswith("/agent-device/"):
             return
         user_id = getattr(principal, "user_id", None)
         username = getattr(principal, "username", None)

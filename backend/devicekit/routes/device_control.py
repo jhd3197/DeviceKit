@@ -4,6 +4,8 @@ import requests
 import logging
 from flask import Blueprint, jsonify, request, Response
 
+from devicekit.services.scopes import require_scope
+
 logger = logging.getLogger(__name__)
 
 
@@ -12,6 +14,7 @@ def make_blueprint(client, limiter):
 
     @bp.route('/devices/<device_id>/adb', methods=['POST'])
     @limiter.limit("30 per minute")
+    @require_scope('devices:command')
     def device_adb(device_id):
         data = request.get_json(silent=True) or {}
         command = data.get('command', '')
@@ -26,6 +29,7 @@ def make_blueprint(client, limiter):
 
     @bp.route('/devices/<device_id>/reboot', methods=['POST'])
     @limiter.limit("5 per minute")
+    @require_scope('devices:command')
     def device_reboot(device_id):
         try:
             client.reboot_device(device=device_id)
@@ -35,6 +39,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/screenshot')
+    @require_scope('devices:read')
     def device_screenshot(device_id):
         try:
             data = client.take_screenshot(device_id)
@@ -45,6 +50,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/tap', methods=['POST'])
+    @require_scope('devices:command')
     def device_tap(device_id):
         data = request.get_json(silent=True) or {}
         x = data.get('x')
@@ -59,6 +65,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/press', methods=['POST'])
+    @require_scope('devices:command')
     def device_press(device_id):
         data = request.get_json(silent=True) or {}
         action = data.get('action')
@@ -72,6 +79,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/swipe', methods=['POST'])
+    @require_scope('devices:command')
     def device_swipe(device_id):
         data = request.get_json(silent=True) or {}
         duration = int(data.get('duration', 400))
@@ -108,6 +116,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/battery')
+    @require_scope('devices:read')
     def device_battery(device_id):
         try:
             info = client.get_device_battery(device=device_id)
@@ -116,6 +125,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/diagnostics')
+    @require_scope('devices:read')
     def device_diagnostics(device_id):
         """Return device diagnostics, preferring agent-sourced metrics when available."""
         try:
@@ -175,6 +185,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/properties')
+    @require_scope('devices:read')
     def device_properties(device_id):
         try:
             def prop(key):
@@ -194,6 +205,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/files')
+    @require_scope('devices:read')
     def device_files(device_id):
         path = request.args.get('path', '/sdcard')
         # Try agent HTTP first
@@ -242,6 +254,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/files/search')
+    @require_scope('devices:read')
     def device_files_search(device_id):
         """Proxy file search to agent."""
         agent_data = client.find_agent_device(device_id)
@@ -261,6 +274,7 @@ def make_blueprint(client, limiter):
 
     @bp.route('/devices/<device_id>/files/upload', methods=['POST'])
     @limiter.limit("20 per minute")
+    @require_scope('devices:command')
     def device_files_upload(device_id):
         """Proxy file upload to agent."""
         agent_data = client.find_agent_device(device_id)
@@ -284,6 +298,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/files/download')
+    @require_scope('devices:read')
     def device_files_download(device_id):
         """Proxy file download from agent."""
         agent_data = client.find_agent_device(device_id)

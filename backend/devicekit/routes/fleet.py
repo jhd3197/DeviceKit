@@ -3,16 +3,20 @@ import time
 
 from flask import Blueprint, jsonify, request
 
+from devicekit.services.scopes import require_scope
+
 
 def make_blueprint(client, limiter):
     bp = Blueprint('fleet', __name__)
 
     @bp.route('/fleet/groups')
+    @require_scope('devices:read')
     def fleet_groups_list():
         groups = client.list_device_groups()
         return jsonify({'groups': groups, 'count': len(groups)})
 
     @bp.route('/fleet/groups', methods=['POST'])
+    @require_scope('fleet:admin')
     def fleet_groups_create():
         data = request.get_json(silent=True) or {}
         name = data.get('name', '')
@@ -28,6 +32,7 @@ def make_blueprint(client, limiter):
         return jsonify(group), 201
 
     @bp.route('/fleet/groups/<group_id>')
+    @require_scope('devices:read')
     def fleet_groups_get(group_id):
         group = client.get_device_group(group_id)
         if group:
@@ -35,6 +40,7 @@ def make_blueprint(client, limiter):
         return jsonify({'error': 'Group not found'}), 404
 
     @bp.route('/fleet/groups/<group_id>', methods=['PUT'])
+    @require_scope('fleet:admin')
     def fleet_groups_update(group_id):
         data = request.get_json(silent=True) or {}
         result = client.update_device_group(group_id, data)
@@ -43,12 +49,14 @@ def make_blueprint(client, limiter):
         return jsonify(result)
 
     @bp.route('/fleet/groups/<group_id>', methods=['DELETE'])
+    @require_scope('fleet:admin')
     def fleet_groups_delete(group_id):
         if client.delete_device_group(group_id):
             return '', 204
         return jsonify({'error': 'Group not found'}), 404
 
     @bp.route('/fleet/groups/<group_id>/devices', methods=['POST'])
+    @require_scope('fleet:admin')
     def fleet_group_add_device(group_id):
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id', '')
@@ -60,6 +68,7 @@ def make_blueprint(client, limiter):
         return jsonify(result)
 
     @bp.route('/fleet/groups/<group_id>/devices/<device_id>', methods=['DELETE'])
+    @require_scope('fleet:admin')
     def fleet_group_remove_device(group_id, device_id):
         result = client.remove_device_from_group(group_id, device_id)
         if result is None:
@@ -69,6 +78,7 @@ def make_blueprint(client, limiter):
     # ── Bulk Actions ──
     @bp.route('/fleet/groups/<group_id>/bulk/command', methods=['POST'])
     @limiter.limit("10 per minute")
+    @require_scope('fleet:admin')
     def fleet_bulk_command(group_id):
         group = client.get_device_group(group_id)
         if not group:
@@ -94,6 +104,7 @@ def make_blueprint(client, limiter):
 
     @bp.route('/fleet/groups/<group_id>/bulk/install', methods=['POST'])
     @limiter.limit("10 per minute")
+    @require_scope('fleet:admin')
     def fleet_bulk_install(group_id):
         group = client.get_device_group(group_id)
         if not group:
@@ -115,6 +126,7 @@ def make_blueprint(client, limiter):
 
     @bp.route('/fleet/groups/<group_id>/bulk/reboot', methods=['POST'])
     @limiter.limit("10 per minute")
+    @require_scope('fleet:admin')
     def fleet_bulk_reboot(group_id):
         group = client.get_device_group(group_id)
         if not group:
@@ -136,12 +148,14 @@ def make_blueprint(client, limiter):
 
     # ── Per-Device Tags ──
     @bp.route('/devices/<device_id>/tags')
+    @require_scope('devices:read')
     def device_tags_get(device_id):
         tags = client.get_device_tags(device_id)
         groups = client.get_groups_for_device(device_id)
         return jsonify({'device_id': device_id, 'tags': tags, 'groups': groups})
 
     @bp.route('/devices/<device_id>/tags', methods=['PUT'])
+    @require_scope('devices:write')
     def device_tags_update(device_id):
         data = request.get_json(silent=True) or {}
         tags = data.get('tags', [])
@@ -150,6 +164,7 @@ def make_blueprint(client, limiter):
 
     # ── Device Locking ──
     @bp.route('/devices/<device_id>/lock', methods=['POST'])
+    @require_scope('devices:write')
     def device_lock(device_id):
         data = request.get_json(silent=True) or {}
         owner = data.get('owner', '')
@@ -163,6 +178,7 @@ def make_blueprint(client, limiter):
         return jsonify(lock_info)
 
     @bp.route('/devices/<device_id>/unlock', methods=['POST'])
+    @require_scope('devices:write')
     def device_unlock(device_id):
         data = request.get_json(silent=True) or {}
         owner = data.get('owner')
@@ -175,12 +191,14 @@ def make_blueprint(client, limiter):
         return jsonify({'status': 'unlocked', 'device_id': device_id})
 
     @bp.route('/devices/available')
+    @require_scope('devices:read')
     def devices_available():
         available = client.get_available_devices()
         return jsonify({'devices': available, 'count': len(available)})
 
     # ── Fleet Health ──
     @bp.route('/fleet/health')
+    @require_scope('devices:read')
     def fleet_health():
         connected = client.get_devices()
         now = time.time()
@@ -260,6 +278,7 @@ def make_blueprint(client, limiter):
         })
 
     @bp.route('/fleet/compare')
+    @require_scope('devices:read')
     def fleet_compare():
         device_ids = request.args.get('devices', '')
         ids = [d.strip() for d in device_ids.split(',') if d.strip()][:4]

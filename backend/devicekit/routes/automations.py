@@ -3,6 +3,8 @@ import base64
 
 from flask import Blueprint, jsonify, request, Response, g
 
+from devicekit.services.scopes import require_scope
+
 
 def _workspace_id():
     """The active workspace the gate attached to the principal (plan 20 part 4), or None."""
@@ -13,16 +15,19 @@ def make_blueprint(client, limiter):
     bp = Blueprint('automations', __name__)
 
     @bp.route('/automations/step-types')
+    @require_scope('automations:read')
     def automation_step_types():
         return jsonify(client.get_step_types())
 
     @bp.route('/automations')
+    @require_scope('automations:read')
     def automations_list():
         # Narrowed to the active workspace when one is set; otherwise unchanged (all automations).
         automations = client.list_automations(workspace_id=_workspace_id())
         return jsonify({'automations': automations, 'count': len(automations)})
 
     @bp.route('/automations', methods=['POST'])
+    @require_scope('automations:write')
     def automations_create():
         data = request.get_json(silent=True) or {}
         name = data.get('name', '')
@@ -38,6 +43,7 @@ def make_blueprint(client, limiter):
         return jsonify(automation), 201
 
     @bp.route('/automations/<automation_id>')
+    @require_scope('automations:read')
     def automations_get(automation_id):
         automation = client.get_automation(automation_id)
         if automation:
@@ -45,6 +51,7 @@ def make_blueprint(client, limiter):
         return jsonify({'error': 'Automation not found'}), 404
 
     @bp.route('/automations/<automation_id>', methods=['PUT'])
+    @require_scope('automations:write')
     def automations_update(automation_id):
         data = request.get_json(silent=True) or {}
         result = client.update_automation(automation_id, data)
@@ -54,12 +61,14 @@ def make_blueprint(client, limiter):
         return jsonify(updated)
 
     @bp.route('/automations/<automation_id>', methods=['DELETE'])
+    @require_scope('automations:write')
     def automations_delete(automation_id):
         if client.delete_automation(automation_id):
             return '', 204
         return jsonify({'error': 'Automation not found'}), 404
 
     @bp.route('/automations/<automation_id>/run', methods=['POST'])
+    @require_scope('automations:run')
     def automations_run(automation_id):
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
@@ -75,6 +84,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/runs')
+    @require_scope('automations:read')
     def automation_runs_list():
         automation_id = request.args.get('automation_id')
         device_id = request.args.get('device_id')
@@ -87,6 +97,7 @@ def make_blueprint(client, limiter):
         return jsonify({'runs': runs, 'count': len(runs)})
 
     @bp.route('/automations/runs/<run_id>')
+    @require_scope('automations:read')
     def automation_runs_get(run_id):
         run = client.get_automation_run(run_id)
         if run:
@@ -94,6 +105,7 @@ def make_blueprint(client, limiter):
         return jsonify({'error': 'Run not found'}), 404
 
     @bp.route('/automations/runs/<run_id>/cancel', methods=['POST'])
+    @require_scope('automations:run')
     def automation_runs_cancel(run_id):
         if client.cancel_automation_run(run_id):
             return jsonify({'status': 'cancelling'})
@@ -101,6 +113,7 @@ def make_blueprint(client, limiter):
 
     # ── Recording ──
     @bp.route('/automations/record/start', methods=['POST'])
+    @require_scope('automations:write')
     def automation_record_start():
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
@@ -113,6 +126,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/record/stop', methods=['POST'])
+    @require_scope('automations:write')
     def automation_record_stop():
         data = request.get_json(silent=True) or {}
         session_id = data.get('session_id')
@@ -127,6 +141,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/record/action', methods=['POST'])
+    @require_scope('automations:write')
     def automation_record_action():
         data = request.get_json(silent=True) or {}
         session_id = data.get('session_id')
@@ -143,12 +158,14 @@ def make_blueprint(client, limiter):
 
     # ── Schedules ──
     @bp.route('/automations/schedules')
+    @require_scope('automations:read')
     def automation_schedules_list():
         automation_id = request.args.get('automation_id')
         schedules = client.list_schedules(automation_id=automation_id)
         return jsonify({'schedules': schedules, 'count': len(schedules)})
 
     @bp.route('/automations/schedules', methods=['POST'])
+    @require_scope('automations:write')
     def automation_schedules_create():
         data = request.get_json(silent=True) or {}
         automation_id = data.get('automation_id')
@@ -170,6 +187,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/schedules/<schedule_id>', methods=['PUT'])
+    @require_scope('automations:write')
     def automation_schedules_update(schedule_id):
         data = request.get_json(silent=True) or {}
         result = client.update_schedule(schedule_id, data)
@@ -178,6 +196,7 @@ def make_blueprint(client, limiter):
         return jsonify(result)
 
     @bp.route('/automations/schedules/<schedule_id>', methods=['DELETE'])
+    @require_scope('automations:write')
     def automation_schedules_delete(schedule_id):
         if client.delete_schedule(schedule_id):
             return '', 204
@@ -185,6 +204,7 @@ def make_blueprint(client, limiter):
 
     # ── Failure Screenshots ──
     @bp.route('/automations/runs/<run_id>/screenshots/<int:step_index>')
+    @require_scope('automations:read')
     def automation_run_screenshot(run_id, step_index):
         run = client.get_automation_run(run_id)
         if not run:
@@ -201,6 +221,7 @@ def make_blueprint(client, limiter):
 
     # ── Clone / Export / Import ──
     @bp.route('/automations/<automation_id>/clone', methods=['POST'])
+    @require_scope('automations:write')
     def automations_clone(automation_id):
         data = request.get_json(silent=True) or {}
         try:
@@ -212,6 +233,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/<automation_id>/export')
+    @require_scope('automations:read')
     def automations_export(automation_id):
         try:
             exported = client.export_automation(automation_id)
@@ -222,6 +244,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/import', methods=['POST'])
+    @require_scope('automations:write')
     def automations_import():
         data = request.get_json(silent=True) or {}
         if not data.get('name'):
@@ -234,6 +257,7 @@ def make_blueprint(client, limiter):
 
     # ── NL Automation (AI-powered) ──
     @bp.route('/automations/generate', methods=['POST'])
+    @require_scope('automations:write')
     def automations_generate():
         data = request.get_json(silent=True) or {}
         description = data.get('description', '')
@@ -247,6 +271,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/refine-step', methods=['POST'])
+    @require_scope('automations:write')
     def automations_refine_step():
         data = request.get_json(silent=True) or {}
         step = data.get('step')
@@ -261,6 +286,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/<automation_id>/explain')
+    @require_scope('automations:read')
     def automations_explain(automation_id):
         try:
             result = client.explain_automation(automation_id)
@@ -271,6 +297,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/ui-hierarchy')
+    @require_scope('devices:read')
     def device_ui_hierarchy(device_id):
         try:
             hierarchy = client.fetch_ui_hierarchy(device_id)

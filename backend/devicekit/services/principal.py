@@ -61,11 +61,19 @@ class Principal:
 
 
 def _scope_allows(scopes, feature, action):
-    """Wildcard scope matching (plan 20 part 2). ``devices:*`` ⇒ ``devices:read``; ``*`` ⇒ all."""
+    """Wildcard scope matching (plan 20 part 2). ``devices:*`` ⇒ ``devices:read``; ``*`` ⇒ all.
+
+    ``<feature>:write`` also satisfies the feature's narrower verbs (``read``, and the plan-21
+    catalog verbs like ``devices:command`` / ``automations:run``) — the scope mirror of the
+    matrix rule that write implies read. The reverse never holds: a ``devices:command`` key
+    cannot pass a ``devices:write`` check.
+    """
     wanted = f"{feature}:{action}"
     for scope in scopes or []:
         if scope in ("*", "*:*", wanted, f"{feature}:*"):
             return True
+    if action != "write":
+        return _scope_allows(scopes, feature, "write")
     return False
 
 

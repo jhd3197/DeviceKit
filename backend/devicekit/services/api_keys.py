@@ -6,13 +6,12 @@ Kept separate from the mixin so the crypto/format decisions live in one place. A
 import hashlib
 import secrets
 
-from devicekit.services.permissions import FEATURES
+# The assignable-scope catalog moved to the shared scope layer (plan 21) — it now includes
+# the device-oriented verbs (devices:command, automations:run, …) beyond read/write pairs.
+from devicekit.services.scopes import available_scopes  # noqa: F401  (re-export, back-compat)
 
 KEY_PREFIX = "dk_"          # avoids ``sk_``, which reads as an OpenAI key
 _PREFIX_DISPLAY_LEN = 11    # "dk_" + 8 chars, stored for display
-
-# Valid scope tokens: "*", "<feature>:*", "<feature>:read", "<feature>:write".
-_ACTIONS = ("read", "write")
 
 
 def generate_key():
@@ -27,15 +26,6 @@ def hash_key(raw):
 
 def looks_like_key(raw):
     return isinstance(raw, str) and raw.startswith(KEY_PREFIX)
-
-
-def available_scopes():
-    """The full catalog of assignable scopes, for the key-creation UI."""
-    scopes = ["*"]
-    for f in FEATURES:
-        scopes.append(f"{f}:*")
-        scopes.extend(f"{f}:{a}" for a in _ACTIONS)
-    return scopes
 
 
 def validate_scopes(scopes):
