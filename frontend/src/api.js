@@ -563,6 +563,29 @@ export const api = {
     request(`/agent-device/${id}/survey`, { method: 'POST', body: JSON.stringify(body) }),
   getAgentVersions: () => request('/agent-device/versions'),
 
+  // OTA agent updates (plan 25 part 3)
+  getOtaPubkey: () => request('/agent-device/ota/pubkey'),
+  getOtaReleases: () => request('/agent-device/ota/releases'),
+  createOtaRelease: (body) =>
+    request('/agent-device/ota/releases', { method: 'POST', body: JSON.stringify(body) }),
+  yankOtaRelease: (id) =>
+    request(`/agent-device/ota/releases/${id}/yank`, { method: 'POST' }),
+  getOtaRollouts: (status) =>
+    request(`/agent-device/ota/rollouts${status ? `?status=${status}` : ''}`),
+  getOtaRollout: (id) => request(`/agent-device/ota/rollouts/${id}`),
+  createOtaRollout: (body) =>
+    request('/agent-device/ota/rollouts', { method: 'POST', body: JSON.stringify(body) }),
+  rollbackOtaRollout: (id, reason) =>
+    request(`/agent-device/ota/rollouts/${id}/rollback`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  pauseOtaRollout: (id, paused) =>
+    request(`/agent-device/ota/rollouts/${id}/pause`, {
+      method: 'POST',
+      body: JSON.stringify({ paused }),
+    }),
+
   // Metrics History (plan 08)
   getMetricsCatalog: () => request('/metrics/catalog'),
   getDeviceMetrics: (id, metric = 'battery_pct', period = '24h') =>
@@ -720,6 +743,9 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('stream_viewer', (e) => {
     handlers.onStreamViewer?.(JSON.parse(e.data))
+  })
+  es.addEventListener('ota', (e) => {
+    handlers.onOta?.(JSON.parse(e.data))
   })
   es.addEventListener('job', (e) => {
     handlers.onJob?.(JSON.parse(e.data))

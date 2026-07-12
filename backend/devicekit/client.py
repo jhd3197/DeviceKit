@@ -29,6 +29,7 @@ from devicekit.mixins.fleet_query import FleetQueryMixin
 from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
 from devicekit.mixins.agent_survey import AgentSurveyMixin
+from devicekit.mixins.agent_ota import AgentOtaMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.extension_ai import ExtensionAiMixin
@@ -66,6 +67,7 @@ class Client(
     DebugBundleMixin,
     AgentDeviceMixin,
     AgentSurveyMixin,
+    AgentOtaMixin,
     PairingMixin,
     ExtensionsMixin,
     ExtensionAiMixin,
@@ -133,6 +135,13 @@ class Client(
             self.init_fleet_policy()
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Fleet policy init skipped: {e}")
+
+        # OTA agent updates (plan 25): register the rollout-advance job kind + schedule and
+        # the OTA notification events (after jobs + notifications are live).
+        try:
+            self.init_agent_ota()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Agent OTA init skipped: {e}")
 
         # Apply any persisted AI provider keys to the environment so Prompture picks them
         # up without a restart (plan 12 settings).

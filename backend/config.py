@@ -46,6 +46,17 @@ AGENT_ENROLLMENT_REQUIRED = os.getenv("AGENT_ENROLLMENT_REQUIRED", "false").lowe
 # Default per-command dispatch timeout (seconds) for synchronous agent commands.
 AGENT_COMMAND_TIMEOUT = float(os.getenv("AGENT_COMMAND_TIMEOUT", "30"))
 
+# OTA agent updates (plan 25 part 3)
+# Ed25519 private key used to sign release manifests. Generated + persisted on first use.
+# The agent pins the matching public key. Keep this file out of backups' plaintext.
+OTA_SIGNING_KEY_PATH = os.getenv(
+    "DEVICEKIT_OTA_KEY_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "ota", "signing_key.pem"))
+# How often the scheduled advance job progresses active rollouts (canary→staged→full).
+OTA_ROLLOUT_ADVANCE_INTERVAL = int(os.getenv("DEVICEKIT_OTA_ADVANCE_INTERVAL", "60"))
+# Crash-loop backoff: a device that fails an install this many times stops being offered it.
+OTA_MAX_UPDATE_ATTEMPTS = int(os.getenv("DEVICEKIT_OTA_MAX_UPDATE_ATTEMPTS", "3"))
+
 # AI Agent (Prompture)
 PROMPTURE_DEFAULT_MODEL = os.environ.get("PROMPTURE_DEFAULT_MODEL", "claude/claude-sonnet-4-20250514")
 
