@@ -1,6 +1,6 @@
 # Plan 28 — Appearance v2: Theme Modes, Design Tokens & White-Label
 
-**Status:** 📝 planned
+**Status:** 🚧 in progress — Phase 1 ✅ (tokens + Tailwind var mapping, dark byte-identical)
 **Inspired by:** ServerKit's theming stack — `styles/_theme-variables.scss` (one token
 sheet: `:root` dark defaults, `[data-theme="light"]` overrides, a `prefers-color-scheme`
 block for `system`), `contexts/ThemeContext.jsx` (mode = `data-theme` attribute on `<html>`
@@ -86,9 +86,18 @@ Plan 12 shipped the accent ramp but deliberately deferred everything else:
 
 | Phase | Delivers | Proves |
 |---|---|---|
-| 1 | Surface/border/text/semantic tokens + Tailwind var mapping, dark values unchanged | pixel-identical dark UI (screenshot diff a few views); every color now has one source of truth |
+| 1 ✅ | Surface/border/text/semantic tokens + Tailwind var mapping, dark values unchanged | pixel-identical dark UI (screenshot diff a few views); every color now has one source of truth |
 | 2 | Light + System modes, `bootTheme()`, `appearance.theme` wired, mode picker | switching to Light recolors instantly with no reload and survives restart in another browser; System follows an OS toggle live |
 | 3 | 8+1 presets + color input, white-label brand name/logo, palette toggle-theme action | an admin renames the instance and uploads a mark; login + sidebar + tab title follow; reset returns to the purple phone |
+
+> **Phase 1 landed (2026-07-12).** Token block added to `index.css :root` as `R G B`
+> triplets (dark = today's exact pure-black values); `body`, the `.bg-card/.bg-card-alt/
+> .border-main/.border-alt/.terminal-bg` component classes, scrollbar thumb, and the
+> test/step semantic borders now read `rgb(var(--token))`; `tailwind.config.js` colors
+> point at the vars (class names unchanged → zero view edits). Dark is provably
+> byte-identical: each token value equals its former literal. **Deviations:** `.tab-active`
+> color kept literal `#fff` (revisit in the Phase-2 light sweep); tramo `--tr-*` vars left
+> pinned to dark hex — the "embedded dark editor in a light app is acceptable v1" decision.
 
 Phase 1 must land alone and be verified pixel-identical before 2 starts.
 

@@ -12,6 +12,34 @@
   --accent-bg: 6 78 59;
 }
 
+/* Design tokens (plan 28 part 1) — the single source of truth for every surface, border,
+   text, and semantic color. Values are "R G B" triplets so Tailwind's
+   rgb(var(--token) / <alpha-value>) mapping (tailwind.config.js) drives opacity utilities.
+   These DARK defaults are DeviceKit's historical pure-black values byte-for-byte — the
+   black-on-black identity is deliberate. Light mode (plan 28 part 2) overrides this block
+   under [data-theme="light"]; dark needs no data-theme attribute to stay correct. */
+:root {
+  /* Surfaces */
+  --bg-body: 0 0 0; /* #000000 */
+  --bg-card: 10 10 10; /* #0a0a0a */
+  --bg-card-alt: 5 5 5; /* #050505 */
+  --bg-hover: 24 24 27; /* #18181b — zinc-900, the nav/list hover wash */
+  --bg-terminal: 2 2 2; /* #020202 */
+  /* Borders */
+  --border-main: 26 26 26; /* #1a1a1a */
+  --border-alt: 46 46 46; /* #2e2e2e */
+  /* Text */
+  --text-primary: 237 237 237; /* #ededed */
+  --text-secondary: 161 161 170; /* #a1a1aa — zinc-400 */
+  /* Semantic (theme-independent by default; light may darken for contrast) */
+  --ok: 16 185 129; /* emerald #10b981 */
+  --warn: 245 158 11; /* amber #f59e0b */
+  --err: 239 68 68; /* red #ef4444 */
+  --info: 59 130 246; /* blue #3b82f6 */
+  /* Scrollbar */
+  --scrollbar-thumb: 34 34 34; /* #222 */
+}
+
 /* tramo editor theme (plan 22 phase 6). The embedded editor is styled entirely by
    --tr-* variables (light defaults); overriding them at :root maps it onto DeviceKit's
    dark palette — :root, not a wrapper, because tramo portals overlays to <body>. */
@@ -36,8 +64,8 @@
 @layer base {
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background-color: #000000;
-    color: #ededed;
+    background-color: rgb(var(--bg-body));
+    color: rgb(var(--text-primary));
     margin: 0;
   }
 
@@ -48,23 +76,23 @@
 
 @layer components {
   .bg-card {
-    background-color: #0a0a0a;
+    background-color: rgb(var(--bg-card));
   }
 
   .bg-card-alt {
-    background-color: #050505;
+    background-color: rgb(var(--bg-card-alt));
   }
 
   .border-main {
-    border-color: #1a1a1a;
+    border-color: rgb(var(--border-main));
   }
 
   .border-alt {
-    border-color: #2e2e2e;
+    border-color: rgb(var(--border-alt));
   }
 
   .terminal-bg {
-    background-color: #020202;
+    background-color: rgb(var(--bg-terminal));
   }
 
   .tab-active {
@@ -80,7 +108,7 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #222;
+  background: rgb(var(--scrollbar-thumb));
   border-radius: 5px;
 }
 
@@ -116,29 +144,29 @@
   scroll-margin: 6rem;
 }
 
-/* Test result borders */
+/* Test result borders — semantic tokens (plan 28). */
 .test-pass {
-  color: #10b981;
-  border-left: 2px solid #10b981;
+  color: rgb(var(--ok));
+  border-left: 2px solid rgb(var(--ok));
 }
 .test-fail {
-  color: #ef4444;
-  border-left: 2px solid #ef4444;
+  color: rgb(var(--err));
+  border-left: 2px solid rgb(var(--err));
 }
 .test-running {
-  color: #3b82f6;
-  border-left: 2px solid #3b82f6;
+  color: rgb(var(--info));
+  border-left: 2px solid rgb(var(--info));
 }
 
-/* Step status borders */
+/* Step status borders — semantic tokens (plan 28). */
 .step-completed {
-  border-left: 2px solid #10b981;
+  border-left: 2px solid rgb(var(--ok));
 }
 .step-failed {
-  border-left: 2px solid #ef4444;
+  border-left: 2px solid rgb(var(--err));
 }
 .step-running {
-  border-left: 2px solid #3b82f6;
+  border-left: 2px solid rgb(var(--info));
 }
 .step-skipped {
   border-left: 2px solid #525252;
