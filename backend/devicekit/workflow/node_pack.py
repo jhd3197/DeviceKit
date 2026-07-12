@@ -26,7 +26,41 @@ SUPPORTED_BUILTINS = [
     "manual-trigger", "webhook-trigger", "cron-trigger",
     "if", "switch", "merge", "for-each", "call-flow",
     "flow-input", "flow-output", "set-var",
+    "dk.event-trigger",
 ]
+
+
+def event_trigger_node_def(event_keys=None):
+    """The DeviceKit-pack event trigger — starts a run from a plan-06 bus event
+    (device.offline, device.battery.critical, automation.run.failed, …)."""
+    field = {"key": "event_key", "label": "Event", "optional": False,
+             "help": "Notification-bus event that starts this automation."}
+    if event_keys:
+        field.update({"type": "select",
+                      "options": [{"label": k, "value": k} for k in sorted(event_keys)]})
+    else:
+        field["type"] = "text"
+    return {
+        "id": "dk.event-trigger",
+        "name": "Event Trigger",
+        "category": "trigger",
+        "description": "Starts the workflow when a DeviceKit event fires "
+                       "(device offline, low battery, run failed, …).",
+        "icon": "Zap",
+        "color": "#8b5cf6",
+        "integrationId": "devicekit",
+        "operationName": "Event Trigger",
+        "inputs": [],
+        "outputs": [{"key": "out", "label": "Event", "type": "object"}],
+        "fields": [
+            field,
+            {"key": "cooldown_seconds", "type": "number", "label": "Cooldown (s)",
+             "optional": True, "default": 60,
+             "help": "Minimum seconds between runs started by this event "
+                     "(prevents notification storms)."},
+        ],
+        "group": "Triggers",
+    }
 
 
 def _field_from_param(key, schema):
@@ -82,13 +116,15 @@ def step_type_to_node_def(type_name, spec):
     }
 
 
-def build_node_pack(step_types):
+def build_node_pack(step_types, event_keys=None):
     """The full pack payload for ``GET /automations/node-pack``.
 
     ``step_types`` is ``client.get_step_types()`` — executor callables already
-    stripped."""
+    stripped. ``event_keys`` (the notification catalog) populates the event-trigger
+    select when available."""
     nodes = [step_type_to_node_def(name, spec)
              for name, spec in sorted(step_types.items())]
+    nodes.insert(0, event_trigger_node_def(event_keys))
     return {
         "integration": {
             "id": "devicekit",

@@ -70,6 +70,13 @@ class NotificationsMixin:
         """Emit a notification for ``event_key``. Non-blocking, safe to call from anywhere
         (jobs, request handlers, extensions). Never raises — a notification problem must not
         take down the caller (a run, a heartbeat)."""
+        # Event-triggered automations (plan 22 part 4): the same bus event may start
+        # runs. Best-effort and cheap — a no-match costs one in-memory index lookup.
+        if hasattr(self, "dispatch_event_triggers"):
+            try:
+                self.dispatch_event_triggers(event_key, data or {})
+            except Exception as e:
+                logger.warning("event-trigger dispatch(%s) failed: %s", event_key, e)
         try:
             return NotificationService.send(
                 event_key, data=data, recipient=recipient, subject_type=subject_type,

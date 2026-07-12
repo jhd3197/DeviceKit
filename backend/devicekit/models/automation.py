@@ -39,7 +39,9 @@ class Automation(Base):
             "updated_at": self.updated_at,
             "workspace_id": self.workspace_id,
             "graph": self.graph,
-            "webhook_token": self.webhook_token,
+            # The token itself is credential-like (it *is* the webhook auth) — expose
+            # presence here; the token string only via the webhook-token endpoints.
+            "has_webhook": bool(self.webhook_token),
         }
 
 

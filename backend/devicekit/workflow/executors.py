@@ -51,11 +51,21 @@ def _exec_cron_trigger(engine, node, inputs):
     return {"out": {"firedAt": time.time()}}
 
 
+def _exec_event_trigger(engine, node, inputs):
+    payload = inputs.get("in")
+    if payload in (None, ""):
+        payload = {"event": None, "data": {}}
+    return {"out": payload}
+
+
 _BUILTINS = {
     "manual-trigger": _exec_manual_trigger,
     "webhook-trigger": _exec_webhook_trigger,
     "cron-trigger": _exec_cron_trigger,
     "flow-input": _exec_manual_trigger,   # caller input, else config sample payload
+    # DeviceKit-pack trigger: a plan-06 bus event starts the run; the event payload
+    # arrives as the trigger and flows out unchanged.
+    "dk.event-trigger": _exec_event_trigger,
 }
 
 

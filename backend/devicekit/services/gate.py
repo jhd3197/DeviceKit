@@ -28,6 +28,12 @@ def _is_public_invitation(path):
         path.endswith('/preview') or path.endswith('/accept'))
 
 
+def _is_public_webhook(path):
+    """Inbound automation webhooks (plan 22 part 4): the unguessable token in the URL
+    *is* the auth — the route 404s on an unknown token. No principal, no scopes."""
+    return path.startswith('/hooks/')
+
+
 def authorize(client, request):
     """Resolve the principal and authorize the request.
 
@@ -36,7 +42,7 @@ def authorize(client, request):
     failure (``None`` with a 401)."""
     path = strip_version(request.path)
     if path in PUBLIC_PATHS or request.method == 'OPTIONS' \
-            or _is_public_invitation(path):
+            or _is_public_invitation(path) or _is_public_webhook(path):
         return client.anonymous_principal(), None
 
     # Agent-device endpoints authenticate on the machine token, orthogonal to human RBAC.

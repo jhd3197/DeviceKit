@@ -108,6 +108,52 @@ def make_blueprint(client, limiter):
             doc = stored['graph']
         return jsonify(client.validate_workflow_doc(doc))
 
+    # ── Triggers (plan 22 part 4) ──
+    @bp.route('/hooks/<token>', methods=['POST'])
+    @limiter.limit('30 per minute')
+    def webhook_trigger(token):
+        # Public by design: the unguessable token in the URL *is* the auth (the gate
+        # exempts /hooks/). Unknown tokens 404 without leaking which automations exist.
+        body = request.get_json(silent=True)
+        if body is None and request.data:
+            body = request.get_data(as_text=True)
+        try:
+            run_record = client.handle_webhook_trigger(
+                token, body=body, query=request.args.to_dict(),
+                headers=dict(request.headers))
+            return jsonify({'run_id': run_record['id'],
+                            'status': run_record['status']}), 201
+        except LookupError:
+            return jsonify({'error': 'Not found'}), 404
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @bp.route('/automations/<automation_id>/webhook-token')
+    @require_scope('automations:write')
+    def webhook_token_get(automation_id):
+        if not client.get_automation(automation_id):
+            return jsonify({'error': 'Automation not found'}), 404
+        token = client.get_webhook_token(automation_id)
+        return jsonify({'token': token, 'url': f'/hooks/{token}' if token else None})
+
+    @bp.route('/automations/<automation_id>/webhook-token', methods=['POST'])
+    @require_scope('automations:write')
+    def webhook_token_create(automation_id):
+        rotate = bool((request.get_json(silent=True) or {}).get('rotate'))
+        token = client.ensure_webhook_token(automation_id, rotate=rotate)
+        if token is None:
+            return jsonify({'error': 'Automation not found'}), 404
+        return jsonify({'token': token, 'url': f'/hooks/{token}'}), 201
+
+    @bp.route('/automations/<automation_id>/webhook-token', methods=['DELETE'])
+    @require_scope('automations:write')
+    def webhook_token_revoke(automation_id):
+        if client.revoke_webhook_token(automation_id):
+            return '', 204
+        return jsonify({'error': 'Automation not found'}), 404
+
     @bp.route('/automations/<automation_id>/run', methods=['POST'])
     @require_scope('automations:run')
     def automations_run(automation_id):

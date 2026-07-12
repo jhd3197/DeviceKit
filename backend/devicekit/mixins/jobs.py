@@ -99,6 +99,10 @@ class JobsMixin:
             self.register_job_kind("automation.run", self._job_run_automation)
         if hasattr(self, "_job_run_graph"):
             self.register_job_kind("automation.run_graph", self._job_run_graph)
+        if hasattr(self, "_job_trigger_cron"):
+            self.register_job_kind("automation.trigger.cron", self._job_trigger_cron)
+        if hasattr(self, "_job_dispatch_event"):
+            self.register_job_kind("automation.dispatch", self._job_dispatch_event)
         if hasattr(self, "_job_schedule_tick"):
             self.register_job_kind("automation.schedule.tick", self._job_schedule_tick)
         self.register_job_kind("bundle.retention.prune", self._job_prune_bundles)

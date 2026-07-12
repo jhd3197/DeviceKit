@@ -1,6 +1,6 @@
 # Plan 22 — Automation Engine v2: DAG + Triggers (tramo-powered)
 
-**Status:** 🚧 in progress — phases 1–3 shipped (see Phases table)
+**Status:** 🚧 in progress — phases 1–4 shipped (see Phases table)
 **Inspired by:** plan 18 calls the current engine "the linear automation engine" — an ordered list
 of steps with no branching, loops, parallelism, or sub-flows. Two sources shape the upgrade:
 
@@ -163,7 +163,7 @@ fleet wants — port the shape, fix these:
 | 1 | ✅ | `WorkflowDoc` storage + Kahn validation + Python topo executor + linear→graph compat shim + AST interpolation (`{{steps.*}}`) | graph engine runs tramo docs, no user migration |
 | 2 | ✅ | control-flow nodes (`if`, `merge`, bounded `for-each`, `call-flow`) + DeviceKit node pack generated from the step-type registry + typed vars | branching / loops / composition; registry speaks tramo |
 | 3 | ✅ | error contract: per-node `retry {count, delayMs, backoff}` + `runAfter: on-error/always` + compensation branches | flows fail safe, not silently |
-| 4 | ⏳ | triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run` | external + internal events start runs |
+| 4 | ✅ | triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run` | external + internal events start runs |
 | 5 | ⏳ | parallel device fan-out — `for-each` device branches as concurrency-capped jobs | "run across the fleet", bounded |
 | 6 | ⏳ | embed tramo editor (Canvas/RightRail/useWorkflow, node-pack endpoint wired, validate, live run view); stretch: NL patches | operators author visually in our own editor |
 

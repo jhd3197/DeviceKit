@@ -15,7 +15,7 @@ import time
 import uuid
 
 from devicekit.db import session_scope
-from devicekit.jobs.service import JobService
+from devicekit.jobs.service import JobService, ScheduledJobService
 from devicekit.models import Automation, AutomationRun
 from devicekit.workflow import (
     WorkflowEngine, build_node_pack, linear_steps_to_doc, validate_doc,
@@ -24,8 +24,18 @@ from devicekit.workflow.doc import is_workflow_doc
 
 logger = logging.getLogger(__name__)
 
+#: Headers never forwarded into {{trigger.headers.*}} — credential-bearing.
+_WEBHOOK_HEADER_DENYLIST = {
+    "authorization", "cookie", "x-api-key", "x-session-token", "x-agent-token",
+}
+
+#: Default seconds between event-triggered runs of the same automation (storm guard).
+EVENT_TRIGGER_COOLDOWN = 60
+
 
 class WorkflowMixin:
+    _event_trigger_index_cache = None   # event_key -> [automation ids]; None = dirty
+    _event_trigger_last = {}            # automation_id -> last event-run timestamp
 
     # ------------------------------------------------------------------
     # Graph storage + validation
@@ -47,7 +57,13 @@ class WorkflowMixin:
         """tramo NodeDefinitions for every registered step type (core + extensions),
         plus the list of tramo builtins the Python engine executes. The editor folds
         this into its registry next to ``BUILTIN_NODES`` (plan 22 part 2)."""
-        return build_node_pack(self.get_step_types())
+        event_keys = None
+        if hasattr(self, "list_notification_events"):
+            try:
+                event_keys = [e["event_key"] for e in self.list_notification_events()]
+            except Exception:
+                event_keys = None
+        return build_node_pack(self.get_step_types(), event_keys=event_keys)
 
     def validate_workflow_doc(self, doc):
         """Structural + Kahn validation (the backend authority behind
@@ -71,6 +87,7 @@ class WorkflowMixin:
             automation.updated_at = time.time()
             s.flush()
             result = automation.to_dict()
+        self.sync_automation_triggers(automation_id, doc)
         logger.info(f"Saved workflow graph for automation {automation_id} "
                     f"({len(doc.get('nodes', []))} nodes)")
         return result
@@ -239,3 +256,179 @@ class WorkflowMixin:
                 result["error"] or "")
         return {"run_id": run_id, "status": result["status"],
                 "completed_steps": run_record["completed_steps"]}
+
+    # ------------------------------------------------------------------
+    # Trigger sync — the doc's trigger nodes materialize as real trigger
+    # infrastructure (plan 22 part 4): webhook token, cron schedule, event index.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _find_trigger_nodes(doc, node_type):
+        return [n for n in (doc or {}).get("nodes", []) if n.get("type") == node_type]
+
+    def sync_automation_triggers(self, automation_id, doc):
+        """Reconcile trigger infrastructure with the saved doc: ensure/remove the cron
+        ScheduledJob and the webhook token, and invalidate the event-trigger index."""
+        # Cron — one plan-05 schedule per automation, keyed by name.
+        schedule_name = f"automation.cron.{automation_id}"
+        cron_nodes = self._find_trigger_nodes(doc, "cron-trigger")
+        if cron_nodes:
+            config = cron_nodes[0].get("config") or {}
+            expression = str(config.get("expression") or "").strip()
+            if expression:
+                ScheduledJobService.ensure(
+                    schedule_name, "automation.trigger.cron",
+                    cron=expression,
+                    payload={"automation_id": automation_id,
+                             "device_id": config.get("device_id")},
+                    owner_type="automation", owner_id=automation_id)
+            else:
+                ScheduledJobService.delete_by_name(schedule_name)
+        else:
+            ScheduledJobService.delete_by_name(schedule_name)
+
+        # Webhook — mint the token as soon as the doc declares the trigger, so the
+        # editor can show the URL immediately.
+        if self._find_trigger_nodes(doc, "webhook-trigger"):
+            self.ensure_webhook_token(automation_id)
+
+        WorkflowMixin._event_trigger_index_cache = None
+
+    def _cleanup_automation_triggers(self, automation_id):
+        """Called by delete_automation — drop the cron schedule + index entry."""
+        try:
+            ScheduledJobService.delete_by_name(f"automation.cron.{automation_id}")
+        except Exception:
+            pass
+        WorkflowMixin._event_trigger_index_cache = None
+
+    # ------------------------------------------------------------------
+    # Webhook trigger — POST /hooks/<token>; the token *is* the auth
+    # ------------------------------------------------------------------
+    def ensure_webhook_token(self, automation_id, rotate=False):
+        """Create (or rotate) the automation's inbound webhook token. Returns the
+        token string, or None if the automation doesn't exist."""
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            if not automation:
+                return None
+            if rotate or not automation.webhook_token:
+                automation.webhook_token = uuid.uuid4().hex
+            return automation.webhook_token
+
+    def get_webhook_token(self, automation_id):
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            return automation.webhook_token if automation else None
+
+    def revoke_webhook_token(self, automation_id):
+        with session_scope() as s:
+            automation = s.get(Automation, automation_id)
+            if not automation:
+                return False
+            automation.webhook_token = None
+        return True
+
+    def handle_webhook_trigger(self, token, body=None, query=None, headers=None):
+        """The ``POST /hooks/<token>`` handler: resolve the automation by token and
+        enqueue a run with the request wrapped as ``{{trigger.*}}``. Raises
+        ``LookupError`` on an unknown token (the route turns it into a 404)."""
+        with session_scope() as s:
+            row = (s.query(Automation)
+                   .filter(Automation.webhook_token == token)
+                   .first())
+            automation_id = row.id if row else None
+        if not automation_id:
+            raise LookupError("Unknown webhook token")
+        safe_headers = {k: v for k, v in (headers or {}).items()
+                        if k.lower() not in _WEBHOOK_HEADER_DENYLIST}
+        payload = {"body": body, "query": dict(query or {}), "headers": safe_headers}
+        device_id = None
+        if isinstance(body, dict) and body.get("device_id"):
+            device_id = body["device_id"]
+        elif (query or {}).get("device_id"):
+            device_id = query["device_id"]
+        return self.enqueue_run(automation_id, device_id=device_id,
+                                trigger_type="webhook", trigger=payload)
+
+    # ------------------------------------------------------------------
+    # Cron trigger — plan-05 ScheduledJob fires automation.trigger.cron
+    # ------------------------------------------------------------------
+    def _job_trigger_cron(self, job):
+        payload = job.get("payload", {})
+        automation_id = payload.get("automation_id")
+        if not automation_id:
+            return {"error": "missing automation_id"}
+        automation = self.get_automation(automation_id)
+        if not automation:
+            # The automation vanished — drop the orphaned schedule.
+            ScheduledJobService.delete_by_name(f"automation.cron.{automation_id}")
+            return {"skipped": "automation deleted"}
+        run = self.enqueue_run(automation_id, device_id=payload.get("device_id"),
+                               trigger_type="cron", trigger={"firedAt": time.time()})
+        return {"run_id": run["id"]}
+
+    # ------------------------------------------------------------------
+    # Event trigger — plan-06 bus events start runs (dk.event-trigger nodes)
+    # ------------------------------------------------------------------
+    def _event_trigger_index(self):
+        """``event_key → [(automation_id, cooldown_seconds, device_from_event)]`` for
+        every automation whose graph has a ``dk.event-trigger`` node. Cached until a
+        graph save/delete invalidates it (single-process, cheap to rebuild)."""
+        cached = WorkflowMixin._event_trigger_index_cache
+        if cached is not None:
+            return cached
+        index = {}
+        with session_scope() as s:
+            rows = s.query(Automation.id, Automation.graph).filter(
+                Automation.graph.isnot(None)).all()
+        for automation_id, graph in rows:
+            for node in self._find_trigger_nodes(graph or {}, "dk.event-trigger"):
+                config = node.get("config") or {}
+                event_key = str(config.get("event_key") or "").strip()
+                if not event_key:
+                    continue
+                try:
+                    cooldown = float(config.get("cooldown_seconds")
+                                     or EVENT_TRIGGER_COOLDOWN)
+                except (TypeError, ValueError):
+                    cooldown = EVENT_TRIGGER_COOLDOWN
+                index.setdefault(event_key, []).append((automation_id, cooldown))
+        WorkflowMixin._event_trigger_index_cache = index
+        return index
+
+    def dispatch_event_triggers(self, event_key, data):
+        """Called by ``notify_event`` for every bus event. When any automation is
+        wired to this event, enqueue one ``automation.dispatch`` job (the matching +
+        cooldown happens there, off the caller's thread). No-op otherwise."""
+        if event_key not in self._event_trigger_index():
+            return None
+        return JobService.enqueue(
+            "automation.dispatch",
+            payload={"event_key": event_key, "data": data},
+            max_attempts=1, owner_type="event_trigger", owner_id=event_key)
+
+    def _job_dispatch_event(self, job):
+        """Job handler for ``automation.dispatch`` — start every event-triggered
+        automation matching the event, honoring each one's cooldown."""
+        payload = job.get("payload", {})
+        event_key = payload.get("event_key") or ""
+        data = payload.get("data") or {}
+        entries = self._event_trigger_index().get(event_key, [])
+        now = time.time()
+        fired, cooled = [], 0
+        for automation_id, cooldown in entries:
+            last = WorkflowMixin._event_trigger_last.get(automation_id, 0)
+            if now - last < cooldown:
+                cooled += 1
+                continue
+            try:
+                run = self.enqueue_run(
+                    automation_id,
+                    device_id=data.get("device_id"),
+                    trigger_type="event",
+                    trigger={"event": event_key, "data": data})
+                WorkflowMixin._event_trigger_last[automation_id] = now
+                fired.append(run["id"])
+            except Exception as e:
+                logger.warning("Event trigger for %s failed: %s", automation_id, e)
+        return {"event": event_key, "fired": fired, "cooldown_skipped": cooled}

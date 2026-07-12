@@ -446,6 +446,12 @@ class AutomationMixin:
             s.add(automation)
             s.flush()
             result = automation.to_dict()
+        # A graph created directly (import/clone) may declare triggers — sync them.
+        if graph and hasattr(self, "sync_automation_triggers"):
+            try:
+                self.sync_automation_triggers(result["id"], graph)
+            except Exception as e:
+                logger.warning(f"Trigger sync for new automation failed: {e}")
         logger.info(f"Created automation '{name}' ({result['id']})")
         return result
 
@@ -480,6 +486,9 @@ class AutomationMixin:
             if not automation:
                 return False
             s.delete(automation)
+        # Drop trigger infrastructure the graph may have materialized (plan 22 part 4).
+        if hasattr(self, "_cleanup_automation_triggers"):
+            self._cleanup_automation_triggers(automation_id)
         logger.info(f"Deleted automation {automation_id}")
         return True
 
