@@ -43,6 +43,8 @@ class BackgroundAgent : Service() {
     private val client = DeviceKitClient()
     private var heartbeatJob: Job? = null
     private var stateReportJob: Job? = null
+    private var commandPoller: CommandPoller? = null
+    private var otaUpdater: OtaUpdater? = null
     private var metricsCollector: MetricsCollector? = null
     private var httpServer: AgentHttpServer? = null
     private var discoveryService: DiscoveryService? = null
@@ -88,6 +90,8 @@ class BackgroundAgent : Service() {
                     LogBuffer.log("BackgroundAgent", "Connected to ${DeviceState.serverUrl}")
                     startHeartbeat()
                     startStateReporting()
+                    startCommandPolling()
+                    startOtaUpdater()
                 } else {
                     LogBuffer.log("BackgroundAgent", "Server connection attempt $attempts/$maxAttempts failed", LogBuffer.Level.ERROR)
                     if (attempts < maxAttempts) {
@@ -116,14 +120,23 @@ class BackgroundAgent : Service() {
             put("product", Build.PRODUCT)
             put("device", Build.DEVICE)
             put("serial", Build.BOARD)
-            put("agent_version", "1.0.0")
-            put("capabilities", org.json.JSONArray().apply {
-                put("accessibility")
-                put("keyboard_detection")
-                put("notification_listener")
-                put("state_reporting")
-                put("command_receiver")
-                put("metrics_collection")
+            // plan 25 part 2: advertise version from BuildConfig (not a hardcoded string) so
+            // the fleet version view + OTA targeting see the real running build.
+            put("agent_version", com.devicekit.agent.BuildConfig.VERSION_NAME)
+            put("agent_version_code", com.devicekit.agent.BuildConfig.VERSION_CODE)
+            // Capabilities as a MAP (FLEET_CONTRACT + FQL `can.*` expect a map, not an array).
+            // `batch_survey` opts this agent into one-round-trip probes; the backend falls back
+            // to the composed path for any agent that omits it.
+            put("capabilities", JSONObject().apply {
+                put("accessibility", true)
+                put("keyboard_detection", true)
+                put("notification_listener", true)
+                put("state_reporting", true)
+                put("command_receiver", true)
+                put("metrics_collection", true)
+                put("survey", true)
+                put("batch_survey", true)
+                put("android_api", Build.VERSION.SDK_INT)
             })
         }
 
@@ -176,6 +189,24 @@ class BackgroundAgent : Service() {
                 delay(STATE_REPORT_INTERVAL_MS)
             }
         }
+    }
+
+    /** Poll the backend for read-only survey primitives (plan 25 part 1). */
+    private fun startCommandPolling() {
+        commandPoller?.stop()
+        commandPoller = CommandPoller(this, client, scope).also {
+            it.start { DeviceState.deviceId }
+        }
+        LogBuffer.log("BackgroundAgent", "Command poller started (survey primitives only)")
+    }
+
+    /** Periodically check for and apply signed OTA agent updates (plan 25 phase 3). */
+    private fun startOtaUpdater() {
+        otaUpdater?.stop()
+        otaUpdater = OtaUpdater(this, client, scope).also {
+            it.start { DeviceState.deviceId }
+        }
+        LogBuffer.log("BackgroundAgent", "OTA updater started")
     }
 
     private fun startHttpServer() {
@@ -232,6 +263,10 @@ class BackgroundAgent : Service() {
         super.onDestroy()
         isRunning = false
         DeviceState.isConnected = false
+        commandPoller?.stop()
+        commandPoller = null
+        otaUpdater?.stop()
+        otaUpdater = null
         discoveryService?.stop()
         discoveryService = null
         httpServer?.stop()

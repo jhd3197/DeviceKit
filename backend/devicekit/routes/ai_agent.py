@@ -1,5 +1,5 @@
 """AI agent control routes (Prompture-backed autonomous agent)."""
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 
 
 def make_blueprint(client, limiter):
@@ -75,6 +75,14 @@ def make_blueprint(client, limiter):
         result = client.switch_agent_model(device_id, model_name)
         return jsonify(result)
 
+    # ---- Prompture Hub (plan 19) ------------------------------------------------------
+
+    @bp.route('/ai/hub/health')
+    def ai_hub_health():
+        """Proxy probe of the configured prompture-hub: liveness + key-scoped model
+        list. Frontend probes through here so the hub URL stays server-side (no CORS)."""
+        return jsonify(client.ai_hub_health())
+
     # ---- Confirmation gate (plan 13) --------------------------------------------------
 
     @bp.route('/devices/<device_id>/agent/pending')
@@ -89,13 +97,22 @@ def make_blueprint(client, limiter):
         if not action_id:
             return jsonify({'error': 'action_id is required'}), 400
         approve = bool(data.get('approve', False))
-        approver = request.headers.get('X-API-Key', '')[:8] or 'api'
+        # Attribute the gate decision to the resolved principal (plan 20 part 3), falling back
+        # to the API-key prefix for a legacy/keyed caller.
+        principal = getattr(g, 'principal', None)
+        # Approval is a *human* act: a scoped dk_ key may never release the gate — otherwise
+        # a devices:write key could approve its own pending actions (plan 21: no side door).
+        if principal is not None and getattr(principal, 'scopes', None) is not None:
+            return jsonify({'error': 'API keys cannot approve gated actions'}), 403
+        approver = (getattr(principal, 'username', None)
+                    or request.headers.get('X-API-Key', '')[:8] or 'api')
         result = client.confirm_action(action_id, approve, approver=approver,
                                        device_id=device_id)
         if 'error' in result:
             return jsonify(result), 404
         client.log_activity('agent_confirm', device_id,
-                            {'action_id': action_id, 'approve': approve})
+                            {'action_id': action_id, 'approve': approve},
+                            user_id=getattr(principal, 'user_id', None))
         return jsonify(result)
 
     @bp.route('/devices/<device_id>/agent/mode', methods=['GET'])

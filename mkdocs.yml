@@ -70,6 +70,7 @@ nav:
   - Architecture: ARCHITECTURE.md
   - Fleet Contract: FLEET_CONTRACT.md
   - AI Agent: ai-agent.md
+  - MCP Server: mcp-server.md
   - droidlink: droidlink.md
   - CI/CD Setup: ci-setup.md
   - Extensions:

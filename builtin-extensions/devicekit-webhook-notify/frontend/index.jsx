@@ -10,7 +10,7 @@
 // export mirrors the manifest so the app can render this builtin from the build-time glob
 // even when the contributions endpoint is briefly unavailable.
 import React, { useEffect, useState } from 'react'
-import { api } from 'devicekit-sdk'
+import { api, Link } from 'devicekit-sdk'
 
 export const contributions = {
   nav: [
@@ -82,7 +82,7 @@ export function WebhookNotifyPage() {
             onChange={(e) => setMessage(e.target.value)}
             rows={3}
             placeholder="Fleet alert: {message}"
-            className="w-full bg-black border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt resize-none"
+            className="w-full bg-body border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt resize-none"
           />
           <div className="flex items-center gap-3">
             <button
@@ -104,20 +104,45 @@ export function WebhookNotifyPage() {
   )
 }
 
-/** Compact widget mounted into the `dashboard.top` slot. */
+/** Compact widget mounted into the `dashboard.top` slot. Reads the extension config and
+ *  reports the real state: active only when a webhook URL is actually configured (the API
+ *  masks the secret but presence is still detectable). Renders nothing while loading. */
 export function WebhookNotifyWidget() {
+  const [configured, setConfigured] = useState(null) // null = loading
+
+  useEffect(() => {
+    api.getExtensionConfig(SLUG)
+      .then((r) => setConfigured(!!r.config?.webhook_url))
+      .catch(() => setConfigured(false))
+  }, [])
+
+  if (configured === null) return null
+
+  if (!configured) {
+    return (
+      <div className="bg-card border border-main rounded-lg p-4 flex items-center gap-3">
+        <span className="w-2 h-2 rounded-full bg-zinc-600 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-zinc-400">Webhook alerts off</p>
+          <p className="text-[10px] text-zinc-600 truncate">No webhook URL configured.</p>
+        </div>
+        <Link
+          to="/extensions"
+          className="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 shrink-0"
+        >
+          Set up
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-card border border-main rounded-lg p-4 flex items-center gap-3">
-      <div className="w-9 h-9 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4 text-emerald-400">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-        </svg>
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold text-zinc-200">Webhook Notify active</p>
+      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-zinc-200">Webhook alerts active</p>
         <p className="text-[10px] text-zinc-500 truncate">
-          Fleet alerts are routed to your configured webhook.
+          Fleet alerts are delivered to your webhook.
         </p>
       </div>
     </div>

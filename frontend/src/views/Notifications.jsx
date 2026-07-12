@@ -206,7 +206,7 @@ export default function Notifications() {
       </div>
 
       {/* List */}
-      <div className="bg-zinc-900 border border-main rounded-lg overflow-hidden">
+      <div className="bg-hover border border-main rounded-lg overflow-hidden">
         {loading ? (
           <div className="px-4 py-10 text-center text-zinc-500">
             <Loader2 className="w-4 h-4 animate-spin inline" /> Loading…

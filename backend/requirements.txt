@@ -14,3 +14,9 @@ SQLAlchemy==2.0.23
 alembic==1.14.1
 croniter==3.0.3
 websocket-client==1.9.0
+cryptography==46.0.5
+bcrypt==4.0.1
+pyotp==2.9.0
+mcp==1.28.1
+PyYAML==6.0.3
+jsonschema==4.26.0

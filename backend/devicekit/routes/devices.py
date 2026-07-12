@@ -35,6 +35,30 @@ def make_blueprint(client, limiter):
         connected = client.get_devices()
         adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
 
+        # ADB-listed devices are connected by definition; when the same device is also
+        # agent-registered, fold in the agent's last-reported metrics and model info so
+        # the dashboard shows CPU/battery for live devices too (the agent-merge loop
+        # below skips ids already present in the ADB list).
+        for d in connected:
+            if not d:
+                continue
+            d['online'] = True
+            agent = client.find_agent_device(d.get('serial') or d.get('device_id') or '')
+            if not agent:
+                continue
+            info = agent.get('info') or {}
+            metrics = (agent.get('state') or {}).get('metrics') or {}
+            if not d.get('model') and info.get('model'):
+                d['model'] = info['model']
+            for src_key, dst_key in (
+                ('battery_level', 'battery_level'),
+                ('cpu_percent', 'cpu_percent'),
+                ('ram_used_mb', 'ram_used_mb'),
+                ('ram_total_mb', 'ram_total_mb'),
+            ):
+                if d.get(dst_key) is None and metrics.get(src_key) is not None:
+                    d[dst_key] = metrics[src_key]
+
         # Merge agent-registered devices that aren't already in the ADB list
         now = time.time()
         for agent_id, agent_data in client._agent_device_states.items():

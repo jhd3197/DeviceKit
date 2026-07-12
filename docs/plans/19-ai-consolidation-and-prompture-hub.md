@@ -1,6 +1,6 @@
 # Plan 19 — AI Provider Consolidation + Prompture Hub Integration
 
-**Status:** proposed
+**Status:** ✅ shipped (2026-07-11) — all 4 phases
 **Inspired by:** DeviceKit already standardized its AI on **Prompture** (Phase 16) — the
 per-device conversational agent, NL automation, visual-diff analysis, and debug-bundle
 summaries all go through `prompture`. But two loose ends remain: a legacy *direct*
@@ -129,12 +129,61 @@ Tie the hub into the extension `llm` permission (`devicekit_sdk/permissions.py`,
 
 ## Phases
 
-| Phase | Delivers | Notes |
-|---|---|---|
-| 1 | Retire `agent.py` legacy `_ask_*` + `AI_PROVIDER`; drop `openai`/direct-`anthropic` deps | Single Prompture path; verify call sites first |
-| 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default |
-| 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX |
-| 4 | Per-extension hub keys via `/admin/*` + `sdk.ai(slug)` routing + consent-time cap/whitelist | The extension security win |
+| Phase | Delivers | Notes | Status |
+|---|---|---|---|
+| 1 | Retire `agent.py` legacy `_ask_*` + `AI_PROVIDER`; drop `openai`/direct-`anthropic` deps | Single Prompture path; verify call sites first | ✅ |
+| 2 | `ai.backend` setting + hub OpenAI-compat driver wiring (boot + save) + masked `ai.hub.key` | Opt-in; `direct` stays default | ✅ |
+| 3 | Hub health probe + `/ai/hub/health` route + model picker from `/v1/models` + setup links in AI pane | The detection + easy-setup UX | ✅ |
+| 4 | Per-extension hub keys via `/admin/*` + `sdk.ai(slug)` routing + consent-time cap/whitelist | The extension security win | ✅ |
+
+**Phase 2 notes (the "validate, don't assume" findings):** the hub's OpenAI-compat
+`/v1/chat/completions` (v0.0.2 source, verified) accepts **no `tools` or
+`response_format` fields** and flattens messages to plain text — so through the hub,
+Prompture's ToolRegistry degrades to its *simulated* tool path and structured output to
+prompted-repair extraction; vision content is unavailable. SSE **streaming IS
+implemented** hub-side (the README roadmap saying otherwise is stale). `HubDriver`'s
+capability flags encode exactly this so Prompture degrades gracefully instead of
+silently dropping tool calls. `OpenAIDriver` in Prompture had no `base_url` hook — fixed
+at the source (prompture commit `e0d83b2`: `base_url` param + `OPENAI_BASE_URL` env)
+rather than worked around here. Hub routing re-prepends the provider prefix so the hub
+receives full `provider/model` ids, matching its `/v1/models` catalog. Wiring lives in
+`backend/devicekit/ai_backend.py` + `mixins/settings.py`; covered by
+`tests/test_ai_backend.py`.
+
+**Phase 4 notes:** `sdk.ai(slug)` grew the LLM call surface (`ask` / `conversation`,
+gated on the `llm` permission) backed by `ExtensionAiMixin.extension_ai_*`. On the hub
+backend each `llm` extension gets its own key at install (revoked at uninstall), scoped
+by the manifest's `llm_allowed_models` / `llm_daily_cap_usd` (default $1/day) — the
+"consent-time" cap is manifest-declared and shown on the consent card like every other
+manifest claim; there's no separate cap-editing UI (logged decision). `HUB_ADMIN_TOKEN`
+is env-only, never a setting. Key records live in the server-managed, masked
+`ai.hub.extension_keys` setting (PUT /settings refuses writes to it). Decisions per plan:
+on `direct` (or hub without admin token) extension calls fall back to host credentials
+with a warning — isolation requires the hub; keys are revoked at uninstall, not disable
+(the status guard already stops a disabled extension from running). Verified live:
+scoped key issued via `/admin/keys`, `sdk.ai().ask()` answered through the extension's
+own key against local Ollama, off-whitelist model 403'd, revoke → instant 401. Also
+fixed a repo-wide quirk found while testing: Alembic's `fileConfig` was silently
+disabling every logger created before boot-time migrations (`alembic/env.py` now passes
+`disable_existing_loggers=False`).
+
+**Phase 3 notes:** verified live against a real hub + local Ollama: `GET /ai/hub/health`
+through DeviceKit reported reachable + the key-scoped 750-model catalog, and a real
+completion ran DeviceKit wiring → hub → `ollama/qwen2.5:1.5b` (off-whitelist models 403,
+usage metered per key). The hub's `/v1/models` is slow on its first call after hub boot
+(catalog built lazily) — the probe gives it a longer timeout than `/health`. The health
+line shows "N models allowed" (no spend-cap figure: the hub exposes caps only via the
+admin API, not to key holders). Fixed a hub boot-blocker at the source while testing
+(prompture-hub commit `e019f2e`: two `status_code=204` routes crashed FastAPI at import).
+The health status card also documents `pip install prompture-hub`, the dashboard link,
+and the run-natively caveat when unreachable.
+
+**Phase 1 deviation note:** `AgentMixin` was already dead post-Phase-16 — nothing imported
+`mixins/agent.py` (`client.py` composes `PromptureAgentMixin`), so this was pure deletion:
+the file, plus `extract_json_from_text`/`remove_json_extras` in `tools.py` (agent.py was
+their only caller). `openai`/`anthropic` were never in `requirements.txt` (they were lazy
+imports inside the dead methods), so there was nothing to drop — the deletion itself
+removed DeviceKit's last direct provider-SDK imports.
 
 Phase 1 is independent and can land first (pure consolidation). Phases 2→3 are
 sequential; phase 4 depends on 2.

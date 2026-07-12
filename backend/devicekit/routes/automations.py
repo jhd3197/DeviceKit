@@ -1,36 +1,55 @@
 """Automation routes (CRUD, runs, recording, schedules, AI generation)."""
 import base64
 
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, request, Response, g
+
+from devicekit.services.scopes import require_scope
+
+
+def _workspace_id():
+    """The active workspace the gate attached to the principal (plan 20 part 4), or None."""
+    return getattr(getattr(g, 'principal', None), 'workspace_id', None)
 
 
 def make_blueprint(client, limiter):
     bp = Blueprint('automations', __name__)
 
     @bp.route('/automations/step-types')
+    @require_scope('automations:read')
     def automation_step_types():
         return jsonify(client.get_step_types())
 
     @bp.route('/automations')
+    @require_scope('automations:read')
     def automations_list():
-        automations = client.list_automations()
+        # Narrowed to the active workspace when one is set; otherwise unchanged (all automations).
+        automations = client.list_automations(workspace_id=_workspace_id())
         return jsonify({'automations': automations, 'count': len(automations)})
 
     @bp.route('/automations', methods=['POST'])
+    @require_scope('automations:write')
     def automations_create():
         data = request.get_json(silent=True) or {}
         name = data.get('name', '')
         if not name:
             return jsonify({'error': 'Name is required'}), 400
+        graph = data.get('graph')
+        if graph is not None:
+            check = client.validate_workflow_doc(graph)
+            if not check['ok']:
+                return jsonify({'error': '; '.join(check['errors'])}), 400
         automation = client.create_automation(
             name=name,
             description=data.get('description', ''),
             steps=data.get('steps', []),
             tags=data.get('tags', []),
+            workspace_id=_workspace_id(),   # born into the active workspace, if any
+            graph=graph,                    # a tramo WorkflowDoc (plan 22), or None
         )
         return jsonify(automation), 201
 
     @bp.route('/automations/<automation_id>')
+    @require_scope('automations:read')
     def automations_get(automation_id):
         automation = client.get_automation(automation_id)
         if automation:
@@ -38,6 +57,7 @@ def make_blueprint(client, limiter):
         return jsonify({'error': 'Automation not found'}), 404
 
     @bp.route('/automations/<automation_id>', methods=['PUT'])
+    @require_scope('automations:write')
     def automations_update(automation_id):
         data = request.get_json(silent=True) or {}
         result = client.update_automation(automation_id, data)
@@ -47,17 +67,112 @@ def make_blueprint(client, limiter):
         return jsonify(updated)
 
     @bp.route('/automations/<automation_id>', methods=['DELETE'])
+    @require_scope('automations:write')
     def automations_delete(automation_id):
         if client.delete_automation(automation_id):
             return '', 204
         return jsonify({'error': 'Automation not found'}), 404
 
+    # ── Workflow graph (plan 22) ──
+    @bp.route('/automations/node-pack')
+    @require_scope('automations:read')
+    def automations_node_pack():
+        return jsonify(client.get_node_pack())
+
+    @bp.route('/automations/<automation_id>/graph')
+    @require_scope('automations:read')
+    def automations_graph_get(automation_id):
+        result = client.get_automation_graph(automation_id)
+        if result is None:
+            return jsonify({'error': 'Automation not found'}), 404
+        return jsonify(result)
+
+    @bp.route('/automations/<automation_id>/graph', methods=['PUT'])
+    @require_scope('automations:write')
+    def automations_graph_save(automation_id):
+        data = request.get_json(silent=True) or {}
+        doc = data.get('graph', data if data.get('nodes') is not None else None)
+        if not isinstance(doc, dict):
+            return jsonify({'error': 'graph document is required'}), 400
+        try:
+            result = client.save_automation_graph(automation_id, doc)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        if result is None:
+            return jsonify({'error': 'Automation not found'}), 404
+        return jsonify(result)
+
+    @bp.route('/automations/<automation_id>/validate', methods=['POST'])
+    @require_scope('automations:read')
+    def automations_graph_validate(automation_id):
+        data = request.get_json(silent=True) or {}
+        doc = data.get('graph')
+        if not isinstance(doc, dict):
+            stored = client.get_automation_graph(automation_id)
+            if stored is None:
+                return jsonify({'error': 'Automation not found'}), 404
+            doc = stored['graph']
+        return jsonify(client.validate_workflow_doc(doc))
+
+    # ── Triggers (plan 22 part 4) ──
+    @bp.route('/hooks/<token>', methods=['POST'])
+    @limiter.limit('30 per minute')
+    def webhook_trigger(token):
+        # Public by design: the unguessable token in the URL *is* the auth (the gate
+        # exempts /hooks/). Unknown tokens 404 without leaking which automations exist.
+        body = request.get_json(silent=True)
+        if body is None and request.data:
+            body = request.get_data(as_text=True)
+        try:
+            run_record = client.handle_webhook_trigger(
+                token, body=body, query=request.args.to_dict(),
+                headers=dict(request.headers))
+            return jsonify({'run_id': run_record['id'],
+                            'status': run_record['status']}), 201
+        except LookupError:
+            return jsonify({'error': 'Not found'}), 404
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @bp.route('/automations/<automation_id>/webhook-token')
+    @require_scope('automations:write')
+    def webhook_token_get(automation_id):
+        if not client.get_automation(automation_id):
+            return jsonify({'error': 'Automation not found'}), 404
+        token = client.get_webhook_token(automation_id)
+        return jsonify({'token': token, 'url': f'/hooks/{token}' if token else None})
+
+    @bp.route('/automations/<automation_id>/webhook-token', methods=['POST'])
+    @require_scope('automations:write')
+    def webhook_token_create(automation_id):
+        rotate = bool((request.get_json(silent=True) or {}).get('rotate'))
+        token = client.ensure_webhook_token(automation_id, rotate=rotate)
+        if token is None:
+            return jsonify({'error': 'Automation not found'}), 404
+        return jsonify({'token': token, 'url': f'/hooks/{token}'}), 201
+
+    @bp.route('/automations/<automation_id>/webhook-token', methods=['DELETE'])
+    @require_scope('automations:write')
+    def webhook_token_revoke(automation_id):
+        if client.revoke_webhook_token(automation_id):
+            return '', 204
+        return jsonify({'error': 'Automation not found'}), 404
+
     @bp.route('/automations/<automation_id>/run', methods=['POST'])
+    @require_scope('automations:run')
     def automations_run(automation_id):
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
         if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+            # Graph automations may run deviceless (fan-out/trigger nodes carry their
+            # own targeting); linear step runs still need a bound device.
+            automation = client.get_automation(automation_id)
+            if not automation:
+                return jsonify({'error': 'Automation not found'}), 404
+            if not automation.get('graph'):
+                return jsonify({'error': 'device_id is required'}), 400
         self_heal = bool(data.get('self_heal', False))
         try:
             run_record = client.execute_automation(automation_id, device_id, self_heal=self_heal)
@@ -68,6 +183,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/runs')
+    @require_scope('automations:read')
     def automation_runs_list():
         automation_id = request.args.get('automation_id')
         device_id = request.args.get('device_id')
@@ -80,6 +196,7 @@ def make_blueprint(client, limiter):
         return jsonify({'runs': runs, 'count': len(runs)})
 
     @bp.route('/automations/runs/<run_id>')
+    @require_scope('automations:read')
     def automation_runs_get(run_id):
         run = client.get_automation_run(run_id)
         if run:
@@ -87,6 +204,7 @@ def make_blueprint(client, limiter):
         return jsonify({'error': 'Run not found'}), 404
 
     @bp.route('/automations/runs/<run_id>/cancel', methods=['POST'])
+    @require_scope('automations:run')
     def automation_runs_cancel(run_id):
         if client.cancel_automation_run(run_id):
             return jsonify({'status': 'cancelling'})
@@ -94,6 +212,7 @@ def make_blueprint(client, limiter):
 
     # ── Recording ──
     @bp.route('/automations/record/start', methods=['POST'])
+    @require_scope('automations:write')
     def automation_record_start():
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
@@ -106,6 +225,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/record/stop', methods=['POST'])
+    @require_scope('automations:write')
     def automation_record_stop():
         data = request.get_json(silent=True) or {}
         session_id = data.get('session_id')
@@ -120,6 +240,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/record/action', methods=['POST'])
+    @require_scope('automations:write')
     def automation_record_action():
         data = request.get_json(silent=True) or {}
         session_id = data.get('session_id')
@@ -136,12 +257,14 @@ def make_blueprint(client, limiter):
 
     # ── Schedules ──
     @bp.route('/automations/schedules')
+    @require_scope('automations:read')
     def automation_schedules_list():
         automation_id = request.args.get('automation_id')
         schedules = client.list_schedules(automation_id=automation_id)
         return jsonify({'schedules': schedules, 'count': len(schedules)})
 
     @bp.route('/automations/schedules', methods=['POST'])
+    @require_scope('automations:write')
     def automation_schedules_create():
         data = request.get_json(silent=True) or {}
         automation_id = data.get('automation_id')
@@ -163,6 +286,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/schedules/<schedule_id>', methods=['PUT'])
+    @require_scope('automations:write')
     def automation_schedules_update(schedule_id):
         data = request.get_json(silent=True) or {}
         result = client.update_schedule(schedule_id, data)
@@ -171,6 +295,7 @@ def make_blueprint(client, limiter):
         return jsonify(result)
 
     @bp.route('/automations/schedules/<schedule_id>', methods=['DELETE'])
+    @require_scope('automations:write')
     def automation_schedules_delete(schedule_id):
         if client.delete_schedule(schedule_id):
             return '', 204
@@ -178,6 +303,7 @@ def make_blueprint(client, limiter):
 
     # ── Failure Screenshots ──
     @bp.route('/automations/runs/<run_id>/screenshots/<int:step_index>')
+    @require_scope('automations:read')
     def automation_run_screenshot(run_id, step_index):
         run = client.get_automation_run(run_id)
         if not run:
@@ -194,6 +320,7 @@ def make_blueprint(client, limiter):
 
     # ── Clone / Export / Import ──
     @bp.route('/automations/<automation_id>/clone', methods=['POST'])
+    @require_scope('automations:write')
     def automations_clone(automation_id):
         data = request.get_json(silent=True) or {}
         try:
@@ -205,6 +332,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/<automation_id>/export')
+    @require_scope('automations:read')
     def automations_export(automation_id):
         try:
             exported = client.export_automation(automation_id)
@@ -215,6 +343,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/import', methods=['POST'])
+    @require_scope('automations:write')
     def automations_import():
         data = request.get_json(silent=True) or {}
         if not data.get('name'):
@@ -227,6 +356,7 @@ def make_blueprint(client, limiter):
 
     # ── NL Automation (AI-powered) ──
     @bp.route('/automations/generate', methods=['POST'])
+    @require_scope('automations:write')
     def automations_generate():
         data = request.get_json(silent=True) or {}
         description = data.get('description', '')
@@ -240,6 +370,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/refine-step', methods=['POST'])
+    @require_scope('automations:write')
     def automations_refine_step():
         data = request.get_json(silent=True) or {}
         step = data.get('step')
@@ -254,6 +385,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/automations/<automation_id>/explain')
+    @require_scope('automations:read')
     def automations_explain(automation_id):
         try:
             result = client.explain_automation(automation_id)
@@ -264,6 +396,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/devices/<device_id>/ui-hierarchy')
+    @require_scope('devices:read')
     def device_ui_hierarchy(device_id):
         try:
             hierarchy = client.fetch_ui_hierarchy(device_id)

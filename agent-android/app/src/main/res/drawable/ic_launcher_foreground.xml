@@ -1,11 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: white phone frame aligned to the web master's proportions
+     (DeviceKitLogo.svg) — body ~0.57 aspect, see-through screen (reveals the gradient
+     background), home-indicator pill, and the green #3DDC97 status LED kept for family
+     continuity with the web favicon/logo. Centered in the 66dp adaptive safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Device icon centered in adaptive icon safe zone -->
+    <!-- White phone frame with screen + home-indicator cut through to the gradient (evenOdd) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M62,25H46c-2.2,0 -4,1.8 -4,4v50c0,2.2 1.8,4 4,4h16c2.2,0 4,-1.8 4,-4V29C66,26.8 64.2,25 62,25zM62,71H46V33h16V71zM54,75c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2s-2,0.9 -2,2S52.9,75 54,75z" />
+        android:fillType="evenOdd"
+        android:pathData="M44,26 H64 A6,6 0 0 1 70,32 V76 A6,6 0 0 1 64,82 H44 A6,6 0 0 1 38,76 V32 A6,6 0 0 1 44,26 Z M44,33 H64 A2,2 0 0 1 66,35 V65 A2,2 0 0 1 64,67 H44 A2,2 0 0 1 42,65 V35 A2,2 0 0 1 44,33 Z M50.25,73.5 H57.75 A1.25,1.25 0 0 1 57.75,76 H50.25 A1.25,1.25 0 0 1 50.25,73.5 Z" />
+    <!-- Green status LED on the screen (top-right) -->
+    <path
+        android:fillColor="#3DDC97"
+        android:pathData="M60,35.4 A1.6,1.6 0 1 0 60,38.6 A1.6,1.6 0 1 0 60,35.4 Z" />
 </vector>

@@ -7,7 +7,7 @@ plan 07 (Agent Security & Fleet Registry): carries the per-device HMAC ``secret`
 enrollment (plus pending-secret columns for zero-downtime key rotation), the advertised
 ``capabilities`` map, and the last source IP for anomaly logging.
 """
-from sqlalchemy import Column, String, Float, Boolean, JSON
+from sqlalchemy import Column, String, Float, Integer, Boolean, JSON
 
 from devicekit.db import Base
 
@@ -31,8 +31,15 @@ class AgentDevice(Base):
     # --- plan 07: capability advertisement ---
     capabilities = Column(JSON, default=dict)           # {screen_record: true, android_api: 34, ...}
 
+    # --- plan 25 part 2: version negotiation (which agent version is on which device) ---
+    agent_version = Column(String, nullable=True)       # advertised versionName, e.g. "1.2.0"
+    agent_version_code = Column(Integer, nullable=True)  # advertised versionCode, e.g. 5
+
     # --- plan 07: anomaly logging ---
     last_ip = Column(String, nullable=True)
+
+    # --- plan 20 part 4: born-in-workspace. NULL = global (unscoped). ---
+    workspace_id = Column(String, nullable=True, index=True)
 
     def to_dict(self):
         return {
@@ -43,7 +50,10 @@ class AgentDevice(Base):
             "state": self.state or {},
             "online": bool(self.online),
             "capabilities": self.capabilities or {},
+            "agent_version": self.agent_version,
+            "agent_version_code": self.agent_version_code,
             "enrolled": bool(self.secret),
             "rotating_key": bool(self.secret_pending),
             "last_ip": self.last_ip,
+            "workspace_id": self.workspace_id,
         }

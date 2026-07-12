@@ -105,7 +105,7 @@ export default function Pipeline() {
   return (
     <>
       {/* Header */}
-      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-body shrink-0">
         <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">
           Automation Pipeline
         </h2>
@@ -126,7 +126,7 @@ export default function Pipeline() {
               placeholder="Search builds..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+              className="w-full bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
             />
           </div>
           <div className="flex-1 overflow-y-auto">
@@ -139,11 +139,11 @@ export default function Pipeline() {
                 <Terminal className="w-8 h-8 mx-auto text-zinc-700" />
                 <p className="font-semibold text-zinc-400">No builds yet</p>
                 <p>Run tests with the droidlink pytest plugin:</p>
-                <pre className="bg-zinc-900 p-3 rounded text-[10px] text-left text-emerald-500 overflow-x-auto">
+                <pre className="bg-hover p-3 rounded text-[10px] text-left text-emerald-500 overflow-x-auto">
 {`pip install droidlink
 pytest tests/ \\
   --device=SERIAL \\
-  --devicekit-url=http://localhost:5050`}
+  --devicekit-url=http://localhost:7317`}
                 </pre>
               </div>
             ) : (
@@ -209,7 +209,7 @@ pytest tests/ \\
         {/* Build detail */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Metrics row */}
-          <div className="p-6 border-b border-main grid grid-cols-4 gap-6 bg-zinc-950 shrink-0">
+          <div className="p-6 border-b border-main grid grid-cols-4 gap-6 bg-card shrink-0">
             <PipelineMetric
               label="Success Rate"
               value={`${successRate}%`}
@@ -323,7 +323,7 @@ pytest tests/ \\
           </div>
 
           {/* Failure analysis panel */}
-          <div className="h-48 border-t border-main bg-black p-4 flex flex-col shrink-0">
+          <div className="h-48 border-t border-main bg-body p-4 flex flex-col shrink-0">
             <div className="flex justify-between items-center mb-2">
               <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest">
                 {selectedFailure
@@ -333,7 +333,7 @@ pytest tests/ \\
               {selectedFailure && (
                 <button
                   onClick={() => navigator.clipboard?.writeText(selectedFailure.trace || '')}
-                  className="text-[10px] bg-zinc-900 px-2 py-1 rounded border border-main text-zinc-400"
+                  className="text-[10px] bg-hover px-2 py-1 rounded border border-main text-zinc-400"
                 >
                   Copy Trace
                 </button>
@@ -360,7 +360,7 @@ pytest tests/ \\
           onClick={() => setScreenshotModal(null)}
         >
           <div
-            className="bg-zinc-900 rounded-lg border border-main p-4 max-w-2xl max-h-[80vh] overflow-auto"
+            className="bg-hover rounded-lg border border-main p-4 max-w-2xl max-h-[80vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-3">

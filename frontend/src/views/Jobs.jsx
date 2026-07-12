@@ -200,7 +200,7 @@ export default function Jobs() {
           { key: 'failed', label: 'Failed', value: stats.by_status?.failed || 0, tone: 'text-red-400' },
           { key: 'cancelled', label: 'Cancelled', value: stats.by_status?.cancelled || 0, tone: 'text-zinc-400' },
         ].map((s) => (
-          <div key={s.key} className="bg-zinc-900 border border-main rounded-lg p-3">
+          <div key={s.key} className="bg-hover border border-main rounded-lg p-3">
             <div className="text-[10px] uppercase text-zinc-500 font-bold">{s.label}</div>
             <div className={`text-2xl font-bold ${s.tone}`}>{s.value}</div>
           </div>
@@ -208,7 +208,7 @@ export default function Jobs() {
       </div>
 
       {/* Schedules */}
-      <div className="bg-zinc-900 border border-main rounded-lg">
+      <div className="bg-hover border border-main rounded-lg">
         <div className="px-4 py-2.5 border-b border-main flex items-center gap-2">
           <CalendarClock className="w-4 h-4 text-zinc-400" />
           <h2 className="text-sm font-bold text-zinc-200">Schedules</h2>
@@ -277,7 +277,7 @@ export default function Jobs() {
           <select
             value={kindFilter}
             onChange={(e) => setKindFilter(e.target.value)}
-            className="text-xs bg-zinc-900 border border-main rounded px-2 py-1.5 text-zinc-300 ml-auto"
+            className="text-xs bg-hover border border-main rounded px-2 py-1.5 text-zinc-300 ml-auto"
           >
             <option value="">All kinds</option>
             {kinds.map((k) => (
@@ -290,7 +290,7 @@ export default function Jobs() {
       </div>
 
       {/* Jobs table */}
-      <div className="bg-zinc-900 border border-main rounded-lg overflow-hidden">
+      <div className="bg-hover border border-main rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>

@@ -7,15 +7,20 @@ import { Pane } from './fields'
 import NotificationChannels from '../NotificationChannels'
 import NotificationPreferences from '../NotificationPreferences'
 
-export default function NotificationsPane() {
+export default function NotificationsPane({ register }) {
+  const reg = register || (() => ({}))
   return (
     <Pane
       title="Notifications"
       description="Delivery channels and per-event preferences for fleet notifications."
     >
-      <NotificationChannels />
+      <div {...reg('notification-channels')}>
+        <NotificationChannels />
+      </div>
       <div className="pt-2 border-t border-main" />
-      <NotificationPreferences />
+      <div {...reg('notification-preferences')}>
+        <NotificationPreferences />
+      </div>
     </Pane>
   )
 }

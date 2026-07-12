@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
-  Layers,
   LayoutGrid,
   Cpu,
   Terminal,
@@ -13,11 +12,15 @@ import {
   Users,
   BarChart3,
   LineChart,
+  GitBranch,
+  Rocket,
+  ClipboardList,
   Puzzle,
   Briefcase,
   Bell,
   ShieldCheck,
   History,
+  DatabaseBackup,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -27,18 +30,26 @@ import RemoteADB from './views/RemoteADB'
 import Automations from './views/Automations'
 import AutomationEditor from './views/AutomationEditor'
 import AutomationRunDetail from './views/AutomationRunDetail'
+import WorkflowEditor from './views/WorkflowEditor'
 import Profiles from './views/Profiles'
 import ProfileEditor from './views/ProfileEditor'
 import FleetGroups from './views/FleetGroups'
 import DeviceCompare from './views/DeviceCompare'
 import FleetMonitor from './views/FleetMonitor'
+import FleetVersions from './views/FleetVersions'
+import AgentUpdates from './views/AgentUpdates'
 import Extensions from './views/Extensions'
+import AgentPlugins from './views/AgentPlugins'
 import Jobs from './views/Jobs'
 import Notifications from './views/Notifications'
 import Enrollment from './views/Enrollment'
+import Onboarding from './views/Onboarding'
 import CommandHistory from './views/CommandHistory'
 import SettingsView from './views/Settings'
+import Backups from './views/Backups'
 
+import Logo from './components/Logo'
+import { useBrand, brandName } from './brand'
 import NotificationBell from './components/NotificationBell'
 import CommandPalette from './components/CommandPalette'
 import { useContributions } from './extensions/contributions'
@@ -59,8 +70,12 @@ const navSections = [
       { to: '/fleet/compare', icon: BarChart3, label: 'Compare' },
       { to: '/fleet/monitor', icon: LineChart, label: 'Metrics Monitor' },
       { to: '/enrollment', icon: ShieldCheck, label: 'Enrollment' },
+      { to: '/onboarding', icon: ClipboardList, label: 'Onboarding' },
+      { to: '/fleet/versions', icon: GitBranch, label: 'Agent Versions' },
+      { to: '/fleet/updates', icon: Rocket, label: 'Agent Updates' },
       { to: '/command-history', icon: History, label: 'Command History' },
       { to: '/extensions', icon: Puzzle, label: 'Extensions' },
+      { to: '/agent-plugins', icon: Puzzle, label: 'Agent Plugins' },
     ],
   },
   {
@@ -70,6 +85,7 @@ const navSections = [
       { to: '/automations', icon: Workflow, label: 'Automations' },
       { to: '/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/notifications', icon: Bell, label: 'Notifications' },
+      { to: '/backups', icon: DatabaseBackup, label: 'Backup & DR' },
       { to: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
@@ -131,15 +147,14 @@ function mergeNav(contribNav) {
 function Sidebar() {
   const { envelope } = useContributions()
   const sections = mergeNav(envelope.nav)
+  const brand = useBrand()
 
   return (
-    <aside className="w-64 border-r border-main flex flex-col bg-black shrink-0">
+    <aside className="w-64 border-r border-main flex flex-col bg-body shrink-0">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3 border-b border-main">
-        <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
-          <Layers className="text-black w-5 h-5" />
-        </div>
-        <span className="font-bold tracking-tight text-lg">DeviceKit</span>
+        <Logo size={32} className="rounded shrink-0" />
+        <span className="font-bold tracking-tight text-lg">{brandName(brand)}</span>
         <div className="ml-auto">
           <NotificationBell />
         </div>
@@ -160,8 +175,8 @@ function Sidebar() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive
-                      ? 'bg-zinc-900 text-white'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                      ? 'bg-hover text-strong'
+                      : 'text-zinc-400 hover:text-strong hover:bg-hover'
                   }`
                 }
               >
@@ -177,32 +192,20 @@ function Sidebar() {
         ))}
       </nav>
 
-      {/* User card */}
-      <div className="p-4 border-t border-main">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-zinc-800 border border-main flex items-center justify-center text-xs font-bold text-zinc-400">
-            JD
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-xs font-semibold truncate">Juan Denis</p>
-            <p className="text-[10px] text-zinc-500 mono uppercase">
-              Fort Lauderdale Node
-            </p>
-          </div>
-        </div>
-      </div>
     </aside>
   )
 }
 
-/** Update document.title from the contributed page_titles map (plan 04). Core pages keep
- *  the default title; extension routes can name their tab. */
+/** Update document.title from the contributed page_titles map (plan 04). Core pages show the
+ *  brand name (white-label, plan 28); extension routes can name their tab. */
 function PageTitle({ titles }) {
   const location = useLocation()
+  const brand = useBrand()
   useEffect(() => {
+    const name = brandName(brand)
     const title = titles?.[location.pathname]
-    document.title = title ? `${title} · DeviceKit` : 'DeviceKit'
-  }, [location.pathname, titles])
+    document.title = title ? `${title} · ${name}` : name
+  }, [location.pathname, titles, brand])
   return null
 }
 
@@ -224,6 +227,7 @@ export default function App() {
           <Route path="/automations" element={<Automations />} />
           <Route path="/automations/new" element={<AutomationEditor />} />
           <Route path="/automations/:id/edit" element={<AutomationEditor />} />
+          <Route path="/automations/:id/graph" element={<WorkflowEditor />} />
           <Route path="/automations/runs/:runId" element={<AutomationRunDetail />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/notifications" element={<Notifications />} />
@@ -231,14 +235,19 @@ export default function App() {
           <Route path="/fleet/groups" element={<FleetGroups />} />
           <Route path="/fleet/compare" element={<DeviceCompare />} />
           <Route path="/fleet/monitor" element={<FleetMonitor />} />
+          <Route path="/fleet/versions" element={<FleetVersions />} />
+          <Route path="/fleet/updates" element={<AgentUpdates />} />
           <Route path="/enrollment" element={<Enrollment />} />
+          <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/command-history" element={<CommandHistory />} />
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
           <Route path="/extensions" element={<Extensions />} />
+          <Route path="/agent-plugins" element={<AgentPlugins />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/settings/:tab" element={<SettingsView />} />
+          <Route path="/backups" element={<Backups />} />
           {extensionRoutes}
         </Routes>
       </main>

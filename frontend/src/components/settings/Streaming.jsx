@@ -12,7 +12,8 @@ const KEYS = [
   'streaming.recording_retention_days',
 ]
 
-export default function Streaming({ settings, save }) {
+export default function Streaming({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const f = usePaneForm(settings, KEYS, save)
 
   return (
@@ -21,6 +22,7 @@ export default function Streaming({ settings, save }) {
         label="Default frame rate"
         help="Frames per second for new streams (1–30)."
         htmlFor="stream-fps"
+        register={reg('stream-fps')}
       >
         <NumberInput
           id="stream-fps"
@@ -36,6 +38,7 @@ export default function Streaming({ settings, save }) {
         label="Default quality"
         help="JPEG quality for new streams (10–100). Lower = less bandwidth."
         htmlFor="stream-quality"
+        register={reg('stream-quality')}
       >
         <NumberInput
           id="stream-quality"
@@ -51,6 +54,7 @@ export default function Streaming({ settings, save }) {
         label="Recording retention"
         help="How long recorded sessions are kept before cleanup."
         htmlFor="rec-retention"
+        register={reg('recording-retention')}
       >
         <NumberInput
           id="rec-retention"

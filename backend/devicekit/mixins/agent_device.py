@@ -28,6 +28,8 @@ from queue import Queue, Empty
 
 from devicekit.db import session_scope
 from devicekit.models import AgentDevice, DeviceCommand
+from devicekit.agent_capabilities import (
+    normalize_capabilities, extract_agent_version)
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +67,11 @@ class AgentDeviceMixin:
                     'last_heartbeat': row.get('last_heartbeat'),
                     'state': row.get('state', {}),
                     'online': row.get('online', False),
-                    'capabilities': row.get('capabilities', {}),
+                    # Legacy rows may hold capabilities as an array; normalize to a map so
+                    # every consumer (FQL, version view, negotiation) sees one shape.
+                    'capabilities': normalize_capabilities(row.get('capabilities')),
+                    'agent_version': row.get('agent_version'),
+                    'agent_version_code': row.get('agent_version_code'),
                     'conn_token': 0,
                 }
                 if serial:
@@ -121,7 +127,11 @@ class AgentDeviceMixin:
         """
         self._ensure_agent_registry()
         now = time.time()
-        capabilities = capabilities if capabilities is not None else (info or {}).get('capabilities') or {}
+        raw_caps = capabilities if capabilities is not None else (info or {}).get('capabilities')
+        # Accept a legacy array or a map; the rest of the platform expects a map (FQL `can.*`,
+        # capability gating, batched-survey negotiation).
+        capabilities = normalize_capabilities(raw_caps)
+        version_name, version_code = extract_agent_version(info)
         with self._agent_registry_lock:
             prev = self._agent_device_states.get(device_id)
             reconnected = prev is not None
@@ -136,6 +146,8 @@ class AgentDeviceMixin:
                 'state': prev.get('state', {}) if prev else {},
                 'online': True,
                 'capabilities': capabilities,
+                'agent_version': version_name,
+                'agent_version_code': version_code,
                 'conn_token': token,
             }
             if serial:
@@ -151,6 +163,7 @@ class AgentDeviceMixin:
             registered_at=self._agent_device_states[device_id]['registered_at'],
             last_heartbeat=now, state=self._agent_device_states[device_id]['state'],
             online=True, capabilities=capabilities, last_ip=ip, secret=secret,
+            agent_version=version_name, agent_version_code=version_code,
         )
         return {
             'device_id': device_id,
@@ -578,7 +591,8 @@ class AgentDeviceMixin:
 
     def save_agent_device(self, device_id, info, serial=None, registered_at=None,
                           last_heartbeat=None, state=None, online=True,
-                          capabilities=None, last_ip=None, secret=None):
+                          capabilities=None, last_ip=None, secret=None,
+                          agent_version=None, agent_version_code=None):
         """Upsert an agent device (used on registration)."""
         now = time.time()
         with session_scope() as s:
@@ -597,6 +611,12 @@ class AgentDeviceMixin:
                 row.last_ip = last_ip
             if secret is not None:
                 row.secret = secret
+            # Only overwrite the advertised version when the agent actually sent one, so a
+            # legacy re-register that omits it doesn't blank a known version.
+            if agent_version is not None:
+                row.agent_version = agent_version
+            if agent_version_code is not None:
+                row.agent_version_code = agent_version_code
 
     def update_agent_device_fields(self, device_id, **fields):
         """Partial update of a persisted agent device (state, last_heartbeat, online)."""
@@ -605,7 +625,52 @@ class AgentDeviceMixin:
             if not row:
                 return False
             for key in ("info", "state", "last_heartbeat", "online", "serial",
-                        "capabilities", "last_ip", "secret"):
+                        "capabilities", "last_ip", "secret",
+                        "agent_version", "agent_version_code"):
                 if key in fields:
                     setattr(row, key, fields[key])
             return True
+
+    # -----------------------------------------------------------
+    # Fleet version view (plan 25 part 2): which agent version is on which device
+    # -----------------------------------------------------------
+    def list_agent_versions(self):
+        """Per-device agent version + an aggregate ``version → [device_ids]`` rollup.
+
+        Backs the fleet "which agent version where" view and the OTA rollout targeting
+        (plan 25 phase 3). Reads the live registry so online/offline is current.
+        """
+        self._ensure_agent_registry()
+        with self._agent_registry_lock:
+            states = [dict(s) for s in self._agent_device_states.values()]
+        devices = []
+        rollup = {}
+        for st in states:
+            did = st.get('device_id')
+            version = st.get('agent_version')
+            code = st.get('agent_version_code')
+            info = st.get('info') or {}
+            devices.append({
+                'device_id': did,
+                'agent_version': version,
+                'agent_version_code': code,
+                'online': bool(st.get('online')),
+                'model': info.get('model'),
+                'android_api': (st.get('capabilities') or {}).get('android_api')
+                               or info.get('sdk'),
+                'capabilities': st.get('capabilities') or {},
+            })
+        for d in devices:
+            key = d['agent_version'] or 'unknown'
+            bucket = rollup.setdefault(key, {'version': key, 'count': 0,
+                                             'online': 0, 'device_ids': []})
+            bucket['count'] += 1
+            bucket['device_ids'].append(d['device_id'])
+            if d['online']:
+                bucket['online'] += 1
+        devices.sort(key=lambda d: (d['agent_version'] or '', d['device_id'] or ''))
+        return {
+            'devices': devices,
+            'versions': sorted(rollup.values(), key=lambda v: v['version']),
+            'distinct_versions': len(rollup),
+        }

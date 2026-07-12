@@ -267,10 +267,10 @@ def cmd_scaffold(slug, backend, builtin, full=False):
         print(f"     {f}")
     if builtin:
         print("\nNext: install it through the real pipeline —")
-        print(f'     curl -X POST localhost:5050/extensions/install -d \'{{"slug": "{slug}"}}\'  (bundled)')
+        print(f'     curl -X POST localhost:7317/extensions/install -d \'{{"slug": "{slug}"}}\'  (bundled)')
     else:
         print("\nNext: install it through the real pipeline (dev loop) —")
-        print(f'     curl -X POST localhost:5050/extensions/install-local -d \'{{"path": "{base}"}}\'')
+        print(f'     curl -X POST localhost:7317/extensions/install-local -d \'{{"path": "{base}"}}\'')
     return 0
 
 

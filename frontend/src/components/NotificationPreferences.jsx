@@ -91,7 +91,7 @@ export default function NotificationPreferences() {
             type="checkbox"
             checked={settings.quiet_hours_enabled}
             onChange={(e) => set('quiet_hours_enabled', e.target.checked)}
-            className="rounded border-zinc-600 bg-black text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+            className="rounded border-zinc-600 bg-body text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
           />
           <span className="text-xs text-zinc-400">Enable quiet hours</span>
         </label>
@@ -101,7 +101,7 @@ export default function NotificationPreferences() {
             <select
               value={settings.quiet_start}
               onChange={(e) => set('quiet_start', e.target.value)}
-              className="bg-black border border-main rounded px-2 py-1 text-xs mono"
+              className="bg-body border border-main rounded px-2 py-1 text-xs mono"
             >
               {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
             </select>
@@ -111,7 +111,7 @@ export default function NotificationPreferences() {
             <select
               value={settings.quiet_end}
               onChange={(e) => set('quiet_end', e.target.value)}
-              className="bg-black border border-main rounded px-2 py-1 text-xs mono"
+              className="bg-body border border-main rounded px-2 py-1 text-xs mono"
             >
               {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
             </select>
@@ -121,7 +121,7 @@ export default function NotificationPreferences() {
               type="checkbox"
               checked={settings.quiet_allow_critical}
               onChange={(e) => set('quiet_allow_critical', e.target.checked)}
-              className="rounded border-zinc-600 bg-black text-red-500 focus:ring-red-500 focus:ring-offset-0"
+              className="rounded border-zinc-600 bg-body text-red-500 focus:ring-red-500 focus:ring-offset-0"
             />
             <span className="text-xs text-zinc-400">Let critical alerts through</span>
           </label>
@@ -142,7 +142,7 @@ export default function NotificationPreferences() {
             type="checkbox"
             checked={settings.digest_enabled}
             onChange={(e) => set('digest_enabled', e.target.checked)}
-            className="rounded border-zinc-600 bg-black text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+            className="rounded border-zinc-600 bg-body text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
           />
           <span className="text-xs text-zinc-400">Enable digests</span>
         </label>
@@ -153,7 +153,7 @@ export default function NotificationPreferences() {
             min="1"
             value={settings.digest_window_minutes}
             onChange={(e) => set('digest_window_minutes', e.target.value)}
-            className="w-16 bg-black border border-main rounded px-2 py-1 text-xs mono"
+            className="w-16 bg-body border border-main rounded px-2 py-1 text-xs mono"
           />
           minutes
         </label>
@@ -169,7 +169,7 @@ export default function NotificationPreferences() {
                     type="checkbox"
                     checked={(settings.digest_events || []).includes(ev.event_key)}
                     onChange={() => toggleDigestEvent(ev.event_key)}
-                    className="rounded border-zinc-600 bg-black text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                    className="rounded border-zinc-600 bg-body text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
                   />
                   <span className="text-[11px] text-zinc-400 mono truncate">{ev.event_key}</span>
                 </label>

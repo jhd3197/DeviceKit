@@ -32,7 +32,9 @@ if not config.get_main_option("sqlalchemy.url", None) or config.get_main_option(
 
 if config.config_file_name is not None:
     try:
-        fileConfig(config.config_file_name)
+        # disable_existing_loggers defaults to True, which would silently kill every
+        # devicekit.* logger created before the boot-time migration runs.
+        fileConfig(config.config_file_name, disable_existing_loggers=False)
     except Exception:
         pass
 

@@ -32,7 +32,7 @@ whole stack without setting anything. The vars worth knowing:
 | `DEVICEKIT_DATABASE_URL` | Point at Postgres to scale out. Defaults to an embedded SQLite file at `backend/devicekit.db`. |
 | `PROMPTURE_DEFAULT_MODEL` + provider key | Enable AI automation/agents (e.g. `ANTHROPIC_API_KEY`). Without one, AI routes return a clear error. |
 
-The full list is in the [root README](../README.md#environment-variables).
+The full list is in the [root README](../README.md#️-environment-variables).
 
 ## 2. Start the backend
 
@@ -117,12 +117,12 @@ curl http://localhost:5050/devices
 
 1. Go to **Automations → New** to open the visual editor.
 2. Add steps from the palette — `tap`, `swipe`, `type`, `open_app`, `screenshot`, and
-   [11 more](../README.md#automation-engine). Every step type renders its own config form.
+   [11 more](../README.md#-automation-engine). Every step type renders its own config form.
 3. *(optional)* Expand **Generate with AI**, describe what you want in plain English
    ("Open Settings, go to Wi-Fi, screenshot the list"), and accept the generated steps. This
    needs a Prompture key — see [AI Agent](ai-agent.md).
 4. Save, then **Run** it against your device. Watch step-by-step progress live; a failed step
-   auto-captures a screenshot and a [debug bundle](../README.md#failure-debug-bundles).
+   auto-captures a screenshot and a [debug bundle](../README.md#-failure-debug-bundles).
 
 ### From Python (droidlink)
 
@@ -160,5 +160,5 @@ d.screenshot("wifi.png")
 | Backend won't start / DB error | Delete `backend/devicekit.db` to recreate from scratch (dev only — this drops all saved automations, groups, and queries). |
 | AI routes return an error | Set `PROMPTURE_DEFAULT_MODEL` and the matching provider key in `.env`, then restart the backend. |
 
-The [root README's Troubleshooting section](../README.md#troubleshooting) covers streaming and
+The [root README's Troubleshooting section](../README.md#️-troubleshooting) covers streaming and
 Docker-specific issues.

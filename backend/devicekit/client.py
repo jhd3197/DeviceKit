@@ -15,6 +15,7 @@ from devicekit.mixins.queue import QueueMixin
 from devicekit.mixins.alerts import AlertMixin
 from devicekit.mixins.activity import ActivityMixin
 from devicekit.mixins.automation import AutomationMixin
+from devicekit.mixins.workflow import WorkflowMixin
 from devicekit.mixins.profile import ProfileMixin
 from devicekit.mixins.prompture_agent import PromptureAgentMixin
 from devicekit.mixins.agent_gate import AgentGateMixin
@@ -27,12 +28,26 @@ from devicekit.mixins.visual_regression import VisualRegressionMixin
 from devicekit.mixins.fleet_query import FleetQueryMixin
 from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
+from devicekit.mixins.agent_survey import AgentSurveyMixin
+from devicekit.mixins.agent_ota import AgentOtaMixin
+from devicekit.mixins.onboarding import OnboardingMixin
+from devicekit.mixins.agent_plugin import AgentPluginMixin
+from devicekit.mixins.backup import BackupMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
+from devicekit.mixins.extension_ai import ExtensionAiMixin
 from devicekit.mixins.jobs import JobsMixin
 from devicekit.mixins.notifications import NotificationsMixin
 from devicekit.mixins.metrics_history import MetricsHistoryMixin
 from devicekit.mixins.settings import SettingsMixin
+from devicekit.mixins.identity import IdentityMixin
+from devicekit.mixins.api_keys import ApiKeysMixin
+from devicekit.mixins.audit import AuditMixin
+from devicekit.mixins.workspaces import WorkspacesMixin
+from devicekit.mixins.vault import VaultMixin
+from devicekit.mixins.account_security import AccountSecurityMixin
+from devicekit.mixins.fleet_policy import FleetPolicyMixin
+from devicekit.mixins.search import SearchMixin
 
 
 class Client(
@@ -43,6 +58,7 @@ class Client(
     DynamodbMixin,
     AwsStorageMixin,
     AutomationMixin,
+    WorkflowMixin,
     ProfileMixin,
     NLAutomationMixin,
     PromptureAgentMixin,
@@ -54,12 +70,26 @@ class Client(
     VisualRegressionMixin,
     DebugBundleMixin,
     AgentDeviceMixin,
+    AgentSurveyMixin,
+    AgentOtaMixin,
+    OnboardingMixin,
+    AgentPluginMixin,
+    BackupMixin,
     PairingMixin,
     ExtensionsMixin,
+    ExtensionAiMixin,
     JobsMixin,
     NotificationsMixin,
     MetricsHistoryMixin,
     SettingsMixin,
+    IdentityMixin,
+    ApiKeysMixin,
+    AuditMixin,
+    WorkspacesMixin,
+    VaultMixin,
+    AccountSecurityMixin,
+    FleetPolicyMixin,
+    SearchMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,
@@ -107,6 +137,34 @@ class Client(
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Metrics history init skipped: {e}")
 
+        # Fleet policies (plan 23): register the apply job kinds + notification events, and
+        # ensure the periodic drift-check schedule (after jobs + notifications are live).
+        try:
+            self.init_fleet_policy()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Fleet policy init skipped: {e}")
+
+        # OTA agent updates (plan 25): register the rollout-advance job kind + schedule and
+        # the OTA notification events (after jobs + notifications are live).
+        try:
+            self.init_agent_ota()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Agent OTA init skipped: {e}")
+
+        # Onboarding state machine (plan 25): register the advance job kind + events (after
+        # jobs + notifications are live; provisioning leans on fleet policy above).
+        try:
+            self.init_onboarding()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Onboarding init skipped: {e}")
+
+        # Backup / DR (plan 25): register the backup + restore-drill job kinds, the drill
+        # schedule, and the edge-triggered drill alerts (after jobs + notifications are live).
+        try:
+            self.init_backup()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Backup init skipped: {e}")
+
         # Apply any persisted AI provider keys to the environment so Prompture picks them
         # up without a restart (plan 12 settings).
         try:
@@ -117,6 +175,13 @@ class Client(
         # Configure authentication
         from config import API_KEY, AGENT_TOKENS
         self.configure_auth(API_KEY, AGENT_TOKENS)
+
+        # Identity/RBAC substrate (plan 20): reset the user-count cache and optionally
+        # bootstrap an admin from the environment. Solo mode (no users) is unchanged.
+        try:
+            self.init_identity()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Identity init skipped: {e}")
 
         # Configure colored logging
         log = logging.getLogger('devicekit')

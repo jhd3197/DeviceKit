@@ -12,7 +12,7 @@ import com.devicekit.agent.DeviceState
  *
  *   adb shell am broadcast -a com.devicekit.agent.COMMAND \
  *       --es type "set_server" \
- *       --es value "http://192.168.1.100:5050"
+ *       --es value "http://192.168.1.100:7317"
  *
  * Supported commands:
  *   - set_server: Change the server URL

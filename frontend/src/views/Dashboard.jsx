@@ -13,6 +13,11 @@ import RecentFailures from '../components/widgets/RecentFailures'
 import FQLBar from '../components/widgets/FQLBar'
 import DeviceRegistry from '../components/widgets/DeviceRegistry'
 
+// Widgets that render in the narrow side column; everything else (KPIs, query bar, the
+// device table) gets the wide main column. Widget order within each column still follows
+// the user's saved layout order.
+const SIDE_WIDGETS = new Set(['fleet-health', 'active-runs', 'recent-failures'])
+
 // Fleet Overview dashboard — a thin composer over self-contained widgets (plan 11). Shared
 // fleet data comes from useFleetData; the widget set, order, and visibility come from
 // useDashboardLayout (persisted, forward-merged). WIDGET_RENDERERS maps a widget id to its
@@ -21,7 +26,7 @@ export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
   const {
-    stats, devices, fleetHealth, fleetAiCost, sparklines, sseConnected,
+    devices, fleetHealth, fleetAiCost, sparklines, trends, sseConnected,
     loading, error, toasts, dismissToast,
   } = useFleetData()
   const { widgets, toggleWidget, moveWidget, resetLayout } = useDashboardLayout()
@@ -33,7 +38,9 @@ export default function Dashboard() {
   // id -> element. A widget id in the layout with no renderer here simply renders nothing,
   // so the layout survives across releases that add/remove widgets.
   const WIDGET_RENDERERS = {
-    'fleet-summary': () => <FleetSummary stats={stats} fleetAiCost={fleetAiCost} />,
+    'fleet-summary': () => (
+      <FleetSummary devices={devices} fleetHealth={fleetHealth} fleetAiCost={fleetAiCost} trends={trends} />
+    ),
     'fleet-health': () => <FleetHealth fleetHealth={fleetHealth} />,
     'active-runs': () => <ActiveRuns />,
     'recent-failures': () => <RecentFailures />,
@@ -42,6 +49,8 @@ export default function Dashboard() {
       <DeviceRegistry devices={devices} sparklines={sparklines} queryResult={queryResult} />
     ),
   }
+
+  const visibleWidgets = widgets.filter(w => w.visible && WIDGET_RENDERERS[w.id])
 
   if (loading) {
     return (
@@ -56,9 +65,9 @@ export default function Dashboard() {
       {/* Header */}
       <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-black/50 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-          <span>Infrastructure</span>
+          <span>Fleet</span>
           <ChevronRight className="w-3 h-3" />
-          <span className="text-zinc-200">Fleet Overview</span>
+          <span className="text-zinc-200">Overview</span>
         </div>
         <div className="flex items-center gap-4">
           <div className={`flex items-center gap-2 text-[10px] mono px-2 py-1 rounded border ${
@@ -91,30 +100,37 @@ export default function Dashboard() {
               />
             )}
           </div>
-          <button className="bg-white text-black text-xs font-bold px-4 py-1.5 rounded hover:bg-zinc-200 transition-colors">
-            Deploy Update
-          </button>
         </div>
       </header>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-7xl">
+      {/* Content — main column (KPIs, query, devices) + side column (health, runs,
+          failures, extension widgets) so the device table stays above the fold and wide
+          screens have no dead gutter. Collapses to one column below xl. */}
+      <div className="flex-1 overflow-y-auto p-8 space-y-6">
         {error && (
           <div className="bg-red-950/50 border border-red-900/50 rounded-lg p-3 text-xs text-red-400">
             {error}
           </div>
         )}
 
-        {/* Extension widgets contributed to the dashboard top (plan 04) */}
-        <ExtensionSlot name="dashboard.top" className="grid gap-4 md:grid-cols-2" />
-
-        {widgets
-          .filter(w => w.visible)
-          .map(w => {
-            const render = WIDGET_RENDERERS[w.id]
-            if (!render) return null
-            return <React.Fragment key={w.id}>{render()}</React.Fragment>
-          })}
+        <div className="grid gap-6 items-start xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-6 min-w-0">
+            {visibleWidgets
+              .filter(w => !SIDE_WIDGETS.has(w.id))
+              .map(w => (
+                <React.Fragment key={w.id}>{WIDGET_RENDERERS[w.id]()}</React.Fragment>
+              ))}
+          </div>
+          <div className="space-y-6 min-w-0">
+            {/* Extension widgets contributed to the dashboard top slot (plan 04) */}
+            <ExtensionSlot name="dashboard.top" className="space-y-6" />
+            {visibleWidgets
+              .filter(w => SIDE_WIDGETS.has(w.id))
+              .map(w => (
+                <React.Fragment key={w.id}>{WIDGET_RENDERERS[w.id]()}</React.Fragment>
+              ))}
+          </div>
+        </div>
       </div>
 
       {/* Auto-onboarding toasts */}

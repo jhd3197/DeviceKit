@@ -389,11 +389,11 @@ export default function AutomationEditor() {
   return (
     <>
       {/* Header */}
-      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-body shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/automations')}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="text-zinc-400 hover:text-strong transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -406,13 +406,13 @@ export default function AutomationEditor() {
             <>
               <button
                 onClick={handleClone}
-                className="border border-main text-zinc-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
+                className="border border-main text-zinc-400 hover:text-strong text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
               >
                 <Copy className="w-3 h-3" /> Clone
               </button>
               <button
                 onClick={handleExport}
-                className="border border-main text-zinc-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
+                className="border border-main text-zinc-400 hover:text-strong text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
               >
                 <Download className="w-3 h-3" /> Export JSON
               </button>
@@ -440,7 +440,7 @@ export default function AutomationEditor() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Login Flow Test"
-              className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none"
+              className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none"
             />
           </div>
           <div>
@@ -452,7 +452,7 @@ export default function AutomationEditor() {
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               placeholder="login, smoke"
-              className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none"
+              className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none"
             />
           </div>
         </div>
@@ -465,7 +465,7 @@ export default function AutomationEditor() {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe what this automation does..."
             rows={2}
-            className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none"
+            className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none"
           />
         </div>
 
@@ -487,7 +487,7 @@ export default function AutomationEditor() {
                 onChange={(e) => setAiPrompt(e.target.value)}
                 placeholder="Describe what the automation should do, e.g. &quot;Open Instagram, scroll feed, like 3 posts&quot;"
                 rows={3}
-                className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none"
+                className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none"
               />
               <div className="flex items-end gap-3">
                 <div className="flex-1">
@@ -497,7 +497,7 @@ export default function AutomationEditor() {
                   <select
                     value={aiDeviceId}
                     onChange={(e) => setAiDeviceId(e.target.value)}
-                    className="w-full bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+                    className="w-full bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
                   >
                     <option value="">No device context</option>
                     {aiDevices.map((d) => (
@@ -554,7 +554,7 @@ export default function AutomationEditor() {
                   {aiPreview.steps.map((gs, gi) => (
                     <div
                       key={gi}
-                      className="bg-black border border-amber-500/20 rounded p-3 flex items-center gap-3 text-xs"
+                      className="bg-body border border-amber-500/20 rounded p-3 flex items-center gap-3 text-xs"
                     >
                       <span className="text-[10px] bg-amber-900/40 text-amber-400 px-1.5 py-0.5 rounded uppercase font-bold shrink-0">
                         {gs.type}
@@ -672,7 +672,7 @@ export default function AutomationEditor() {
                             moveStep(idx, -1)
                           }}
                           disabled={idx === 0}
-                          className="p-1 text-zinc-500 hover:text-white disabled:opacity-20 transition-colors"
+                          className="p-1 text-zinc-500 hover:text-strong disabled:opacity-20 transition-colors"
                         >
                           <ChevronUp className="w-3 h-3" />
                         </button>
@@ -682,7 +682,7 @@ export default function AutomationEditor() {
                             moveStep(idx, 1)
                           }}
                           disabled={idx === steps.length - 1}
-                          className="p-1 text-zinc-500 hover:text-white disabled:opacity-20 transition-colors"
+                          className="p-1 text-zinc-500 hover:text-strong disabled:opacity-20 transition-colors"
                         >
                           <ChevronDown className="w-3 h-3" />
                         </button>
@@ -722,7 +722,7 @@ export default function AutomationEditor() {
                         </button>
                         <button
                           onClick={() => { setRefineStepId(null); setRefineInstruction('') }}
-                          className="p-1 text-zinc-500 hover:text-white transition-colors"
+                          className="p-1 text-zinc-500 hover:text-strong transition-colors"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -751,7 +751,7 @@ export default function AutomationEditor() {
                                       e.target.value
                                     )
                                   }
-                                  className="w-full bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+                                  className="w-full bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
                                 >
                                   {(schema.options || []).map((opt) => (
                                     <option key={opt} value={opt}>
@@ -772,7 +772,7 @@ export default function AutomationEditor() {
                                         : Number(e.target.value)
                                     )
                                   }
-                                  className="w-full bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+                                  className="w-full bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
                                 />
                               ) : (
                                 <input
@@ -785,7 +785,7 @@ export default function AutomationEditor() {
                                       e.target.value
                                     )
                                   }
-                                  className="w-full bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+                                  className="w-full bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
                                 />
                               )}
                             </div>
@@ -818,7 +818,7 @@ export default function AutomationEditor() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {baselines.map((b) => (
                   <div key={b.id} className="bg-card border border-main rounded overflow-hidden group">
-                    <div className="aspect-[9/16] bg-black relative cursor-pointer"
+                    <div className="aspect-[9/16] bg-body relative cursor-pointer"
                       onClick={() => setBaselinePreview({ stepIndex: b.step_index, imageUrl: api.getBaselineImageUrl(id, b.id), baselineId: b.id })}
                     >
                       <img
@@ -857,7 +857,7 @@ export default function AutomationEditor() {
                 <h3 className="text-sm font-bold flex items-center gap-2">
                   <Camera className="w-4 h-4 text-emerald-400" /> Capture Baseline
                 </h3>
-                <button onClick={() => { setBaselineCapturing(null); setMaskRegions([]) }} className="text-zinc-500 hover:text-white transition-colors">
+                <button onClick={() => { setBaselineCapturing(null); setMaskRegions([]) }} className="text-zinc-500 hover:text-strong transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -872,7 +872,7 @@ export default function AutomationEditor() {
                 <select
                   value={baselineDevice}
                   onChange={(e) => setBaselineDevice(e.target.value)}
-                  className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+                  className="w-full bg-body border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
                 >
                   {baselineDevices.map((d) => (
                     <option key={d.device_id} value={d.device_id}>
@@ -894,7 +894,7 @@ export default function AutomationEditor() {
               )}
               <div className="flex justify-end gap-2">
                 <button onClick={() => { setBaselineCapturing(null); setMaskRegions([]) }}
-                  className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors">
+                  className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-strong transition-colors">
                   Cancel
                 </button>
                 <button
@@ -926,14 +926,14 @@ export default function AutomationEditor() {
                 <button
                   onClick={() => setMaskMode(!maskMode)}
                   className={`text-[10px] px-2 py-1 rounded flex items-center gap-1 transition-all ${
-                    maskMode ? 'bg-amber-600 text-white' : 'bg-black/70 text-zinc-300 hover:text-white'
+                    maskMode ? 'bg-amber-600 text-white' : 'bg-black/70 text-zinc-300 hover:text-strong'
                   }`}
                 >
                   <Crosshair className="w-3 h-3" /> {maskMode ? 'Masking ON' : 'Add Masks'}
                 </button>
                 <button
                   onClick={() => setBaselinePreview(null)}
-                  className="bg-black/70 text-zinc-300 hover:text-white text-[10px] px-2 py-1 rounded"
+                  className="bg-black/70 text-zinc-300 hover:text-strong text-[10px] px-2 py-1 rounded"
                 >
                   Close
                 </button>
@@ -955,7 +955,7 @@ export default function AutomationEditor() {
               <h3 className="text-sm font-bold">Add Step</h3>
               <button
                 onClick={() => setShowPicker(false)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-500 hover:text-strong transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -970,7 +970,7 @@ export default function AutomationEditor() {
                     <button
                       key={st.key}
                       onClick={() => addStep(st.key)}
-                      className="text-left bg-black border border-main rounded p-3 hover:border-emerald-600 hover:bg-zinc-900/30 transition-colors"
+                      className="text-left bg-body border border-main rounded p-3 hover:border-emerald-600 hover:bg-zinc-900/30 transition-colors"
                     >
                       <p className="text-xs font-medium">{st.label}</p>
                       <p className="text-[10px] text-zinc-500 mono mt-0.5">

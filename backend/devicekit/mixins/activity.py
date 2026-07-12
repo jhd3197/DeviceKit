@@ -10,8 +10,10 @@ class ActivityMixin:
 
     _activities = []
 
-    def log_activity(self, action, device_id=None, details=None, source_ip=None, authenticated=None):
-        """Log an activity event."""
+    def log_activity(self, action, device_id=None, details=None, source_ip=None,
+                     authenticated=None, user_id=None):
+        """Log an activity event (in-memory feed for /activities). ``user_id`` attributes it to
+        the resolved principal when the caller has one (plan 20 part 3)."""
         activity = {
             'id': str(uuid.uuid4()),
             'action': action,
@@ -20,6 +22,7 @@ class ActivityMixin:
             'timestamp': time.time(),
             'source_ip': source_ip,
             'authenticated': authenticated,
+            'user_id': user_id,
         }
         self._activities.append(activity)
         logger.info(f"Activity logged: {action}" + (f" on {device_id}" if device_id else ""))

@@ -94,6 +94,14 @@ def make_blueprint(client, limiter):
         client.broadcast('device_connected', {'device_id': device_id, 'info': data})
         if not result['reconnected']:
             client.broadcast('device_new', {'device_id': device_id, 'info': data})
+            # A genuinely new device kicks off the formal onboarding state machine (plan 25):
+            # validate → provision (apply its group policy) → ready. Best-effort; a failure
+            # here never blocks the registration response.
+            try:
+                client.start_onboarding(device_id, serial=serial,
+                                        context={'trigger': 'register'})
+            except Exception as e:
+                logger.warning(f"Onboarding start skipped for {device_id}: {e}")
         elif result['was_offline']:
             client.broadcast('device_reconnected', {'device_id': device_id})
             client.notify_event(
@@ -281,6 +289,43 @@ def make_blueprint(client, limiter):
             'count': client.count_device_commands(device_id=device_id, status=status),
         })
 
+    # -------------------------------------------------------------------
+    # Read-only survey primitives (plan 25 part 1 — the trust boundary)
+    # -------------------------------------------------------------------
+    @bp.route('/agent-device/primitives')
+    def agent_device_primitives():
+        """The fixed allowlist of read-only survey primitives the server may compose.
+
+        The panel is untrusted: it can only ask for these primitives (or a named probe that
+        combines them) — it can never name a shell command or read a whole file.
+        """
+        return jsonify(client.list_agent_primitives())
+
+    @bp.route('/agent-device/<device_id>/survey', methods=['POST'])
+    def agent_device_survey(device_id):
+        """Compose a survey: either a single ``primitive`` (+ ``args``) or a named ``probe``.
+
+        Validation happens before dispatch, so an off-allowlist name is a 400, never a
+        command that reaches the device.
+        """
+        from devicekit.agent_primitives import PrimitiveError
+        data = request.get_json(silent=True) or {}
+        timeout = data.get('timeout')
+        try:
+            if data.get('probe'):
+                result = client.compose_agent_probe(
+                    device_id, data['probe'], timeout=timeout)
+                return jsonify(result)
+            primitive = data.get('primitive')
+            if not primitive:
+                return jsonify({'error': 'primitive or probe required'}), 400
+            row = client.send_agent_primitive(
+                device_id, primitive, args=data.get('args') or {}, timeout=timeout)
+            code = 200 if row and row['status'] == 'completed' else 202
+            return jsonify(row), code
+        except PrimitiveError as e:
+            return jsonify({'error': str(e)}), 400
+
     @bp.route('/agent-device/<device_id>/metrics')
     def agent_device_metrics(device_id):
         """Return raw agent-sourced metrics for a device."""
@@ -377,6 +422,15 @@ def make_blueprint(client, limiter):
             return jsonify({'error': 'no pending rotation'}), 400
         client.log_activity('agent_key_rotation_complete', device_id, {})
         return jsonify({'device_id': device_id, 'status': 'rotated'})
+
+    @bp.route('/agent-device/versions')
+    def agent_device_versions():
+        """Fleet 'which agent version is on which device' view (plan 25 part 2).
+
+        Returns per-device version rows plus a ``version → devices`` rollup — the read side
+        of OTA targeting (the roll-forward/back actions land with OTA in phase 3).
+        """
+        return jsonify(client.list_agent_versions())
 
     @bp.route('/agent-device/status')
     def agent_device_status():

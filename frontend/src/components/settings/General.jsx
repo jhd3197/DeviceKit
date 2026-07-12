@@ -5,7 +5,8 @@ import { usePaneForm } from './usePaneForm'
 
 const KEYS = ['general.instance_name', 'general.default_device_timeout']
 
-export default function General({ settings, save }) {
+export default function General({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const f = usePaneForm(settings, KEYS, save)
 
   return (
@@ -14,6 +15,7 @@ export default function General({ settings, save }) {
         label="Instance name"
         help="Shown in the sidebar and page titles. Rename this node."
         htmlFor="instance-name"
+        register={reg('instance-name')}
       >
         <TextInput
           id="instance-name"
@@ -27,6 +29,7 @@ export default function General({ settings, save }) {
         label="Default device timeout"
         help="Fallback per-command dispatch timeout for device operations."
         htmlFor="device-timeout"
+        register={reg('device-timeout')}
       >
         <NumberInput
           id="device-timeout"

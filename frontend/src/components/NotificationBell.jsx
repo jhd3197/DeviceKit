@@ -50,7 +50,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setOpen((v) => !v)}
         title="Notifications"
-        className="relative w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors"
+        className="relative w-8 h-8 flex items-center justify-center rounded-md text-zinc-400 hover:text-strong hover:bg-hover transition-colors"
       >
         <Bell className="w-4 h-4" />
         {unread > 0 && (
@@ -64,7 +64,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-2 w-80 bg-zinc-900 border border-main rounded-lg shadow-xl z-50 overflow-hidden">
+        <div className="absolute top-full right-0 mt-2 w-80 bg-hover border border-main rounded-lg shadow-xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 border-b border-main">
             <span className="text-xs font-bold text-zinc-200 uppercase tracking-widest">
               Notifications
@@ -131,7 +131,7 @@ export default function NotificationBell() {
 
           <button
             onClick={() => { setOpen(false); navigate('/notifications') }}
-            className="w-full px-3 py-2 text-center text-[11px] text-zinc-400 hover:text-white hover:bg-zinc-800 border-t border-main"
+            className="w-full px-3 py-2 text-center text-[11px] text-zinc-400 hover:text-strong hover:bg-zinc-800 border-t border-main"
           >
             View all notifications
           </button>

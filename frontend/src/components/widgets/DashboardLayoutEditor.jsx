@@ -23,13 +23,13 @@ export default function DashboardLayoutEditor({ widgets, toggleWidget, moveWidge
   return (
     <div
       ref={ref}
-      className="absolute top-full right-0 mt-2 w-72 bg-zinc-900 border border-main rounded-lg shadow-xl z-30"
+      className="absolute top-full right-0 mt-2 w-72 bg-hover border border-main rounded-lg shadow-xl z-30"
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-main">
         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
           Customize Layout
         </span>
-        <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+        <button onClick={onClose} className="text-zinc-500 hover:text-strong transition-colors">
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -52,7 +52,7 @@ export default function DashboardLayoutEditor({ widgets, toggleWidget, moveWidge
             <button
               onClick={() => moveWidget(w.id, 'up')}
               disabled={i === 0}
-              className="text-zinc-500 hover:text-white disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
+              className="text-zinc-500 hover:text-strong disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
               title="Move up"
             >
               <ChevronUp className="w-4 h-4" />
@@ -60,7 +60,7 @@ export default function DashboardLayoutEditor({ widgets, toggleWidget, moveWidge
             <button
               onClick={() => moveWidget(w.id, 'down')}
               disabled={i === widgets.length - 1}
-              className="text-zinc-500 hover:text-white disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
+              className="text-zinc-500 hover:text-strong disabled:opacity-20 disabled:hover:text-zinc-500 transition-colors"
               title="Move down"
             >
               <ChevronDown className="w-4 h-4" />

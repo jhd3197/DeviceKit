@@ -115,7 +115,7 @@ class SettingsFragment : Fragment() {
         // Copy ADB command button
         view.findViewById<Button>(R.id.copyAdbCommandButton).setOnClickListener {
             val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("adb command", "adb reverse tcp:5050 tcp:5050"))
+            clipboard.setPrimaryClip(ClipData.newPlainText("adb command", "adb reverse tcp:7317 tcp:7317"))
             Toast.makeText(requireContext(), "Command copied", Toast.LENGTH_SHORT).show()
         }
 
@@ -252,7 +252,7 @@ class SettingsFragment : Fragment() {
 
         val subnet = deviceIp.substringBeforeLast(".")
         scanNetworkButton.isEnabled = false
-        scanResultText.text = "Scanning $subnet.1-254:5050..."
+        scanResultText.text = "Scanning $subnet.1-254:7317..."
 
         CoroutineScope(Dispatchers.IO).launch {
             val semaphore = Semaphore(20)
@@ -264,7 +264,7 @@ class SettingsFragment : Fragment() {
                     try {
                         val ip = "$subnet.$i"
                         val request = Request.Builder()
-                            .url("http://$ip:5050/health")
+                            .url("http://$ip:7317/health")
                             .build()
                         val response = httpClient.newCall(request).execute()
                         if (response.isSuccessful) {
@@ -288,17 +288,17 @@ class SettingsFragment : Fragment() {
                     scanResultText.text = "Found: ${found.joinToString(", ")}\nTap an IP to use it."
                     // Make tappable if only one result, auto-populate
                     if (found.size == 1) {
-                        val url = "http://${found[0]}:5050"
+                        val url = "http://${found[0]}:7317"
                         serverUrlInput.setText(url)
                         saveServerUrl(prefs)
                         scanResultText.text = "Found server at ${found[0]} — URL set."
                     } else {
                         scanResultText.setOnClickListener(null)
                         // Show clickable list
-                        scanResultText.text = found.joinToString("\n") { ip -> "• http://$ip:5050" }
+                        scanResultText.text = found.joinToString("\n") { ip -> "• http://$ip:7317" }
                         scanResultText.setOnClickListener {
                             // Use first found as default
-                            val url = "http://${found[0]}:5050"
+                            val url = "http://${found[0]}:7317"
                             serverUrlInput.setText(url)
                             saveServerUrl(prefs)
                             scanResultText.text = "URL set to $url"

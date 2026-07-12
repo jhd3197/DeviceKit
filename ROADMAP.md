@@ -411,6 +411,11 @@ See [docs/plans/10-command-palette.md](docs/plans/10-command-palette.md) and [do
 - [ ] Dashboard carved into widgets with a renderer map; toggle/reorder/reset persisted in localStorage with forward-compatible merge
 - [ ] Extension entries (palette) + extension widgets (`dashboard.top` slot) — palette `command_palette` entries done (plan 10); widgets pending (plan 11)
 
+**Palette v2** (see [docs/plans/26-command-palette-v2.md](docs/plans/26-command-palette-v2.md)):
+- [x] `F1` + `Ctrl/Cmd+Shift+P` open bindings; frecency ranking (14-day half-life) replacing last-6 recents; footer hint row
+- [x] Settings card index + `?focus=setting:` deep-link flash + admin-only authz gating
+- [x] Backend `GET /search` omnisearch (`SearchMixin`) + async entity provider with category weights/caps
+
 ### Phase 32: Settings & Theming ✅
 **Goal**: A real `/settings` (the sidebar link currently 404s) and runtime accent theming.
 See [docs/plans/12-settings-and-theming.md](docs/plans/12-settings-and-theming.md).
@@ -484,7 +489,78 @@ See [docs/plans/18-app-driver-extensions.md](docs/plans/18-app-driver-extensions
 **Goal**: One AI path (Prompture, no direct provider SDKs) and an optional self-hosted `prompture-hub` backend that keeps provider keys out of DeviceKit.
 See [docs/plans/19-ai-consolidation-and-prompture-hub.md](docs/plans/19-ai-consolidation-and-prompture-hub.md).
 
-- [ ] Retire `agent.py` legacy `_ask_openai`/`_ask_anthropic` + `AI_PROVIDER`; drop direct `openai`/`anthropic` deps (all AI via Prompture)
-- [ ] `ai.backend` = direct|hub setting + hub OpenAI-compat driver wiring (base_url `/v1`, masked `ph_` key); `direct` stays default
-- [ ] Hub health probe (`/health`, `/v1/models`) + `/ai/hub/health` route + model picker from hub + setup links (`pip install prompture-hub`, dashboard)
-- [ ] Per-extension scoped hub keys via `/admin/*` (allowed-model whitelist + daily spend cap at consent) routed through `sdk.ai(slug)` — contains untrusted extension LLM use
+- [x] Retire `agent.py` legacy `_ask_openai`/`_ask_anthropic` + `AI_PROVIDER`; drop direct `openai`/`anthropic` deps (all AI via Prompture)
+- [x] `ai.backend` = direct|hub setting + hub OpenAI-compat driver wiring (base_url `/v1`, masked `ph_` key); `direct` stays default
+- [x] Hub health probe (`/health`, `/v1/models`) + `/ai/hub/health` route + model picker from hub + setup links (`pip install prompture-hub`, dashboard)
+- [x] Per-extension scoped hub keys via `/admin/*` (allowed-model whitelist + daily spend cap at consent) routed through `sdk.ai(slug)` — contains untrusted extension LLM use
+
+---
+
+## Second-Wave Platform Phases (ServerKit deep pass)
+
+Phases 40–45 come from a closer read of ServerKit ([docs/plans/00-overview.md](docs/plans/00-overview.md) → plans 20–25). These port mature, mostly-shipped ServerKit patterns; each plan carries a "ServerKit source map" naming the exact source files. Four items are flagged *greenfield* (no ServerKit prior art) — MCP server, OTA agent updates, real on-device sandboxing, multi-node control plane. Recommended order: **40 first** (identity is the substrate 41/45 and the plan-39 hub keys assume), then 41 + 44 in parallel, 42 → 43, and 45 independently.
+
+### Phase 40: Identity, RBAC & Secrets Vault
+**Goal**: Move from single-token solo-localhost to real users, roles, workspaces, scoped API keys, a user-attributed audit trail, and an encrypted secrets vault — without breaking the solo setup.
+See [docs/plans/20-identity-rbac-and-secrets.md](docs/plans/20-identity-rbac-and-secrets.md).
+
+- [x] Opt-in narrow-only `scope_query` retrofit (no workspace context = unchanged behavior)
+- [x] `User` + login/session + global role + per-feature read/write matrix; `AuthMixin` → principal resolver
+- [x] Hashed, scoped, multi API keys (`dk_…`, wildcard scopes, rotate/revoke/expiry) replacing the single global key
+- [x] User-attributed `AuditService` (redaction, proxy IP/UA) folding `log_activity` + attributing `AgentAuditLog`
+- [x] `Workspace` + `WorkspaceMember` scoping devices (born-in-workspace) + automations; capability fold + `ResourceGrant`
+- [x] Fernet secrets vault (reuse `notifications/crypto.py`) — masked list + reveal + `resolve_env_dict` injection
+- [x] (optional) invitations + TOTP + lockout + require-2FA-with-grace policy
+
+### Phase 41: Public API `/api/v1` + OpenAPI + MCP Server
+**Goal**: A versioned, scope-gated public API with auto-generated OpenAPI, and an MCP server so Claude can drive the fleet through the same gated surface.
+See [docs/plans/21-public-api-and-mcp-server.md](docs/plans/21-public-api-and-mcp-server.md).
+
+- [x] `/api/v1` mount + dual auth (session or `dk_` key) + `require_scope` (pass-through for session) + device scope catalog
+- [x] Auto-OpenAPI generator over the blueprint `url_map` + `/api/v1/openapi.json` + docs page
+- [x] **MCP server** (stdio + HTTP): curated tool set, per-tool scope gating, plan-13 confirmation gate on writes *(greenfield)*
+- [x] Generated client + `devicekit` CLI (token auth, completions)
+
+### Phase 42: Automation Engine v2 — DAG + Triggers
+**Goal**: Replace the linear step engine with a branching graph (loops, sub-flows, parallel device fan-out) and four trigger types.
+See [docs/plans/22-automation-engine-v2.md](docs/plans/22-automation-engine-v2.md).
+
+- [x] nodes+edges model + Kahn cycle-validation + topo executor + linear→graph compat shim (no user migration) + AST interpolation (not `eval`)
+- [x] Control-flow nodes: `logic_if`, bounded `for_each`, `sub_automation`, typed step variables *(shipped as tramo types: `if`/`switch`/`merge`, bounded `for-each`, `call-flow`, `set-var`)*
+- [x] Error contract: per-node retry/backoff + `on_failure` edge + compensation node *(shipped as tramo `retry {count,delayMs,backoff}` + `runAfter: on-error/always` branches)*
+- [x] Triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run`
+- [x] Parallel device fan-out — `for_each` device branches as concurrency-capped jobs
+- [x] Frontend graph builder (canvas, validate, dry-run) *(embedded tramo editor: Canvas/RightRail/useWorkflow + node pack + live SSE run view)*
+
+### Phase 43: Desired-State Fleet Policy (`devicekit.yaml`)
+**Goal**: Declare a device/group's desired apps + automations + config as code; plan a diff, apply in a job, detect drift, reconcile — MDM-grade policy.
+See [docs/plans/23-desired-state-fleet-policy.md](docs/plans/23-desired-state-fleet-policy.md).
+
+- [x] `devicekit.yaml` schema + validator + normalize *(Draft-7 JSON-Schema, snake_case aliases, stable hash — `backend/devicekit/policy/spec.py`)*
+- [x] `FleetPolicy` persistence (raw + normalized + sha256 + status) scoped to device/group *(workspace-scoped, `applied_hash` kept across edits)*
+- [x] Plan: desired-vs-live diff → ordered steps + hard blockers (the "honesty rule") *(pure `plan_policy`; `attach_extension` ordered first — provisioning rides driver extensions)*
+- [x] Apply as a job (before/after snapshots, idempotent unchanged-hash short-circuit, per-device fan-out) *(`policy.apply` parent + concurrency-capped `policy.apply.device` children)*
+- [x] Drift detection (shared with Phase 44) + reconcile (pending-by-default, opt-in autoApply) *(plan 24 not built yet — the re-plan IS the drift primitive; edge-triggered notifications)*
+- [x] Scaffold YAML from live state (secrets → `fromSecret` refs into the vault) *(adopt-then-plan-empty + drift/reconcile verified live on the Samsung A03s)*
+
+### Phase 44: Fleet Health, Sweeps & Auto-Remediation
+**Goal**: Bounded fleet-wide sweeps, allowlisted capability-gated remediation, and the predictive-health layer Phase 22 still needs — the disciplined answer to "fleet scale" (not multi-node).
+See [docs/plans/24-fleet-health-and-remediation.md](docs/plans/24-fleet-health-and-remediation.md).
+
+- [ ] `fleet_sweep` bounded off-thread fan-out (per-device timeout, wall-clock budget, `(device_id, check_key)` rows) + the six-rule checklist
+- [ ] Device doctor: uniform best-effort check rows, `repairable` gated on capability
+- [ ] Fleet repair: data-driven allowlist, capability-gated, audited, operator-triggered by default
+- [ ] Predictive health: z-score anomaly + regression capacity forecast + `/fleet/health/predictions` + Predictions card (finishes Phase 22)
+- [ ] Edge-triggered health alerts (fire once on failed, once on recovery)
+- [ ] (optional) Fleet status page (uptime %, auto-incidents, stripped public payload)
+
+### Phase 45: Agent Lifecycle, OTA & Backup/DR
+**Goal**: Operate the agent at fleet scale (enforced trust boundary, OTA updates, onboarding state machine) and make DeviceKit survive its own box dying (backup + restore drills).
+See [docs/plans/25-agent-lifecycle-and-backup.md](docs/plans/25-agent-lifecycle-and-backup.md).
+
+- [x] Agent-enforced read-only primitive allowlist (server composes, never pushes shell)
+- [x] Capability/version negotiation + fleet "which agent version where" view
+- [x] **OTA agent updates**: signed APK versions + rollout policy (canary→staged→full+rollback) as jobs *(greenfield)*
+- [x] Onboarding state machine (`pending → validating → provisioning → ready | failed`) on the job bus
+- [x] Agent-plugin manifest contract (capabilities + typed perms + limits + deps); runtime deferred
+- [x] Backup/DR of own state: tarball + manifest + verify ladder + **restore drill** + scrub-first debug bundles

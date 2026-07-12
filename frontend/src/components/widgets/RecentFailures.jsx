@@ -52,7 +52,7 @@ export default function RecentFailures() {
         </h3>
         <button
           onClick={load}
-          className="text-zinc-500 hover:text-white transition-colors"
+          className="text-zinc-500 hover:text-strong transition-colors"
           title="Refresh now"
         >
           <RefreshCw className="w-3.5 h-3.5" />

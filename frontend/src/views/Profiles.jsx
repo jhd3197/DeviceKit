@@ -64,7 +64,7 @@ export default function Profiles() {
 
   return (
     <>
-      <header className="h-14 border-b border-main flex items-center justify-between px-6 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-6 bg-body shrink-0">
         <div className="flex items-center gap-3">
           <Bot className="w-5 h-5 text-zinc-400" />
           <h1 className="text-sm font-bold">AI Profiles</h1>
@@ -116,7 +116,7 @@ export default function Profiles() {
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => navigate(`/profiles/${p.id}/edit`)}
-                        className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-white mr-1"
+                        className="p-1.5 hover:bg-zinc-800 rounded text-zinc-500 hover:text-strong mr-1"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>

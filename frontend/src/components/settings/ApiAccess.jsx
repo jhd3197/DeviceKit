@@ -11,7 +11,8 @@ import { Pane, Field, SaveBar } from './fields'
 
 const LS_KEY = 'devicekit_api_key'
 
-export default function ApiAccess() {
+export default function ApiAccess({ register }) {
+  const reg = register || (() => ({}))
   const [value, setValue] = useState(() => localStorage.getItem(LS_KEY) || '')
   const [baseline, setBaseline] = useState(value)
   const [show, setShow] = useState(false)
@@ -46,6 +47,7 @@ export default function ApiAccess() {
         label="API key"
         help="Stored in this browser only. Reloads pick it up automatically."
         htmlFor="api-key"
+        register={reg('api-key')}
       >
         <div className="flex items-center gap-2 w-full">
           <div className="relative flex-1">
@@ -56,14 +58,14 @@ export default function ApiAccess() {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="No key set (dev mode)"
-              className="w-full bg-black border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+              className="w-full bg-body border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
             />
           </div>
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
             title={show ? 'Hide' : 'Show'}
-            className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md"
+            className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md"
           >
             {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
@@ -72,7 +74,7 @@ export default function ApiAccess() {
             onClick={copy}
             disabled={!value}
             title="Copy"
-            className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md disabled:opacity-40"
+            className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md disabled:opacity-40"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
           </button>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048">
+  <defs>
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <!-- Solid accent squircle badge -->
+  <path fill="url(#brandGradient)" d="M598,128 H1450 A470,470 0 0 1 1920,598 V1450 A470,470 0 0 1 1450,1920 H598 A470,470 0 0 1 128,1450 V598 A470,470 0 0 1 598,128 Z"/>
+  <!-- White phone glyph: solid body with screen, speaker slot, and home indicator cut out
+       (evenodd) so the accent badge shows through as the screen and bezel details. -->
+  <path fill="white" fill-rule="evenodd" d="M870,520 H1178 A110,110 0 0 1 1288,630 V1418 A110,110 0 0 1 1178,1528 H870 A110,110 0 0 1 760,1418 V630 A110,110 0 0 1 870,520 Z M876,680 H1172 A44,44 0 0 1 1216,724 V1324 A44,44 0 0 1 1172,1368 H876 A44,44 0 0 1 832,1324 V724 A44,44 0 0 1 876,680 Z M978,584 H1070 A14,14 0 0 1 1084,598 A14,14 0 0 1 1070,612 H978 A14,14 0 0 1 964,598 A14,14 0 0 1 978,584 Z M958,1436 H1090 A14,14 0 0 1 1104,1450 A14,14 0 0 1 1090,1464 H958 A14,14 0 0 1 944,1450 A14,14 0 0 1 958,1436 Z"/>
+  <!-- Green status LED (family continuity with the Android accent) -->
+  <circle cx="1150" cy="740" r="30" fill="#3ddc97"/>
+</svg>

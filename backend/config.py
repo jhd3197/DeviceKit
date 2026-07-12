@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API
-API_PORT = int(os.getenv("API_PORT", 5050))
+API_PORT = int(os.getenv("API_PORT", 7317))
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 
 # AWS
@@ -45,6 +45,24 @@ AGENT_HMAC_WINDOW = float(os.getenv("AGENT_HMAC_WINDOW", "60"))
 AGENT_ENROLLMENT_REQUIRED = os.getenv("AGENT_ENROLLMENT_REQUIRED", "false").lower() in ("true", "1", "yes")
 # Default per-command dispatch timeout (seconds) for synchronous agent commands.
 AGENT_COMMAND_TIMEOUT = float(os.getenv("AGENT_COMMAND_TIMEOUT", "30"))
+
+# OTA agent updates (plan 25 part 3)
+# Ed25519 private key used to sign release manifests. Generated + persisted on first use.
+# The agent pins the matching public key. Keep this file out of backups' plaintext.
+OTA_SIGNING_KEY_PATH = os.getenv(
+    "DEVICEKIT_OTA_KEY_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "ota", "signing_key.pem"))
+# How often the scheduled advance job progresses active rollouts (canary→staged→full).
+OTA_ROLLOUT_ADVANCE_INTERVAL = int(os.getenv("DEVICEKIT_OTA_ADVANCE_INTERVAL", "60"))
+# Crash-loop backoff: a device that fails an install this many times stops being offered it.
+OTA_MAX_UPDATE_ATTEMPTS = int(os.getenv("DEVICEKIT_OTA_MAX_UPDATE_ATTEMPTS", "3"))
+
+# Backup / DR of DeviceKit's own state (plan 25 part 6)
+# How often the scheduled restore drill runs (default daily). The drill restores the latest
+# backup into a throwaway scratch DB and tears it down — it never touches live.
+BACKUP_DRILL_INTERVAL = int(os.getenv("DEVICEKIT_BACKUP_DRILL_INTERVAL", "86400"))
+# Keep this many most-recent backups on disk (older ones are pruned after a new one lands).
+BACKUP_RETENTION = int(os.getenv("DEVICEKIT_BACKUP_RETENTION", "7"))
 
 # AI Agent (Prompture)
 PROMPTURE_DEFAULT_MODEL = os.environ.get("PROMPTURE_DEFAULT_MODEL", "claude/claude-sonnet-4-20250514")

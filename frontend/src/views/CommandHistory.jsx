@@ -144,7 +144,7 @@ export default function CommandHistory() {
       </div>
 
       {/* Commands table */}
-      <div className="bg-zinc-900 border border-main rounded-lg overflow-hidden">
+      <div className="bg-hover border border-main rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>

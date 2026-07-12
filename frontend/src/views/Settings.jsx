@@ -18,9 +18,16 @@ import {
   Bell,
   Palette,
   Puzzle,
+  Users as UsersIcon,
+  Lock,
+  Building2,
+  History,
+  ShieldCheck,
 } from 'lucide-react'
 
 import { api } from '../api'
+import { useAuth } from '../auth/AuthContext'
+import { useSettingFocus } from '../hooks/useSettingFocus'
 import { useContributions } from '../extensions/contributions'
 import ExtensionSlot from '../extensions/ExtensionSlot'
 import General from '../components/settings/General'
@@ -31,6 +38,12 @@ import Streaming from '../components/settings/Streaming'
 import Bundles from '../components/settings/Bundles'
 import Appearance from '../components/settings/Appearance'
 import NotificationsPane from '../components/settings/NotificationsPane'
+import Users from '../components/settings/Users'
+import ApiKeysPane from '../components/settings/ApiKeysPane'
+import Workspaces from '../components/settings/Workspaces'
+import Vault from '../components/settings/Vault'
+import AuditLog from '../components/settings/AuditLog'
+import Security from '../components/settings/Security'
 
 // Pane that hosts extension-contributed settings forms (plan 04's `settings.panels` slot).
 // Host settings + save are forwarded so a schema-driven form can read/write them.
@@ -47,9 +60,16 @@ function ExtensionPanels({ settings, save }) {
 }
 
 // Tab registry. `section` groups items in the nav; `component` receives { settings, save }.
+// `admin: true` tabs (plan 20) only render for an admin principal.
 const TABS = [
   { id: 'general', label: 'General', icon: SettingsIcon, section: 'Workspace', component: General },
   { id: 'api', label: 'API Access', icon: KeyRound, section: 'Workspace', component: ApiAccess },
+  { id: 'account', label: 'Account & 2FA', icon: ShieldCheck, section: 'Access & Security', component: Security },
+  { id: 'users', label: 'Users', icon: UsersIcon, section: 'Access & Security', component: Users, admin: true },
+  { id: 'apikeys', label: 'API Keys', icon: Lock, section: 'Access & Security', component: ApiKeysPane, admin: true },
+  { id: 'workspaces', label: 'Workspaces', icon: Building2, section: 'Access & Security', component: Workspaces },
+  { id: 'vault', label: 'Secrets Vault', icon: Lock, section: 'Access & Security', component: Vault, admin: true },
+  { id: 'audit', label: 'Audit Log', icon: History, section: 'Access & Security', component: AuditLog, admin: true },
   { id: 'ai', label: 'AI', icon: Sparkles, section: 'Devices & AI', component: AiSettings },
   { id: 'streaming', label: 'Streaming', icon: MonitorPlay, section: 'Devices & AI', component: Streaming },
   { id: 'bundles', label: 'Debug Bundles', icon: Package, section: 'Devices & AI', component: Bundles },
@@ -67,7 +87,7 @@ const EXTENSION_TAB = {
   component: ExtensionPanels,
 }
 
-const SECTION_ORDER = ['Workspace', 'Devices & AI', 'Personalization']
+const SECTION_ORDER = ['Workspace', 'Access & Security', 'Devices & AI', 'Personalization']
 
 function groupTabs(tabs) {
   const bySection = new Map()
@@ -84,13 +104,19 @@ export default function Settings() {
   const { tab } = useParams()
   const navigate = useNavigate()
   const { envelope } = useContributions()
+  const { isAdmin } = useAuth()
+  // Palette settings deep-links (plan 26): reads ?focus=setting:<id> and hands panes a
+  // register(id) they attach to their cards so the target scrolls into view and flashes.
+  const { register } = useSettingFocus()
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   // Only surface the Extensions tab when something actually contributes to the slot.
   const hasExtensionPanels = (envelope.widgets || []).some((w) => w.slot === 'settings.panels')
-  const tabs = hasExtensionPanels ? [...TABS, EXTENSION_TAB] : TABS
+  // Admin-only tabs (plan 20) are hidden from non-admin principals.
+  const visibleTabs = TABS.filter((t) => !t.admin || isAdmin)
+  const tabs = hasExtensionPanels ? [...visibleTabs, EXTENSION_TAB] : visibleTabs
 
   const activeId = tabs.some((t) => t.id === tab) ? tab : tabs[0].id
   const active = tabs.find((t) => t.id === activeId)
@@ -144,8 +170,8 @@ export default function Settings() {
                   onClick={() => navigate(`/settings/${t.id}`)}
                   className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                     t.id === activeId
-                      ? 'bg-zinc-900 text-white'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                      ? 'bg-hover text-strong'
+                      : 'text-zinc-400 hover:text-strong hover:bg-hover'
                   }`}
                 >
                   <t.icon className="w-4 h-4" />
@@ -165,7 +191,7 @@ export default function Settings() {
           ) : error ? (
             <p className="text-red-400 text-sm">{error}</p>
           ) : (
-            <Pane settings={settings} save={save} />
+            <Pane settings={settings} save={save} register={register} />
           )}
         </div>
       </div>

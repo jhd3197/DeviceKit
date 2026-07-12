@@ -428,7 +428,8 @@ class AutomationMixin:
     # ---------------------------------------------------------------
     # Automation CRUD
     # ---------------------------------------------------------------
-    def create_automation(self, name, description="", steps=None, tags=None):
+    def create_automation(self, name, description="", steps=None, tags=None,
+                          workspace_id=None, graph=None):
         now = time.time()
         with session_scope() as s:
             automation = Automation(
@@ -439,10 +440,18 @@ class AutomationMixin:
                 tags=tags or [],
                 created_at=now,
                 updated_at=now,
+                workspace_id=workspace_id,   # born-in-workspace (plan 20 part 4); None = global
+                graph=graph,                 # plan 22: a tramo WorkflowDoc, or None (linear)
             )
             s.add(automation)
             s.flush()
             result = automation.to_dict()
+        # A graph created directly (import/clone) may declare triggers — sync them.
+        if graph and hasattr(self, "sync_automation_triggers"):
+            try:
+                self.sync_automation_triggers(result["id"], graph)
+            except Exception as e:
+                logger.warning(f"Trigger sync for new automation failed: {e}")
         logger.info(f"Created automation '{name}' ({result['id']})")
         return result
 
@@ -451,9 +460,13 @@ class AutomationMixin:
             automation = s.get(Automation, automation_id)
             return automation.to_dict() if automation else None
 
-    def list_automations(self):
+    def list_automations(self, workspace_id=None):
+        """List automations, narrowed to a workspace when one is active. With no workspace
+        context (``workspace_id=None``) the query is unchanged (plan 20 part 4, narrow-only)."""
+        from devicekit.services.workspace import scope_query
         with session_scope() as s:
-            return [a.to_dict() for a in s.query(Automation).all()]
+            q = scope_query(s.query(Automation), Automation, workspace_id)
+            return [a.to_dict() for a in q.all()]
 
     def update_automation(self, automation_id, updates):
         with session_scope() as s:
@@ -473,25 +486,41 @@ class AutomationMixin:
             if not automation:
                 return False
             s.delete(automation)
+        # Drop trigger infrastructure the graph may have materialized (plan 22 part 4).
+        if hasattr(self, "_cleanup_automation_triggers"):
+            self._cleanup_automation_triggers(automation_id)
         logger.info(f"Deleted automation {automation_id}")
         return True
 
     # ---------------------------------------------------------------
     # Execution
     # ---------------------------------------------------------------
-    def execute_automation(self, automation_id, device_id, self_heal=False):
+    def execute_automation(self, automation_id, device_id, self_heal=False,
+                           trigger_type="manual", trigger=None):
         """Create a run record and enqueue an ``automation.run`` job that executes it.
 
         Formerly this spawned a raw daemon thread; now the run is durable work on the job
         system — it survives a restart with a coherent status, can be retried, and appears in
         the jobs list. The step loop itself is unchanged; it just runs inside the job handler
         (``_job_run_automation``) on a bounded worker pool. Returns the queued run record
-        immediately so the API still responds 201 without blocking."""
+        immediately so the API still responds 201 without blocking.
+
+        ``trigger_type``/``trigger`` record what started the run (plan 22 part 4 —
+        webhook/cron/event/fanout callers pass theirs through ``enqueue_run``)."""
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
 
+        # Graph automations (plan 22) run on the workflow engine; every caller of this
+        # method (routes, MCP actions, schedules) funnels through without changes.
+        if automation.get("graph") and hasattr(self, "_enqueue_graph_run"):
+            return self._enqueue_graph_run(automation, device_id, trigger_type, trigger,
+                                           self_heal=self_heal)
+
         steps = automation.get("steps", [])
+        trigger_record = {"type": trigger_type}
+        if trigger is not None:
+            trigger_record["payload"] = trigger
         run_record = {
             "id": str(uuid.uuid4()),
             "automation_id": automation_id,
@@ -506,6 +535,8 @@ class AutomationMixin:
             "step_results": [],
             "error": None,
             "self_heal": self_heal,
+            "kind": "linear",
+            "trigger": trigger_record,
         }
         self._save_run(run_record)
 
@@ -912,6 +943,8 @@ class AutomationMixin:
             row.step_results = run_record.get("step_results", [])
             row.error = run_record.get("error")
             row.self_heal = run_record.get("self_heal", False)
+            row.kind = run_record.get("kind", "linear")
+            row.trigger = run_record.get("trigger")
 
     def get_automation_run(self, run_id):
         with session_scope() as s:
@@ -1127,6 +1160,7 @@ class AutomationMixin:
             description=automation.get("description", ""),
             steps=steps,
             tags=list(automation.get("tags", [])),
+            graph=copy.deepcopy(automation.get("graph")),
         )
         logger.info(f"Cloned automation '{automation['name']}' -> '{cloned['name']}'")
         return cloned
@@ -1136,8 +1170,11 @@ class AutomationMixin:
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
         exported = copy.deepcopy(automation)
-        for key in ("id", "created_at", "updated_at"):
+        # webhook_token is credential-like (the token *is* the auth) — never export it.
+        for key in ("id", "created_at", "updated_at", "webhook_token"):
             exported.pop(key, None)
+        if exported.get("graph") is None:
+            exported.pop("graph", None)
         for step in exported.get("steps", []):
             step.pop("id", None)
         return exported
@@ -1149,4 +1186,5 @@ class AutomationMixin:
             description=data.get("description", ""),
             steps=data.get("steps", []),
             tags=data.get("tags", []),
+            graph=data.get("graph"),
         )

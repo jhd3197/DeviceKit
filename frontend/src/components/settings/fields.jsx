@@ -17,9 +17,11 @@ export function Pane({ title, description, children }) {
 }
 
 // A single labelled field row: label + optional help on the left, control on the right.
-export function Field({ label, help, htmlFor, children }) {
+// `register` (optional) is a props object from useSettingFocus — spread it BEFORE className so
+// the deep-link ref/data-setting-id land on the root div without clobbering styles.
+export function Field({ label, help, htmlFor, children, register }) {
   return (
-    <div className="grid grid-cols-[1fr_auto] gap-4 items-start">
+    <div {...register} className="grid grid-cols-[1fr_auto] gap-4 items-start">
       <div>
         <label htmlFor={htmlFor} className="text-sm font-medium text-zinc-200 block">
           {label}
@@ -39,7 +41,7 @@ export function TextInput({ id, value, onChange, placeholder, type = 'text', cla
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent ${className}`}
+      className={`w-full bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent ${className}`}
     />
   )
 }
@@ -55,7 +57,7 @@ export function NumberInput({ id, value, onChange, min, max, step = 1, suffix })
         max={max}
         step={step}
         onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-        className="w-24 bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-accent"
+        className="w-24 bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-accent"
       />
       {suffix && <span className="text-xs text-zinc-500">{suffix}</span>}
     </div>
@@ -68,7 +70,7 @@ export function Select({ id, value, onChange, options }) {
       id={id}
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-accent"
+      className="w-full bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-accent"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -117,7 +119,7 @@ export function SaveBar({ dirty, saving, onSave, onReset, savedAt }) {
         <button
           type="button"
           onClick={onReset}
-          className="text-sm text-zinc-400 hover:text-white px-2 py-2"
+          className="text-sm text-zinc-400 hover:text-strong px-2 py-2"
         >
           Discard
         </button>

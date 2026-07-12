@@ -162,10 +162,10 @@ export default function FQLBar({ initialQuery = '', onResult }) {
             }}
             onFocus={() => setShowAutocomplete(true)}
             onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
-            className="w-full bg-black border border-main px-3 py-1.5 text-xs mono rounded focus:outline-none focus:border-zinc-500"
+            className="w-full bg-body border border-main px-3 py-1.5 text-xs mono rounded focus:outline-none focus:border-zinc-500"
           />
           {showAutocomplete && queryExpr && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-main rounded shadow-lg z-20 max-h-48 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-hover border border-main rounded shadow-lg z-20 max-h-48 overflow-y-auto">
               {getAutocompleteSuggestions().map(field => (
                 <button
                   key={field}
@@ -196,7 +196,7 @@ export default function FQLBar({ initialQuery = '', onResult }) {
         {queryActive && (
           <button
             onClick={clearQuery}
-            className="text-zinc-500 hover:text-white text-xs px-2 py-1.5 rounded border border-main hover:border-zinc-600 transition-colors"
+            className="text-zinc-500 hover:text-strong text-xs px-2 py-1.5 rounded border border-main hover:border-zinc-600 transition-colors"
           >
             Clear
           </button>
@@ -214,7 +214,7 @@ export default function FQLBar({ initialQuery = '', onResult }) {
             <Zap className="w-3 h-3" /> Presets <ChevronDown className="w-2.5 h-2.5" />
           </button>
           {showPresets && (
-            <div className="absolute top-full left-0 mt-1 bg-zinc-900 border border-main rounded shadow-lg z-20 w-64">
+            <div className="absolute top-full left-0 mt-1 bg-hover border border-main rounded shadow-lg z-20 w-64">
               {presetQueries.map((p, i) => (
                 <button
                   key={i}
@@ -238,7 +238,7 @@ export default function FQLBar({ initialQuery = '', onResult }) {
             <Save className="w-3 h-3" /> Saved <ChevronDown className="w-2.5 h-2.5" />
           </button>
           {showSaved && (
-            <div className="absolute top-full left-0 mt-1 bg-zinc-900 border border-main rounded shadow-lg z-20 w-72">
+            <div className="absolute top-full left-0 mt-1 bg-hover border border-main rounded shadow-lg z-20 w-72">
               {savedQueries.length === 0 && (
                 <p className="px-3 py-2 text-[10px] text-zinc-600">No saved queries</p>
               )}
@@ -287,7 +287,7 @@ export default function FQLBar({ initialQuery = '', onResult }) {
                     <Zap className="w-3 h-3" /> Bulk Action <ChevronDown className="w-2.5 h-2.5" />
                   </button>
                   {showBulkAction && (
-                    <div className="absolute top-full left-0 mt-1 bg-zinc-900 border border-main rounded shadow-lg z-20 w-48">
+                    <div className="absolute top-full left-0 mt-1 bg-hover border border-main rounded shadow-lg z-20 w-48">
                       {['reboot', 'lock', 'unlock', 'add_tag', 'add_to_group'].map(action => (
                         <button
                           key={action}

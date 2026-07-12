@@ -33,6 +33,10 @@ SETTINGS_DEFAULTS = {
     "ai.provider_keys": {},                    # {ENV_VAR: value} pushed into os.environ
     "ai.default_agent_mode": "supervised",     # observe | supervised | autonomous (per-device default)
     "ai.gate_timeout_seconds": 120,            # confirmation gate deadline; default-deny on expiry
+    "ai.backend": "direct",                    # direct (provider keys in env) | hub (prompture-hub gateway)
+    "ai.hub.url": "http://localhost:1984",     # prompture-hub base URL (backend probes {url}/health)
+    "ai.hub.key": None,                        # scoped ph_... hub key; the only secret DeviceKit holds on hub
+    "ai.hub.extension_keys": {},               # {slug: {id, key, ...}} — server-managed, never client-writable
     # Streaming
     "streaming.default_fps": 10,
     "streaming.default_quality": 50,
@@ -42,23 +46,44 @@ SETTINGS_DEFAULTS = {
     "bundles.share_token_lifetime_minutes": 1440,   # 24h
     # Appearance
     "appearance.theme": "dark",
-    "appearance.accent": "#10b981",            # emerald — DeviceKit's historical accent
+    "appearance.accent": "#6d7cff",            # periwinkle — DeviceKit's brand purple (plan 27)
+    "appearance.brand_name": "",               # white-label instance name; "" => "DeviceKit" (plan 28)
+    "appearance.logo": "",                     # white-label mark as a size-capped data-URI; "" => the brand SVG
+    # Account security (plan 20 part 6)
+    "security.require_2fa": False,             # require TOTP 2FA for all users
+    "security.require_2fa_enabled_at": None,   # stamped when the policy is turned on (grace anchor)
+    "security.twofa_grace_days": 7,            # grace window before an un-enrolled user is required
 }
 
-# Keys whose values are secret-ish (never echo the raw value back to the client). Their
-# presence is reported as a boolean per env var instead.
-_SECRET_KEYS = {"ai.provider_keys"}
+# Keys whose values are secret-ish (never echo the raw value back to the client). Dict
+# values are masked to a {name: bool} presence map, scalars to a single boolean.
+_SECRET_KEYS = {"ai.provider_keys", "ai.hub.key", "ai.hub.extension_keys"}
+
+# Server-managed settings the client API must never write (PUT /settings skips them).
+_SERVER_MANAGED_KEYS = {"ai.hub.extension_keys"}
+
+# Settings that reconfigure Prompture's driver registry when they change.
+_AI_BACKEND_KEYS = {"ai.backend", "ai.hub.url", "ai.hub.key"}
+
+# White-label logo is stored inline as a data-URI. Cap it so a huge upload can't bloat the
+# settings row / every GET /settings response. ~512 KB of base64 ≈ a 380 KB image — plenty
+# for a mark; the frontend also downscales before sending.
+_LOGO_MAX_CHARS = 512 * 1024
 
 
 class SettingsMixin:
     """CRUD + typed accessors for durable app settings."""
 
     def init_settings(self):
-        """Apply any persisted provider keys to the environment at boot. Idempotent."""
+        """Apply persisted provider keys + the AI backend selection at boot. Idempotent."""
         try:
             self._apply_provider_keys(self.get_setting("ai.provider_keys") or {})
         except Exception as e:  # a broken settings row must never block boot
             logger.warning(f"Settings init skipped: {e}")
+        try:
+            self._apply_ai_backend()
+        except Exception as e:  # an unreachable hub must never block boot
+            logger.warning(f"AI backend init skipped: {e}")
 
     # -----------------------------------------------------------
     # Core store
@@ -85,9 +110,12 @@ class SettingsMixin:
                     values[row.key] = row.value
         if redact:
             for key in _SECRET_KEYS:
-                raw = values.get(key) or {}
-                # Report which provider keys are set without leaking the secret.
-                values[key] = {name: bool(v) for name, v in raw.items()}
+                raw = values.get(key)
+                # Report which secrets are set without leaking the values.
+                if isinstance(raw, dict):
+                    values[key] = {name: bool(v) for name, v in raw.items()}
+                else:
+                    values[key] = bool(raw)
         return values
 
     def set_setting(self, key, value):
@@ -103,6 +131,11 @@ class SettingsMixin:
             row.updated_at = time.time()
         if key == "ai.provider_keys":
             self._apply_provider_keys(value or {})
+        if key in _AI_BACKEND_KEYS:
+            try:
+                self._apply_ai_backend()
+            except Exception as e:  # driver-registry hiccup must not fail the save
+                logger.warning(f"AI backend re-apply failed after saving {key}: {e}")
         return value
 
     def update_settings(self, data):
@@ -112,10 +145,24 @@ class SettingsMixin:
         if not isinstance(data, dict):
             raise ValueError("settings payload must be an object")
         for key, value in data.items():
-            if key not in SETTINGS_DEFAULTS:
+            if key not in SETTINGS_DEFAULTS or key in _SERVER_MANAGED_KEYS:
                 continue
             if key == "ai.provider_keys" and isinstance(value, dict):
                 value = self._merge_provider_keys(value)
+            if key == "ai.hub.key":
+                # GET /settings masks this to a boolean; a client echoing the masked
+                # value back must not clobber the stored secret. Only strings are
+                # accepted: non-empty replaces, empty clears.
+                if not isinstance(value, str):
+                    continue
+                value = value.strip() or None
+            if key == "appearance.logo":
+                # Only strings; reject an oversized data-URI rather than storing a blob that
+                # would bloat every settings response. Empty string clears the override.
+                if not isinstance(value, str):
+                    continue
+                if len(value) > _LOGO_MAX_CHARS:
+                    raise ValueError("Logo image is too large (max ~380 KB)")
             self.set_setting(key, value)
         return self.get_all_settings()
 
@@ -139,6 +186,39 @@ class SettingsMixin:
         for name, value in (keys or {}).items():
             if value:
                 os.environ[name] = value
+
+    # -----------------------------------------------------------
+    # AI backend (direct vs prompture-hub, plan 19)
+    # -----------------------------------------------------------
+
+    def _apply_ai_backend(self):
+        """Point Prompture's driver registry at the configured backend. Idempotent;
+        runs at boot and whenever an ``ai.backend`` / ``ai.hub.*`` setting is saved."""
+        from devicekit.ai_backend import apply_ai_backend
+        apply_ai_backend(
+            self.ai_backend(),
+            self.get_setting("ai.hub.url"),
+            self.get_setting("ai.hub.key"),
+        )
+
+    def ai_backend(self):
+        """Effective AI backend: ``direct`` (default) or ``hub``."""
+        backend = self.get_setting("ai.backend") or "direct"
+        return backend if backend in ("direct", "hub") else "direct"
+
+    def ai_hub_url(self):
+        return (self.get_setting("ai.hub.url") or "http://localhost:1984").rstrip("/")
+
+    def ai_hub_key(self):
+        return self.get_setting("ai.hub.key") or None
+
+    def ai_hub_health(self):
+        """Probe the configured hub for the Settings pane (server-side, so the hub URL
+        never has to be CORS-reachable from the browser)."""
+        from devicekit.ai_backend import probe_hub
+        health = probe_hub(self.ai_hub_url(), self.ai_hub_key())
+        health["backend"] = self.ai_backend()
+        return health
 
     # -----------------------------------------------------------
     # Typed accessors used by other mixins

@@ -4,6 +4,8 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from devicekit.services.scopes import require_scope
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,39 +13,12 @@ def make_blueprint(client, limiter):
     bp = Blueprint('fleet_query', __name__)
 
     def _get_all_devices():
-        """Helper to get merged ADB + agent device list for queries."""
-        connected = client.get_devices()
-        adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
-        now = time.time()
-        for agent_id, agent_data in client._agent_device_states.items():
-            if agent_id in adb_ids:
-                continue
-            info = agent_data.get('info', {})
-            state = agent_data.get('state', {})
-            metrics = state.get('metrics', {})
-            last_hb = agent_data.get('last_heartbeat', 0)
-            online = (now - last_hb) < 15 if last_hb else False
-            connected.append({
-                'serial': agent_id,
-                'device_id': agent_id,
-                'model': info.get('model', 'Unknown'),
-                'manufacturer': info.get('manufacturer', 'Unknown'),
-                'brand': info.get('brand', ''),
-                'android_version': info.get('android_version', ''),
-                'sdk': info.get('sdk', 0),
-                'online': online,
-                'source': 'agent',
-                'agent_version': info.get('agent_version', ''),
-                'battery_level': metrics.get('battery_level'),
-                'cpu_percent': metrics.get('cpu_percent'),
-                'ram_used_mb': metrics.get('ram_used_mb'),
-                'ram_total_mb': metrics.get('ram_total_mb'),
-                'currentPackageName': state.get('window', {}).get('package'),
-                'capabilities': agent_data.get('capabilities', {}),
-            })
-        return connected
+        """Merged ADB + agent device list for queries — moved onto FleetQueryMixin
+        (``all_devices_for_query``) so the workflow fan-out node shares it (plan 22)."""
+        return client.all_devices_for_query()
 
     @bp.route('/fleet/query')
+    @require_scope('devices:read')
     def fleet_query():
         """Execute a fleet query expression against all devices."""
         expression = request.args.get('q', '').strip()
@@ -72,6 +47,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/fleet/query/validate', methods=['POST'])
+    @require_scope('devices:read')
     def fleet_query_validate():
         """Validate a query expression without executing it."""
         data = request.get_json(silent=True) or {}
@@ -81,20 +57,24 @@ def make_blueprint(client, limiter):
         return jsonify(client.validate_query(expression))
 
     @bp.route('/fleet/query/fields')
+    @require_scope('devices:read')
     def fleet_query_fields():
         """Return supported query fields with descriptions."""
         return jsonify({'fields': client.get_query_fields()})
 
     @bp.route('/fleet/query/presets')
+    @require_scope('devices:read')
     def fleet_query_presets():
         """Return built-in preset queries."""
         return jsonify({'presets': client.get_preset_queries()})
 
     @bp.route('/fleet/queries', methods=['GET'])
+    @require_scope('devices:read')
     def fleet_saved_queries_list():
         return jsonify({'queries': client.list_saved_queries()})
 
     @bp.route('/fleet/queries', methods=['POST'])
+    @require_scope('devices:write')
     def fleet_saved_queries_create():
         data = request.get_json(silent=True) or {}
         name = data.get('name', '').strip()
@@ -109,6 +89,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 400
 
     @bp.route('/fleet/queries/<query_id>', methods=['GET'])
+    @require_scope('devices:read')
     def fleet_saved_query_get(query_id):
         query = client.get_saved_query(query_id)
         if not query:
@@ -116,6 +97,7 @@ def make_blueprint(client, limiter):
         return jsonify(query)
 
     @bp.route('/fleet/queries/<query_id>', methods=['PUT'])
+    @require_scope('devices:write')
     def fleet_saved_query_update(query_id):
         data = request.get_json(silent=True) or {}
         try:
@@ -127,6 +109,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 400
 
     @bp.route('/fleet/queries/<query_id>', methods=['DELETE'])
+    @require_scope('devices:write')
     def fleet_saved_query_delete(query_id):
         deleted = client.delete_saved_query(query_id)
         if not deleted:
@@ -134,6 +117,7 @@ def make_blueprint(client, limiter):
         return jsonify({'deleted': True})
 
     @bp.route('/fleet/query/bulk-action', methods=['POST'])
+    @require_scope('fleet:admin')
     def fleet_query_bulk_action():
         """Execute a bulk action on devices matching a query."""
         data = request.get_json(silent=True) or {}
@@ -178,7 +162,7 @@ def make_blueprint(client, limiter):
                     elif action == 'run_automation':
                         auto_id = action_params.get('automation_id', '')
                         if auto_id:
-                            run = client.run_automation(auto_id, device=did)
+                            run = client.execute_automation(auto_id, did)
                             result['success'] = True
                             result['run_id'] = run.get('id')
                         else:

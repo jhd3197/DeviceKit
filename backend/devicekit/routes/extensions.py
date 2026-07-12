@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 
 from devicekit.extension_manifest import manifest_spec, ManifestError
 from devicekit.mixins.extensions import SDK_VERSION
+from devicekit.services.scopes import require_scope
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +19,18 @@ def make_blueprint(client, limiter):
     bp = Blueprint('extensions', __name__)
 
     @bp.route('/extensions')
+    @require_scope('extensions:read')
     def extensions_list():
         exts = client.list_extensions()
         return jsonify({'extensions': exts, 'count': len(exts)})
 
     @bp.route('/extensions/manifest-spec')
+    @require_scope('extensions:read')
     def extensions_manifest_spec():
         return jsonify(manifest_spec())
 
     @bp.route('/extensions/contributions')
+    @require_scope('extensions:read')
     def extensions_contributions():
         """Merged declarative UI contributions of every active extension (plan 04). The
         React app fetches this once at boot and re-fetches after install/enable/disable to
@@ -34,10 +38,12 @@ def make_blueprint(client, limiter):
         return jsonify(client.get_contributions_envelope())
 
     @bp.route('/extensions/sdk-version')
+    @require_scope('extensions:read')
     def extensions_sdk_version():
         return jsonify({'sdk_version': SDK_VERSION})
 
     @bp.route('/extensions/registry')
+    @require_scope('extensions:read')
     def extensions_registry():
         force = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
         try:
@@ -47,6 +53,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/updates')
+    @require_scope('extensions:read')
     def extensions_updates():
         force = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
         try:
@@ -57,6 +64,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/preview', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_preview():
         data = request.get_json(silent=True) or {}
         url = data.get('url')
@@ -73,6 +81,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/install', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_install():
         data = request.get_json(silent=True) or {}
         slug = data.get('slug')
@@ -98,6 +107,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/install-local', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_install_local():
         """Zip a working tree on disk through the real pipeline (dev loop)."""
         data = request.get_json(silent=True) or {}
@@ -114,6 +124,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/install-upload', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_install_upload():
         file = request.files.get('file')
         if not file:
@@ -129,6 +140,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/<slug>')
+    @require_scope('extensions:read')
     def extensions_get(slug):
         ext = client.get_extension(slug)
         if not ext:
@@ -136,6 +148,7 @@ def make_blueprint(client, limiter):
         return jsonify(ext)
 
     @bp.route('/extensions/<slug>', methods=['DELETE'])
+    @require_scope('extensions:admin')
     def extensions_uninstall(slug):
         purge = request.args.get('purge', '').lower() in ('1', 'true', 'yes')
         force = request.args.get('force', '').lower() in ('1', 'true', 'yes')
@@ -148,6 +161,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 409
 
     @bp.route('/extensions/<slug>/update', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_update(slug):
         try:
             ext = client.update_extension(slug)
@@ -159,6 +173,7 @@ def make_blueprint(client, limiter):
             return jsonify({'error': str(e)}), 500
 
     @bp.route('/extensions/<slug>/enable', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_enable(slug):
         result = client.enable_extension(slug)
         if result is None:
@@ -166,6 +181,7 @@ def make_blueprint(client, limiter):
         return jsonify(result)
 
     @bp.route('/extensions/<slug>/disable', methods=['POST'])
+    @require_scope('extensions:admin')
     def extensions_disable(slug):
         result = client.disable_extension(slug)
         if result is None:
@@ -173,6 +189,7 @@ def make_blueprint(client, limiter):
         return jsonify(result)
 
     @bp.route('/extensions/<slug>/config', methods=['GET'])
+    @require_scope('extensions:read')
     def extensions_get_config(slug):
         cfg = client.get_extension_config(slug)
         if cfg is None:
@@ -180,6 +197,7 @@ def make_blueprint(client, limiter):
         return jsonify({'config': cfg})
 
     @bp.route('/extensions/<slug>/config', methods=['PUT'])
+    @require_scope('extensions:admin')
     def extensions_put_config(slug):
         data = request.get_json(silent=True) or {}
         cfg = client.update_extension_config(slug, data)
