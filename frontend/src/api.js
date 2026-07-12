@@ -594,6 +594,15 @@ export const api = {
   onboardDevice: (deviceId) =>
     request(`/agent-device/${deviceId}/onboard`, { method: 'POST', body: '{}' }),
 
+  // Agent-plugin manifest contract (plan 25 part 5)
+  getAgentPlugins: () => request('/agent-plugins'),
+  getAgentPluginOrder: () => request('/agent-plugins/order'),
+  validateAgentPlugin: (manifest) =>
+    request('/agent-plugins/validate', { method: 'POST', body: JSON.stringify({ manifest }) }),
+  declareAgentPlugin: (manifest) =>
+    request('/agent-plugins', { method: 'POST', body: JSON.stringify({ manifest }) }),
+  deleteAgentPlugin: (id) => request(`/agent-plugins/${id}`, { method: 'DELETE' }),
+
   // Metrics History (plan 08)
   getMetricsCatalog: () => request('/metrics/catalog'),
   getDeviceMetrics: (id, metric = 'battery_pct', period = '24h') =>

@@ -39,6 +39,7 @@ import FleetMonitor from './views/FleetMonitor'
 import FleetVersions from './views/FleetVersions'
 import AgentUpdates from './views/AgentUpdates'
 import Extensions from './views/Extensions'
+import AgentPlugins from './views/AgentPlugins'
 import Jobs from './views/Jobs'
 import Notifications from './views/Notifications'
 import Enrollment from './views/Enrollment'
@@ -71,6 +72,7 @@ const navSections = [
       { to: '/fleet/updates', icon: Rocket, label: 'Agent Updates' },
       { to: '/command-history', icon: History, label: 'Command History' },
       { to: '/extensions', icon: Puzzle, label: 'Extensions' },
+      { to: '/agent-plugins', icon: Puzzle, label: 'Agent Plugins' },
     ],
   },
   {
@@ -237,6 +239,7 @@ export default function App() {
           <Route path="/profiles/new" element={<ProfileEditor />} />
           <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
           <Route path="/extensions" element={<Extensions />} />
+          <Route path="/agent-plugins" element={<AgentPlugins />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/settings/:tab" element={<SettingsView />} />
           {extensionRoutes}

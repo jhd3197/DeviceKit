@@ -31,6 +31,7 @@ from devicekit.mixins.agent_device import AgentDeviceMixin
 from devicekit.mixins.agent_survey import AgentSurveyMixin
 from devicekit.mixins.agent_ota import AgentOtaMixin
 from devicekit.mixins.onboarding import OnboardingMixin
+from devicekit.mixins.agent_plugin import AgentPluginMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.extension_ai import ExtensionAiMixin
@@ -70,6 +71,7 @@ class Client(
     AgentSurveyMixin,
     AgentOtaMixin,
     OnboardingMixin,
+    AgentPluginMixin,
     PairingMixin,
     ExtensionsMixin,
     ExtensionAiMixin,
