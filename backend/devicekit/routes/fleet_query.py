@@ -13,56 +13,9 @@ def make_blueprint(client, limiter):
     bp = Blueprint('fleet_query', __name__)
 
     def _get_all_devices():
-        """Merged ADB + agent device list for queries.
-
-        Mirrors the ``/devices`` route's enrichment: an ADB-listed device is ``online`` by
-        definition, and when it's also agent-registered its model/metrics are folded in.
-        Without this, FQL over ``online``/``model``/``battery`` never matched ADB-only rows
-        (they lack those keys) — the query surface must see what the fleet list sees."""
-        connected = client.get_devices()
-        adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
-        now = time.time()
-        for d in connected:
-            if not d:
-                continue
-            d['online'] = True
-            agent = client.find_agent_device(d.get('serial') or d.get('device_id') or '')
-            if not agent:
-                continue
-            info = agent.get('info') or {}
-            metrics = (agent.get('state') or {}).get('metrics') or {}
-            if not d.get('model') and info.get('model'):
-                d['model'] = info['model']
-            for key in ('battery_level', 'cpu_percent', 'ram_used_mb', 'ram_total_mb'):
-                if d.get(key) is None and metrics.get(key) is not None:
-                    d[key] = metrics[key]
-        for agent_id, agent_data in client._agent_device_states.items():
-            if agent_id in adb_ids:
-                continue
-            info = agent_data.get('info', {})
-            state = agent_data.get('state', {})
-            metrics = state.get('metrics', {})
-            last_hb = agent_data.get('last_heartbeat', 0)
-            online = (now - last_hb) < 15 if last_hb else False
-            connected.append({
-                'serial': agent_id,
-                'device_id': agent_id,
-                'model': info.get('model', 'Unknown'),
-                'manufacturer': info.get('manufacturer', 'Unknown'),
-                'brand': info.get('brand', ''),
-                'android_version': info.get('android_version', ''),
-                'sdk': info.get('sdk', 0),
-                'online': online,
-                'source': 'agent',
-                'agent_version': info.get('agent_version', ''),
-                'battery_level': metrics.get('battery_level'),
-                'cpu_percent': metrics.get('cpu_percent'),
-                'ram_used_mb': metrics.get('ram_used_mb'),
-                'ram_total_mb': metrics.get('ram_total_mb'),
-                'currentPackageName': state.get('window', {}).get('package'),
-                'capabilities': agent_data.get('capabilities', {}),
-            })
-        return connected
+        """Merged ADB + agent device list for queries — moved onto FleetQueryMixin
+        (``all_devices_for_query``) so the workflow fan-out node shares it (plan 22)."""
+        return client.all_devices_for_query()
 
     @bp.route('/fleet/query')
     @require_scope('devices:read')

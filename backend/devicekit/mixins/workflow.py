@@ -105,7 +105,8 @@ class WorkflowMixin:
         if is_workflow_doc(automation.get("graph")):
             return self._enqueue_graph_run(automation, device_id, trigger_type,
                                            trigger, self_heal=self_heal)
-        return self.execute_automation(automation_id, device_id, self_heal=self_heal)
+        return self.execute_automation(automation_id, device_id, self_heal=self_heal,
+                                       trigger_type=trigger_type, trigger=trigger)
 
     def _enqueue_graph_run(self, automation, device_id, trigger_type, trigger,
                            self_heal=False):
@@ -209,6 +210,9 @@ class WorkflowMixin:
             trigger=trigger_record.get("payload") or {},
             cancel_event=cancel_event,
             run_id=run_id,
+            # Seed the cross-automation cycle guard: call-flow / device-fan-out nodes
+            # reject anything already on the stack, starting with this automation.
+            call_stack=[run_record.get("automation_id")],
         )
 
         def on_event(event):

@@ -26,8 +26,50 @@ SUPPORTED_BUILTINS = [
     "manual-trigger", "webhook-trigger", "cron-trigger",
     "if", "switch", "merge", "for-each", "call-flow",
     "flow-input", "flow-output", "set-var",
-    "dk.event-trigger",
+    "dk.event-trigger", "dk.device-fan-out",
 ]
+
+
+def device_fan_out_node_def():
+    """Run a sub-automation across many devices — one concurrency-capped job per
+    device branch, per-device timeout, results collected into the parent run."""
+    return {
+        "id": "dk.device-fan-out",
+        "name": "Run Across Devices",
+        "category": "action",
+        "description": "Fan a sub-automation out over a device list or FQL result — "
+                       "one job per device, concurrency-capped, per-device timeout.",
+        "icon": "Network",
+        "color": "#10b981",
+        "integrationId": "devicekit",
+        "operationName": "Run Across Devices",
+        "inputs": [{"key": "in", "label": "In", "type": "any"}],
+        "outputs": [
+            {"key": "out", "label": "Results", "type": "object"},
+            {"key": "error", "label": "Error", "type": "object"},
+        ],
+        "fields": [
+            {"key": "automation_id", "type": "flow-ref", "label": "Automation",
+             "help": "The sub-automation each device branch runs."},
+            {"key": "devices", "type": "text", "label": "Devices", "optional": True,
+             "help": "Comma-separated serials, a JSON list, or an expression "
+                     "(e.g. trigger.devices). Leave empty to target by FQL."},
+            {"key": "fql", "type": "text", "label": "FQL query", "optional": True,
+             "help": "Fleet query selecting target devices "
+                     "(e.g. online = true and battery_level > 30)."},
+            {"key": "inputs", "type": "json", "label": "Branch inputs (JSON)",
+             "optional": True, "default": "{}",
+             "help": "Passed to every branch as {{trigger.*}}. Supports {{var}}s."},
+            {"key": "concurrency", "type": "number", "label": "Concurrency",
+             "optional": True, "default": 3,
+             "help": "Max device branches in flight at once."},
+            {"key": "timeout_seconds", "type": "number", "label": "Per-device timeout (s)",
+             "optional": True, "default": 600,
+             "help": "A branch still running after this is cancelled and marked "
+                     "timeout — one slow device never stalls the run."},
+        ],
+        "group": "Fleet",
+    }
 
 
 def event_trigger_node_def(event_keys=None):
@@ -124,6 +166,7 @@ def build_node_pack(step_types, event_keys=None):
     select when available."""
     nodes = [step_type_to_node_def(name, spec)
              for name, spec in sorted(step_types.items())]
+    nodes.insert(0, device_fan_out_node_def())
     nodes.insert(0, event_trigger_node_def(event_keys))
     return {
         "integration": {

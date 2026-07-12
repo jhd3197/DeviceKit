@@ -495,14 +495,18 @@ class AutomationMixin:
     # ---------------------------------------------------------------
     # Execution
     # ---------------------------------------------------------------
-    def execute_automation(self, automation_id, device_id, self_heal=False):
+    def execute_automation(self, automation_id, device_id, self_heal=False,
+                           trigger_type="manual", trigger=None):
         """Create a run record and enqueue an ``automation.run`` job that executes it.
 
         Formerly this spawned a raw daemon thread; now the run is durable work on the job
         system — it survives a restart with a coherent status, can be retried, and appears in
         the jobs list. The step loop itself is unchanged; it just runs inside the job handler
         (``_job_run_automation``) on a bounded worker pool. Returns the queued run record
-        immediately so the API still responds 201 without blocking."""
+        immediately so the API still responds 201 without blocking.
+
+        ``trigger_type``/``trigger`` record what started the run (plan 22 part 4 —
+        webhook/cron/event/fanout callers pass theirs through ``enqueue_run``)."""
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
@@ -510,10 +514,13 @@ class AutomationMixin:
         # Graph automations (plan 22) run on the workflow engine; every caller of this
         # method (routes, MCP actions, schedules) funnels through without changes.
         if automation.get("graph") and hasattr(self, "_enqueue_graph_run"):
-            return self._enqueue_graph_run(automation, device_id, "manual", None,
+            return self._enqueue_graph_run(automation, device_id, trigger_type, trigger,
                                            self_heal=self_heal)
 
         steps = automation.get("steps", [])
+        trigger_record = {"type": trigger_type}
+        if trigger is not None:
+            trigger_record["payload"] = trigger
         run_record = {
             "id": str(uuid.uuid4()),
             "automation_id": automation_id,
@@ -528,6 +535,8 @@ class AutomationMixin:
             "step_results": [],
             "error": None,
             "self_heal": self_heal,
+            "kind": "linear",
+            "trigger": trigger_record,
         }
         self._save_run(run_record)
 

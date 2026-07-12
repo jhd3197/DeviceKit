@@ -25,6 +25,9 @@ from devicekit.workflow.doc import (
 )
 from devicekit.workflow.engine import WorkflowEngine
 import devicekit.workflow.control  # noqa: F401 — registers the control-flow executors
+from devicekit.workflow.executors import register_builtin as _register_builtin
+from devicekit.workflow import fanout as _fanout
+_fanout.register(_register_builtin)  # dk.device-fan-out (plan 22 phase 5)
 from devicekit.workflow.node_pack import build_node_pack
 
 __all__ = [

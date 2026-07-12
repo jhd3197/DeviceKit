@@ -455,6 +455,61 @@ class FleetQueryMixin:
     # Query execution
     # -----------------------------------------------------------
 
+    def all_devices_for_query(self):
+        """Merged ADB + agent device list for FQL evaluation.
+
+        Mirrors the ``/devices`` route's enrichment: an ADB-listed device is ``online``
+        by definition, and when it's also agent-registered its model/metrics are folded
+        in. Factored out of the fleet-query route closure so the workflow fan-out node
+        (plan 22 phase 5) targets devices with exactly the query surface the fleet list
+        sees."""
+        import time as _time
+        connected = self.get_devices() if hasattr(self, 'get_devices') else []
+        adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
+        now = _time.time()
+        for d in connected:
+            if not d:
+                continue
+            d['online'] = True
+            agent = (self.find_agent_device(d.get('serial') or d.get('device_id') or '')
+                     if hasattr(self, 'find_agent_device') else None)
+            if not agent:
+                continue
+            info = agent.get('info') or {}
+            metrics = (agent.get('state') or {}).get('metrics') or {}
+            if not d.get('model') and info.get('model'):
+                d['model'] = info['model']
+            for key in ('battery_level', 'cpu_percent', 'ram_used_mb', 'ram_total_mb'):
+                if d.get(key) is None and metrics.get(key) is not None:
+                    d[key] = metrics[key]
+        for agent_id, agent_data in getattr(self, '_agent_device_states', {}).items():
+            if agent_id in adb_ids:
+                continue
+            info = agent_data.get('info', {})
+            state = agent_data.get('state', {})
+            metrics = state.get('metrics', {})
+            last_hb = agent_data.get('last_heartbeat', 0)
+            online = (now - last_hb) < 15 if last_hb else False
+            connected.append({
+                'serial': agent_id,
+                'device_id': agent_id,
+                'model': info.get('model', 'Unknown'),
+                'manufacturer': info.get('manufacturer', 'Unknown'),
+                'brand': info.get('brand', ''),
+                'android_version': info.get('android_version', ''),
+                'sdk': info.get('sdk', 0),
+                'online': online,
+                'source': 'agent',
+                'agent_version': info.get('agent_version', ''),
+                'battery_level': metrics.get('battery_level'),
+                'cpu_percent': metrics.get('cpu_percent'),
+                'ram_used_mb': metrics.get('ram_used_mb'),
+                'ram_total_mb': metrics.get('ram_total_mb'),
+                'currentPackageName': state.get('window', {}).get('package'),
+                'capabilities': agent_data.get('capabilities', {}),
+            })
+        return connected
+
     def execute_fleet_query(self, expression, devices=None):
         """Parse and evaluate a query expression against the device fleet.
         Returns list of matching devices."""

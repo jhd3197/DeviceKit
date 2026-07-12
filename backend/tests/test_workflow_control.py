@@ -286,8 +286,8 @@ def test_node_pack_maps_step_registry_to_tramo_defs():
     client = _Client()
     pack = client.get_node_pack()
     assert pack["integration"]["id"] == "devicekit"
-    # Every step type + the pack's own event trigger (plan 22 part 4).
-    assert pack["count"] == len(STEP_TYPES) + 1
+    # Every step type + the pack's own nodes (event trigger, device fan-out).
+    assert pack["count"] == len(STEP_TYPES) + 2
     by_id = {n["id"]: n for n in pack["nodes"]}
 
     tap = by_id["dk.tap"]
