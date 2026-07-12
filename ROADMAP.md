@@ -411,6 +411,11 @@ See [docs/plans/10-command-palette.md](docs/plans/10-command-palette.md) and [do
 - [ ] Dashboard carved into widgets with a renderer map; toggle/reorder/reset persisted in localStorage with forward-compatible merge
 - [ ] Extension entries (palette) + extension widgets (`dashboard.top` slot) — palette `command_palette` entries done (plan 10); widgets pending (plan 11)
 
+**Palette v2** (see [docs/plans/26-command-palette-v2.md](docs/plans/26-command-palette-v2.md)):
+- [x] `F1` + `Ctrl/Cmd+Shift+P` open bindings; frecency ranking (14-day half-life) replacing last-6 recents; footer hint row
+- [ ] Settings card index + `?focus=setting:` deep-link flash + admin-only authz gating
+- [ ] Backend `GET /search` omnisearch (`SearchMixin`) + async entity provider with category weights/caps
+
 ### Phase 32: Settings & Theming ✅
 **Goal**: A real `/settings` (the sidebar link currently 404s) and runtime accent theming.
 See [docs/plans/12-settings-and-theming.md](docs/plans/12-settings-and-theming.md).

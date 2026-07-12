@@ -20,6 +20,7 @@ import {
 import { api } from '../api'
 import { useContributions } from '../extensions/contributions'
 import ExtensionIcon from '../extensions/ExtensionIcon'
+import { recordUse, frecencyScore, recentEntries } from '../utils/paletteFrecency'
 
 // Static pages — mirrors the sidebar `navSections` in App.jsx. Keep in sync when nav changes.
 const PAGES = [
@@ -49,20 +50,10 @@ const ACTIONS = [
   { id: 'action:install-extension', label: 'Install Extension', path: '/extensions', icon: Puzzle, keywords: 'install extension plugin marketplace' },
 ]
 
-// localStorage recents — last N selections, shown when the query is empty.
-const RECENTS_KEY = 'devicekit_palette_recents'
-const RECENTS_MAX = 6
-function loadRecents() {
-  try {
-    const v = JSON.parse(localStorage.getItem(RECENTS_KEY))
-    return Array.isArray(v) ? v : []
-  } catch {
-    return []
-  }
-}
-function saveRecents(list) {
-  try { localStorage.setItem(RECENTS_KEY, JSON.stringify(list)) } catch { /* quota / private mode */ }
-}
+// Recents are sourced from `utils/paletteFrecency.js` (plan 26) — a frequency+recency blend with
+// a 14-day half-life — replacing the old last-6 list. On an empty query the top frecency entries
+// show as the "Recents" group; on a live query each item's frecency is blended into its score.
+const RECENTS_MAX = 8
 
 // --- Fuzzy scorer (ported from ServerKit's small scorer) ----------------------------------
 // substring match (prefix > word-boundary > mid-string) scores highest; a subsequence match is
@@ -112,6 +103,14 @@ function groupRank(g) {
   return g === 'Extensions' ? 6 : 5
 }
 
+// Category weights (plan 26) — a small tie-breaker blended into the live score so that, among
+// equally-good fuzzy matches, higher-signal groups win. Settings deep-links (phase 2) and
+// pages/actions rank above raw entity rows; frecency (capped) adds the "you use this a lot" nudge.
+const GROUP_WEIGHT = { Settings: 6, Pages: 4, Actions: 4, Devices: 1, Automations: 1 }
+function groupWeight(g) {
+  return GROUP_WEIGHT[g] ?? 1
+}
+
 // Normalize a contribution's `keywords` (array or string) into a searchable string.
 function keywordString(kw) {
   if (Array.isArray(kw)) return kw.join(' ')
@@ -125,7 +124,7 @@ export default function CommandPalette() {
   const [query, setQuery] = useState('')
   const [devices, setDevices] = useState([])
   const [automations, setAutomations] = useState([])
-  const [recents, setRecents] = useState(loadRecents)
+  const [recents, setRecents] = useState(() => recentEntries(RECENTS_MAX))
   const [fql, setFql] = useState({ matches: [], total: 0, loading: false, error: null })
 
   // FQL mode: a `>`-prefixed query runs `/fleet/query` inline. `fqlExpr` is the expression
@@ -136,11 +135,15 @@ export default function CommandPalette() {
   }, [query])
   const fqlMode = fqlExpr !== null
 
-  // Global Ctrl/Cmd+K toggles the palette; Escape closes it. The chord fires regardless of
-  // focus so it works from inside any input.
+  // Global open bindings (plan 26): `Ctrl/Cmd+K`, `Ctrl/Cmd+Shift+P` (VS Code muscle memory),
+  // and `F1`. Escape closes. All fire regardless of focus so they work from inside any input;
+  // `F1` needs an explicit `preventDefault` to stop the browser help panel.
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      const cmdK = (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')
+      const cmdShiftP = (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')
+      const f1 = e.key === 'F1'
+      if (cmdK || cmdShiftP || f1) {
         e.preventDefault()
         setOpen((v) => !v)
       } else if (e.key === 'Escape' && open) {
@@ -157,6 +160,8 @@ export default function CommandPalette() {
       setQuery('')
       return
     }
+    // Refresh the frecency-ranked recents each open so they reflect uses since last time.
+    setRecents(recentEntries(RECENTS_MAX))
     let cancelled = false
     api.getDevices().then((r) => { if (!cancelled) setDevices(r.devices || []) }).catch(() => {})
     api.getAutomations().then((r) => { if (!cancelled) setAutomations(r.automations || []) }).catch(() => {})
@@ -184,18 +189,20 @@ export default function CommandPalette() {
   const close = useCallback(() => setOpen(false), [])
 
   // Execute an item: close, run its action (custom `onRun` or navigate to `path`), and record
-  // it in recents when it has a stable `path`.
+  // the use in frecency when it has a stable `path` (meta lets recents render even for items not
+  // in the current live list, e.g. an offline device).
   const runItem = useCallback((item) => {
     if (!item.keepOpen) close()
     if (item.onRun) item.onRun()
     else if (item.path) navigate(item.path)
     if (item.path) {
-      setRecents((prev) => {
-        const entry = { id: item.id, label: item.label, sublabel: item.sublabel, group: item.group, path: item.path }
-        const next = [entry, ...prev.filter((r) => r.id !== item.id)].slice(0, RECENTS_MAX)
-        saveRecents(next)
-        return next
+      recordUse(item.id, {
+        label: item.label,
+        sublabel: item.sublabel,
+        group: item.group,
+        path: item.path,
       })
+      setRecents(recentEntries(RECENTS_MAX))
     }
   }, [close, navigate])
 
@@ -317,9 +324,15 @@ export default function CommandPalette() {
     if (!q) {
       list = [...recentItems, ...items]
     } else {
+      // Final score = fuzzy + category weight + capped frecency (plan 26): among comparable
+      // fuzzy matches, higher-signal groups and items you use often float up.
       list = items
-        .map((it) => ({ it, score: scoreItem(it, q) }))
-        .filter((x) => x.score >= 0)
+        .map((it) => {
+          const fuzzy = scoreItem(it, q)
+          if (fuzzy < 0) return null
+          return { it, score: fuzzy + groupWeight(it.group) + Math.min(frecencyScore(it.id), 10) }
+        })
+        .filter(Boolean)
         .sort((a, b) => b.score - a.score)
         .map((x) => x.it)
     }
@@ -423,6 +436,15 @@ export default function CommandPalette() {
               </Command.Group>
             ))}
           </Command.List>
+
+          {/* Footer hint row (plan 26). `?` docs mode is deferred until an in-app docs route
+              exists (plan 16) — advertised only when routable. */}
+          <div className="flex items-center gap-3 px-4 py-2 border-t border-main text-[10px] text-zinc-600">
+            <span><kbd className="mono text-zinc-500">↵</kbd> open</span>
+            <span><kbd className="mono text-zinc-500">&gt;</kbd> query fleet</span>
+            <span><kbd className="mono text-zinc-500">esc</kbd> close</span>
+            <span className="ml-auto text-zinc-700 mono">F1 · ⌘K · ⌘⇧P</span>
+          </div>
         </Command>
       </div>
     </div>

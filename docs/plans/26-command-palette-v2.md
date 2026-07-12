@@ -1,6 +1,6 @@
 # Plan 26 — Command Palette v2: F1, Omnisearch & Settings Deep-Links
 
-**Status:** 📝 planned
+**Status:** 🚧 in progress — phase 1 ✅ shipped
 **Inspired by:** ServerKit's current palette stack — `layouts/DashboardLayout.jsx` (three
 open bindings), `components/CommandPalette.jsx` (prefix modes, category weights),
 `data/settingsIndex.js` + `hooks/useSettingFocus.js` (settings deep-links that *flash* the
@@ -78,11 +78,11 @@ grew four things DeviceKit's lacks, and the user's number-one ask is the first:
 
 ## Phases
 
-| Phase | Delivers | Proves |
-|---|---|---|
-| 1 | F1 + Ctrl/Cmd+Shift+P bindings, frecency ranking replacing recents, footer hints | `F1` from any view opens the palette; most-used items float to the top of the empty screen |
-| 2 | Settings card index + `?focus=setting:` deep-link flash + authz gating | typing "retention" → enter lands on `/settings/bundles` with the retention card flashing; non-admins never see Vault/Users entries |
-| 3 | `SearchMixin` + `GET /search`, async entity provider with weights/caps | with 200 devices, typing 3 chars of a serial returns in one debounced request instead of pre-fetching every table |
+| Phase | Delivers | Proves | Status |
+|---|---|---|---|
+| 1 | F1 + Ctrl/Cmd+Shift+P bindings, frecency ranking replacing recents, footer hints | `F1` from any view opens the palette; most-used items float to the top of the empty screen | ✅ shipped — `utils/paletteFrecency.js` (14-day half-life), 3 open bindings, footer row. `?` docs mode deferred (no in-app docs route yet). |
+| 2 | Settings card index + `?focus=setting:` deep-link flash + authz gating | typing "retention" → enter lands on `/settings/bundles` with the retention card flashing; non-admins never see Vault/Users entries | ⏳ |
+| 3 | `SearchMixin` + `GET /search`, async entity provider with weights/caps | with 200 devices, typing 3 chars of a serial returns in one debounced request instead of pre-fetching every table | ⏳ |
 
 Phases are independent; 1 is a one-sitting win and should land first since it's the direct ask.
 
