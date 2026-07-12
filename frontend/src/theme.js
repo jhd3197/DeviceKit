@@ -82,18 +82,19 @@ export function bootTheme() {
   applyThemeMode(getStoredThemeMode())
 }
 
-// A few presets for the picker; users can also enter any hex. Periwinkle (the brand default)
-// and Indigo lead — the same two-purples split the logo uses (#6d7cff live / #6366f1 deep).
-// Emerald stays available for users who prefer the historical accent; semantic emerald
-// (online/pass/success) is unaffected by this list — only brand chrome rides the accent ramp.
+// Preset swatches for the picker; users can also enter any hex or use the native color input.
+// Periwinkle (the brand default, plan 27) leads, followed by ServerKit's 8 presets (plan 28)
+// so the two products' palettes match. Semantic emerald (online/pass/success) is unaffected by
+// this list — only brand chrome rides the accent ramp.
 export const ACCENT_PRESETS = [
   { name: 'Periwinkle', hex: '#6d7cff' },
   { name: 'Indigo', hex: '#6366f1' },
-  { name: 'Emerald', hex: '#10b981' },
-  { name: 'Blue', hex: '#3b82f6' },
+  { name: 'Ocean', hex: '#0ea5e9' },
+  { name: 'Forest', hex: '#10b981' },
+  { name: 'Sunset', hex: '#f97316' },
+  { name: 'Rose', hex: '#f43f5e' },
   { name: 'Violet', hex: '#8b5cf6' },
   { name: 'Amber', hex: '#f59e0b' },
-  { name: 'Rose', hex: '#f43f5e' },
   { name: 'Cyan', hex: '#06b6d4' },
 ]
 

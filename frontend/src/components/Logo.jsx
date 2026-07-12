@@ -12,11 +12,28 @@
 //     master asset's light→dark diagonal — DeviceKit's --accent-hover is *brighter* than the
 //     base, which would flatten the gradient.
 import { useId } from 'react'
+import { useBrand } from '../brand'
 
 export default function Logo({ size = 64, className = '' }) {
   const rawId = useId()
   const gradId = `dkBrandGradient-${rawId.replace(/:/g, '')}`
   const fill = `url(#${gradId})`
+
+  // White-label (plan 28): a saved logo data-URI replaces the brand mark everywhere Logo
+  // renders (sidebar, login, About). Empty => the default purple-phone SVG below.
+  const { logo } = useBrand()
+  if (logo) {
+    return (
+      <img
+        src={logo}
+        width={size}
+        height={size}
+        className={className}
+        alt="Instance logo"
+        style={{ objectFit: 'contain' }}
+      />
+    )
+  }
 
   return (
     <svg

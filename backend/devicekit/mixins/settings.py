@@ -47,6 +47,8 @@ SETTINGS_DEFAULTS = {
     # Appearance
     "appearance.theme": "dark",
     "appearance.accent": "#6d7cff",            # periwinkle — DeviceKit's brand purple (plan 27)
+    "appearance.brand_name": "",               # white-label instance name; "" => "DeviceKit" (plan 28)
+    "appearance.logo": "",                     # white-label mark as a size-capped data-URI; "" => the brand SVG
     # Account security (plan 20 part 6)
     "security.require_2fa": False,             # require TOTP 2FA for all users
     "security.require_2fa_enabled_at": None,   # stamped when the policy is turned on (grace anchor)
@@ -62,6 +64,11 @@ _SERVER_MANAGED_KEYS = {"ai.hub.extension_keys"}
 
 # Settings that reconfigure Prompture's driver registry when they change.
 _AI_BACKEND_KEYS = {"ai.backend", "ai.hub.url", "ai.hub.key"}
+
+# White-label logo is stored inline as a data-URI. Cap it so a huge upload can't bloat the
+# settings row / every GET /settings response. ~512 KB of base64 ≈ a 380 KB image — plenty
+# for a mark; the frontend also downscales before sending.
+_LOGO_MAX_CHARS = 512 * 1024
 
 
 class SettingsMixin:
@@ -149,6 +156,13 @@ class SettingsMixin:
                 if not isinstance(value, str):
                     continue
                 value = value.strip() or None
+            if key == "appearance.logo":
+                # Only strings; reject an oversized data-URI rather than storing a blob that
+                # would bloat every settings response. Empty string clears the override.
+                if not isinstance(value, str):
+                    continue
+                if len(value) > _LOGO_MAX_CHARS:
+                    raise ValueError("Logo image is too large (max ~380 KB)")
             self.set_setting(key, value)
         return self.get_all_settings()
 

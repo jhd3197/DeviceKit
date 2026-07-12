@@ -49,6 +49,7 @@ import SettingsView from './views/Settings'
 import Backups from './views/Backups'
 
 import Logo from './components/Logo'
+import { useBrand, brandName } from './brand'
 import NotificationBell from './components/NotificationBell'
 import CommandPalette from './components/CommandPalette'
 import { useContributions } from './extensions/contributions'
@@ -146,13 +147,14 @@ function mergeNav(contribNav) {
 function Sidebar() {
   const { envelope } = useContributions()
   const sections = mergeNav(envelope.nav)
+  const brand = useBrand()
 
   return (
     <aside className="w-64 border-r border-main flex flex-col bg-body shrink-0">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3 border-b border-main">
         <Logo size={32} className="rounded shrink-0" />
-        <span className="font-bold tracking-tight text-lg">DeviceKit</span>
+        <span className="font-bold tracking-tight text-lg">{brandName(brand)}</span>
         <div className="ml-auto">
           <NotificationBell />
         </div>
@@ -194,14 +196,16 @@ function Sidebar() {
   )
 }
 
-/** Update document.title from the contributed page_titles map (plan 04). Core pages keep
- *  the default title; extension routes can name their tab. */
+/** Update document.title from the contributed page_titles map (plan 04). Core pages show the
+ *  brand name (white-label, plan 28); extension routes can name their tab. */
 function PageTitle({ titles }) {
   const location = useLocation()
+  const brand = useBrand()
   useEffect(() => {
+    const name = brandName(brand)
     const title = titles?.[location.pathname]
-    document.title = title ? `${title} · DeviceKit` : 'DeviceKit'
-  }, [location.pathname, titles])
+    document.title = title ? `${title} · ${name}` : name
+  }, [location.pathname, titles, brand])
   return null
 }
 

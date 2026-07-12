@@ -229,12 +229,28 @@ export const SETTINGS_INDEX = [
 
   // --- Appearance (tab: appearance) ---
   {
+    id: 'theme-mode',
+    label: 'Theme',
+    description: 'Dark, Light, or follow your operating system.',
+    keywords: 'theme mode dark light system appearance color scheme night day os',
+    tab: 'appearance',
+    adminOnly: false,
+  },
+  {
     id: 'accent-color',
     label: 'Accent color',
     description: 'Personalize the accent color used across DeviceKit.',
     keywords: 'accent color theme appearance personalize hue palette branding',
     tab: 'appearance',
     adminOnly: false,
+  },
+  {
+    id: 'white-label',
+    label: 'White-label',
+    description: 'Rename the instance and replace the logo on sidebar, login, and tab title.',
+    keywords: 'white label brand name logo rebrand instance mark customize sidebar login title',
+    tab: 'appearance',
+    adminOnly: true,
   },
 
   // --- About (tab: about) ---

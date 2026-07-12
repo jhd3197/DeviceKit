@@ -19,9 +19,10 @@ import { useNavigate } from 'react-router-dom'
 import {
   LayoutGrid, Cpu, Terminal, Users, BarChart3, LineChart, ShieldCheck, History,
   Puzzle, PlayCircle, Workflow, Briefcase, Bell, Settings, Bot, Smartphone, Search, Plus,
-  Building2,
+  Building2, SunMoon,
 } from 'lucide-react'
 import { api } from '../api'
+import { toggleTheme } from '../theme'
 import { useContributions } from '../extensions/contributions'
 import ExtensionIcon from '../extensions/ExtensionIcon'
 import { recordUse, frecencyScore, recentEntries } from '../utils/paletteFrecency'
@@ -263,6 +264,16 @@ export default function CommandPalette() {
       icon: Search,
       keepOpen: true,
       onRun: () => setQuery('> '),
+    })
+    // Toggle theme (plan 28): flip dark <-> light instantly. A `system` user resolves to
+    // their current OS look first, then toggles to the opposite concrete mode.
+    out.push({
+      id: 'action:toggle-theme',
+      group: 'Actions',
+      label: 'Toggle theme',
+      keywords: 'theme dark light mode toggle switch appearance color scheme',
+      icon: SunMoon,
+      onRun: () => toggleTheme(),
     })
     for (const e of extEntries) {
       if (!e.path) continue

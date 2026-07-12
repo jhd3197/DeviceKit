@@ -21,6 +21,9 @@ export default {
         'border-alt': 'rgb(var(--border-alt) / <alpha-value>)',
         body: 'rgb(var(--bg-body) / <alpha-value>)',
         hover: 'rgb(var(--bg-hover) / <alpha-value>)',
+        // Emphasis text/border — pure white in dark, near-black in light (see --text-strong).
+        // Drives text-strong / hover:text-strong / border-strong from the plan-28 sweep.
+        strong: 'rgb(var(--text-strong) / <alpha-value>)',
         // Semantic status tokens (emerald/amber/red/blue today; light may darken for contrast).
         ok: 'rgb(var(--ok) / <alpha-value>)',
         warn: 'rgb(var(--warn) / <alpha-value>)',

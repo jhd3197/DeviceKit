@@ -1,6 +1,7 @@
 # Plan 28 — Appearance v2: Theme Modes, Design Tokens & White-Label
 
-**Status:** 🚧 in progress — Phase 1 ✅ · Phase 2 ✅ (Light/System modes + token sweep)
+**Status:** ✅ shipped — Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ (v2 pane + white-label)
+(Follow-up polish pass tracked below: ~60 bare `text-white` stragglers + dark opacity washes.)
 **Inspired by:** ServerKit's theming stack — `styles/_theme-variables.scss` (one token
 sheet: `:root` dark defaults, `[data-theme="light"]` overrides, a `prefers-color-scheme`
 block for `system`), `contexts/ThemeContext.jsx` (mode = `data-theme` attribute on `<html>`
@@ -88,8 +89,24 @@ Plan 12 shipped the accent ramp but deliberately deferred everything else:
 |---|---|---|
 | 1 ✅ | Surface/border/text/semantic tokens + Tailwind var mapping, dark values unchanged | pixel-identical dark UI (screenshot diff a few views); every color now has one source of truth |
 | 2 ✅ | Light + System modes, `bootTheme()`, `appearance.theme` wired, mode picker | switching to Light recolors instantly with no reload and survives restart in another browser; System follows an OS toggle live |
-| 3 | 8+1 presets + color input, white-label brand name/logo, palette toggle-theme action | an admin renames the instance and uploads a mark; login + sidebar + tab title follow; reset returns to the purple phone |
+| 3 ✅ | 8+1 presets + color input, white-label brand name/logo, palette toggle-theme action | an admin renames the instance and uploads a mark; login + sidebar + tab title follow; reset returns to the purple phone |
 
+> **Phase 3 landed (2026-07-12).** Accent presets → Periwinkle (default) + ServerKit's 8
+> (Indigo/Ocean/Forest/Sunset/Rose/Violet/Amber/Cyan); added a native `<input type="color">`
+> next to the kept hex text input. White-label: `appearance.brand_name` + `appearance.logo`
+> (size-capped data-URI, backend `_LOGO_MAX_CHARS` 512 KB → 400 on overflow) added to
+> `SETTINGS_DEFAULTS`; new `frontend/src/brand.js` mirrors brand to localStorage + a window
+> event (`useBrand` hook) so `Logo.jsx` (override `<img>`), the sidebar, `Login`, and
+> `PageTitle` all follow with no shared context — reconciled from the server in the Appearance
+> pane like accent. Admin-only white-label card (name + downscale-to-256px logo upload + live
+> preview + reset). Palette `Actions` gains **Toggle theme** (`onRun: toggleTheme`).
+> New Tailwind `strong` color maps `--text-strong` so the Phase-2 `text-strong`/`border-strong`
+> sweep classes actually generate. **Verified end-to-end** against a running backend
+> (`:7317`): brand_name + theme=light + logo persist via `PUT/GET /settings`; an oversized
+> logo is rejected `400 "Logo image is too large"` and the prior value survives. **Deviation:**
+> plan named a plan-26 `commandActions` context for the toggle — none exists; implemented as a
+> static palette action with `onRun`, which is the existing pattern (`Query Fleet…`).
+>
 > **Phase 2 landed (2026-07-12).** `theme.js` grew `setThemeMode/getStoredThemeMode/
 > resolveThemeMode/toggleTheme/subscribeTheme/bootTheme` (localStorage `devicekit_theme`,
 > `<html data-theme>`, window event so open components sync without a context); `bootTheme()`
