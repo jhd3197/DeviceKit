@@ -9,6 +9,7 @@ live-state seams: merged device list (FQL mixin), plan-18 app-driver provisionin
 schedules, ADB settings, the extension registry, and the plan-20 vault for ``fromSecret``.
 """
 import logging
+import os
 import re
 import time
 import uuid
@@ -24,9 +25,12 @@ _VERSION_NAME_RE = re.compile(r"versionName=(\S+)")
 
 POLICY_APPLY_KIND = "policy.apply"
 POLICY_APPLY_DEVICE_KIND = "policy.apply.device"
+POLICY_DRIFT_KIND = "policy.drift.check"
 # Per-device apply budget inside the fan-out (mirrors plan 22's fan-out default).
 POLICY_DEVICE_TIMEOUT_SECONDS = 600
 POLICY_FANOUT_CONCURRENCY = 3
+POLICY_DRIFT_INTERVAL_SECONDS = int(os.environ.get(
+    "DEVICEKIT_POLICY_DRIFT_INTERVAL", "300"))
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,12 @@ class FleetPolicyMixin:
         if hasattr(self, "register_job_kind"):
             self.register_job_kind(POLICY_APPLY_KIND, self._job_apply_policy)
             self.register_job_kind(POLICY_APPLY_DEVICE_KIND, self._job_apply_policy_device)
+            self.register_job_kind(POLICY_DRIFT_KIND, self._job_check_policy_drift)
+        if hasattr(self, "ensure_scheduled_job"):
+            self.ensure_scheduled_job(
+                POLICY_DRIFT_KIND, POLICY_DRIFT_KIND,
+                interval_seconds=POLICY_DRIFT_INTERVAL_SECONDS,
+                startup_delay_seconds=60, owner_type="system", owner_id="core")
         if hasattr(self, "register_notification_event"):
             try:
                 self.register_notification_event(
@@ -52,6 +62,12 @@ class FleetPolicyMixin:
                 self.register_notification_event(
                     "policy.apply.failed", "Fleet policy apply failed",
                     severity="error", category="fleet")
+                self.register_notification_event(
+                    "policy.drift.detected", "Fleet policy drift detected",
+                    severity="warning", category="fleet")
+                self.register_notification_event(
+                    "policy.drift.resolved", "Fleet policy drift resolved",
+                    severity="info", category="fleet")
             except Exception as e:
                 logger.warning(f"Policy notification events not registered: {e}")
 
@@ -584,6 +600,84 @@ class FleetPolicyMixin:
                               subject_type="fleet_policy", subject_id=policy["id"])
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # Drift detection + reconcile (part 5)
+    # ------------------------------------------------------------------
+    def check_fleet_policy_drift(self, policy_id, auto_apply=True):
+        """Re-plan an applied policy against live state. Edge-triggered: only the
+        applied→drifted transition notifies; a policy that converges externally flips
+        back and notifies resolution. ``autoApply`` policies reconcile themselves on the
+        drift edge — never when blockers stand (the honesty rule holds unattended too)."""
+        policy = self.get_fleet_policy(policy_id)
+        if not policy:
+            raise ValueError("policy not found")
+        if policy["status"] not in (STATUS_APPLIED, STATUS_DRIFTED):
+            return {"policy_id": policy_id, "checked": False, "status": policy["status"],
+                    "reason": "only applied policies are drift-checked"}
+        plan = self.plan_fleet_policy(policy_id)
+        was = policy["status"]
+        out = {"policy_id": policy_id, "checked": True, "drifted": not plan["empty"],
+               "edge": False, "auto_applied": False}
+        if plan["empty"]:
+            if was == STATUS_DRIFTED:
+                self._set_policy_status(policy_id, STATUS_APPLIED,
+                                        detail={"summary": "drift resolved externally"},
+                                        applied_hash=policy["applied_hash"])
+                self._notify_policy("policy.drift.resolved", policy,
+                                    "live state converged back to the policy")
+                out["edge"] = True
+            else:
+                self._touch_policy_checked(policy_id)
+            out["status"] = STATUS_APPLIED
+            return out
+        summary = {
+            "summary": f"{len(plan['steps'])} step(s) diverged"
+                       + (f", {len(plan['blockers'])} blocker(s)" if plan["blockers"] else ""),
+            "steps": len(plan["steps"]),
+            "blockers": plan["blockers"],
+            "detected_at": time.time(),
+        }
+        if was == STATUS_APPLIED:
+            self._set_policy_status(policy_id, STATUS_DRIFTED, detail=summary)
+            self._notify_policy("policy.drift.detected", policy, summary["summary"])
+            out["edge"] = True
+            if auto_apply and policy["auto_apply"] and not plan["blockers"]:
+                result = self.apply_fleet_policy(policy_id, triggered_by="auto_apply")
+                out["auto_applied"] = bool(result.get("job") or result.get("applied"))
+        else:
+            self._touch_policy_checked(policy_id, detail=summary)
+        out["status"] = STATUS_DRIFTED
+        return out
+
+    def _job_check_policy_drift(self, job):
+        """Scheduled sweep over every applied/drifted policy (all workspaces)."""
+        out = {"checked": 0, "drifted": 0, "resolved": 0, "auto_applied": 0}
+        for policy in self.list_fleet_policies():
+            if policy["status"] not in (STATUS_APPLIED, STATUS_DRIFTED):
+                continue
+            try:
+                result = self.check_fleet_policy_drift(policy["id"])
+            except Exception as e:
+                logger.warning(f"Drift check failed for policy {policy['id']}: {e}")
+                continue
+            out["checked"] += 1
+            if result.get("drifted"):
+                out["drifted"] += 1
+            elif result.get("edge"):
+                out["resolved"] += 1
+            if result.get("auto_applied"):
+                out["auto_applied"] += 1
+        return out
+
+    def _touch_policy_checked(self, policy_id, detail=None):
+        with session_scope() as s:
+            p = s.get(FleetPolicy, policy_id)
+            if not p:
+                return
+            p.last_checked_at = time.time()
+            if detail is not None:
+                p.status_detail = detail
 
     # ------------------------------------------------------------------
     # Shared internals

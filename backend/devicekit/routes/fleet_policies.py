@@ -76,6 +76,33 @@ def make_blueprint(client, limiter):
         status = 202 if result.get("job") else 200
         return jsonify(result), status
 
+    @bp.route("/fleet-policies/<policy_id>/check-drift", methods=["POST"])
+    def check_drift(policy_id):
+        """One-shot drift evaluation (the scheduled job does this periodically)."""
+        try:
+            result = client.check_fleet_policy_drift(policy_id)
+        except ValueError as e:
+            status = 404 if "not found" in str(e) else 400
+            return jsonify({"error": str(e)}), status
+        return jsonify(result)
+
+    @bp.route("/fleet-policies/<policy_id>/reconcile", methods=["POST"])
+    def reconcile_policy(policy_id):
+        """Reconcile = apply the stored spec to a drifted fleet. Pending-by-default:
+        nothing reconciles unless an operator calls this (or the policy opts into
+        autoApply). Same refusal semantics as apply."""
+        try:
+            result = client.apply_fleet_policy(policy_id, triggered_by="reconcile")
+        except ValueError as e:
+            status = 404 if "not found" in str(e) else 400
+            return jsonify({"error": str(e)}), status
+        if result.get("refused"):
+            return jsonify({"error": "plan has blockers; reconcile refused",
+                            "blockers": result["plan"]["blockers"],
+                            "plan": result["plan"]}), 409
+        status = 202 if result.get("job") else 200
+        return jsonify(result), status
+
     @bp.route("/fleet-policies/<policy_id>", methods=["GET"])
     def get_policy(policy_id):
         policy = client.get_fleet_policy(policy_id)
