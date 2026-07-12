@@ -13,6 +13,7 @@ import {
   Users,
   BarChart3,
   LineChart,
+  GitBranch,
   Puzzle,
   Briefcase,
   Bell,
@@ -33,6 +34,7 @@ import ProfileEditor from './views/ProfileEditor'
 import FleetGroups from './views/FleetGroups'
 import DeviceCompare from './views/DeviceCompare'
 import FleetMonitor from './views/FleetMonitor'
+import FleetVersions from './views/FleetVersions'
 import Extensions from './views/Extensions'
 import Jobs from './views/Jobs'
 import Notifications from './views/Notifications'
@@ -60,6 +62,7 @@ const navSections = [
       { to: '/fleet/compare', icon: BarChart3, label: 'Compare' },
       { to: '/fleet/monitor', icon: LineChart, label: 'Metrics Monitor' },
       { to: '/enrollment', icon: ShieldCheck, label: 'Enrollment' },
+      { to: '/fleet/versions', icon: GitBranch, label: 'Agent Versions' },
       { to: '/command-history', icon: History, label: 'Command History' },
       { to: '/extensions', icon: Puzzle, label: 'Extensions' },
     ],
@@ -219,6 +222,7 @@ export default function App() {
           <Route path="/fleet/groups" element={<FleetGroups />} />
           <Route path="/fleet/compare" element={<DeviceCompare />} />
           <Route path="/fleet/monitor" element={<FleetMonitor />} />
+          <Route path="/fleet/versions" element={<FleetVersions />} />
           <Route path="/enrollment" element={<Enrollment />} />
           <Route path="/command-history" element={<CommandHistory />} />
           <Route path="/profiles" element={<Profiles />} />

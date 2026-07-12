@@ -118,14 +118,23 @@ class BackgroundAgent : Service() {
             put("product", Build.PRODUCT)
             put("device", Build.DEVICE)
             put("serial", Build.BOARD)
-            put("agent_version", "1.0.0")
-            put("capabilities", org.json.JSONArray().apply {
-                put("accessibility")
-                put("keyboard_detection")
-                put("notification_listener")
-                put("state_reporting")
-                put("command_receiver")
-                put("metrics_collection")
+            // plan 25 part 2: advertise version from BuildConfig (not a hardcoded string) so
+            // the fleet version view + OTA targeting see the real running build.
+            put("agent_version", com.devicekit.agent.BuildConfig.VERSION_NAME)
+            put("agent_version_code", com.devicekit.agent.BuildConfig.VERSION_CODE)
+            // Capabilities as a MAP (FLEET_CONTRACT + FQL `can.*` expect a map, not an array).
+            // `batch_survey` opts this agent into one-round-trip probes; the backend falls back
+            // to the composed path for any agent that omits it.
+            put("capabilities", JSONObject().apply {
+                put("accessibility", true)
+                put("keyboard_detection", true)
+                put("notification_listener", true)
+                put("state_reporting", true)
+                put("command_receiver", true)
+                put("metrics_collection", true)
+                put("survey", true)
+                put("batch_survey", true)
+                put("android_api", Build.VERSION.SDK_INT)
             })
         }
 

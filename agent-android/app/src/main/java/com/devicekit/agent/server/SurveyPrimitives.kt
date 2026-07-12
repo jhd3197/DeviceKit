@@ -25,6 +25,7 @@ import java.nio.file.FileSystems
 object SurveyPrimitives {
 
     const val COMMAND_PREFIX = "survey."
+    const val BATCH_COMMAND = "survey.batch"
 
     /** Every primitive the device will execute. Anything else is refused. */
     val ALLOWED: Set<String> = setOf(
@@ -33,6 +34,30 @@ object SurveyPrimitives {
     )
 
     fun isSurveyCommand(command: String): Boolean = command.startsWith(COMMAND_PREFIX)
+
+    /**
+     * Run a whole probe in one call (the `batch_survey` capability). [args] is
+     * `{primitives: [{primitive, args}, ...]}`; the reply is `{results: [{primitive, result}
+     * | {primitive, error}]}`. Each step is still validated against the allowlist, so batching
+     * never widens what the device will run.
+     */
+    fun executeBatch(context: Context, args: JSONObject): JSONObject {
+        val requested = args.optJSONArray("primitives") ?: JSONArray()
+        val results = JSONArray()
+        for (i in 0 until requested.length()) {
+            val step = requested.optJSONObject(i) ?: continue
+            val primitive = step.optString("primitive")
+            val stepArgs = step.optJSONObject("args") ?: JSONObject()
+            val entry = JSONObject().put("primitive", primitive)
+            try {
+                entry.put("result", execute(context, COMMAND_PREFIX + primitive, stepArgs))
+            } catch (e: Exception) {
+                entry.put("error", e.message ?: "primitive failed")
+            }
+            results.put(entry)
+        }
+        return JSONObject().put("results", results)
+    }
 
     /**
      * Execute an allowlisted primitive. [command] is the full `survey.<name>` string from the

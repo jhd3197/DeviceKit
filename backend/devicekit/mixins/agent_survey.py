@@ -18,10 +18,13 @@ import logging
 
 from devicekit.agent_primitives import (
     validate_primitive, get_probe, list_primitives, PrimitiveError)
+from devicekit.agent_capabilities import supports_batch_survey
 
 logger = logging.getLogger(__name__)
 
 SURVEY_COMMAND_PREFIX = "survey."
+# One-shot command that carries a whole probe recipe (capability-gated optimization).
+SURVEY_BATCH_COMMAND = "survey.batch"
 
 
 class AgentSurveyMixin:
@@ -45,19 +48,31 @@ class AgentSurveyMixin:
             timeout=timeout, source="survey")
 
     def compose_agent_probe(self, device_id, probe, timeout=None):
-        """Run a named composed probe: each step is an allowlisted primitive, dispatched in
-        order and folded into one result. A step that fails is recorded (not raised) so the
-        probe returns partial evidence instead of aborting — the composer's job is to
-        *combine* primitives, and a missing package or offline moment is data, not a crash.
+        """Run a named composed probe, negotiating the transport by capability.
+
+        A ``batch_survey``-capable agent gets the whole probe in one ``survey.batch`` command
+        (one round trip). Every other agent — and any agent whose batch attempt fails or
+        returns malformed data — falls back to the per-primitive composed path from phase 1,
+        which works forever. Either way the return shape is identical.
         """
         recipe = get_probe(probe)  # raises PrimitiveError on an unknown probe
+        caps = (self.get_agent_capabilities(device_id)
+                if hasattr(self, "get_agent_capabilities") else {})
+        if supports_batch_survey(caps):
+            batched = self._batched_probe(device_id, probe, recipe, timeout)
+            if batched is not None:
+                return batched
+            logger.info("Batched survey failed for %s; falling back to composed", device_id)
+        return self._composed_probe(device_id, probe, recipe, timeout)
+
+    def _composed_probe(self, device_id, probe, recipe, timeout):
+        """Permanent fallback: one command per primitive, folded into one result."""
         steps = []
         ok = True
         for step in recipe:
             row = self.send_device_command(
                 device_id, f"{SURVEY_COMMAND_PREFIX}{step['primitive']}",
-                args=step["args"], timeout=timeout, source="survey")
-            row = row or {}
+                args=step["args"], timeout=timeout, source="survey") or {}
             step_ok = row.get("status") == "completed"
             ok = ok and step_ok
             steps.append({
@@ -67,4 +82,43 @@ class AgentSurveyMixin:
                 "result": row.get("result"),
                 "error": row.get("error"),
             })
-        return {"device_id": device_id, "probe": probe, "ok": ok, "steps": steps}
+        return {"device_id": device_id, "probe": probe, "ok": ok,
+                "transport": "composed", "steps": steps}
+
+    def _batched_probe(self, device_id, probe, recipe, timeout):
+        """Capability-gated optimization: send the whole recipe in one command.
+
+        Returns the folded result, or ``None`` to signal the caller to fall back to the
+        composed path (agent offline, command failed, or a result the agent couldn't parse
+        into per-primitive rows).
+        """
+        payload = {"primitives": [{"primitive": s["primitive"], "args": s["args"]}
+                                  for s in recipe]}
+        row = self.send_device_command(
+            device_id, SURVEY_BATCH_COMMAND, args=payload, timeout=timeout,
+            source="survey") or {}
+        if row.get("status") != "completed":
+            return None
+        result = row.get("result") or {}
+        results = result.get("results")
+        if not isinstance(results, list):
+            return None  # agent returned something we can't fold — fall back
+        by_primitive = {}
+        for r in results:
+            if isinstance(r, dict) and r.get("primitive"):
+                by_primitive[r["primitive"]] = r
+        steps = []
+        ok = True
+        for step in recipe:
+            r = by_primitive.get(step["primitive"], {})
+            step_ok = not r.get("error") and "result" in r
+            ok = ok and step_ok
+            steps.append({
+                "primitive": step["primitive"],
+                "args": step["args"],
+                "status": "completed" if step_ok else "failed",
+                "result": r.get("result"),
+                "error": r.get("error"),
+            })
+        return {"device_id": device_id, "probe": probe, "ok": ok,
+                "transport": "batched", "steps": steps}

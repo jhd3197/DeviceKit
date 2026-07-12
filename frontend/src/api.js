@@ -557,6 +557,12 @@ export const api = {
     return request(`/device-commands${qs ? `?${qs}` : ''}`)
   },
 
+  // Agent Lifecycle (plan 25)
+  getAgentPrimitives: () => request('/agent-device/primitives'),
+  surveyDevice: (id, body) =>
+    request(`/agent-device/${id}/survey`, { method: 'POST', body: JSON.stringify(body) }),
+  getAgentVersions: () => request('/agent-device/versions'),
+
   // Metrics History (plan 08)
   getMetricsCatalog: () => request('/metrics/catalog'),
   getDeviceMetrics: (id, metric = 'battery_pct', period = '24h') =>

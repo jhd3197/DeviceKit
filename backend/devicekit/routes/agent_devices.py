@@ -415,6 +415,15 @@ def make_blueprint(client, limiter):
         client.log_activity('agent_key_rotation_complete', device_id, {})
         return jsonify({'device_id': device_id, 'status': 'rotated'})
 
+    @bp.route('/agent-device/versions')
+    def agent_device_versions():
+        """Fleet 'which agent version is on which device' view (plan 25 part 2).
+
+        Returns per-device version rows plus a ``version → devices`` rollup — the read side
+        of OTA targeting (the roll-forward/back actions land with OTA in phase 3).
+        """
+        return jsonify(client.list_agent_versions())
+
     @bp.route('/agent-device/status')
     def agent_device_status():
         # The heartbeat reaper owns online->offline transitions (plan 07); run it here too so

@@ -70,7 +70,11 @@ class CommandPoller(
             return
         }
         try {
-            val result = SurveyPrimitives.execute(context, command, args)
+            val result = if (command == SurveyPrimitives.BATCH_COMMAND) {
+                SurveyPrimitives.executeBatch(context, args)
+            } else {
+                SurveyPrimitives.execute(context, command, args)
+            }
             client.postCommandResult(deviceId, id, result, null)
         } catch (e: SecurityException) {
             client.postCommandResult(deviceId, id, null, "COMMAND_NOT_ALLOWLISTED")
