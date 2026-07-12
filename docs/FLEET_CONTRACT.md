@@ -265,7 +265,7 @@ A device advertises capabilities in the `capabilities` field at registration. Th
 it as a **map** (`{ "screen_record": true, "android_api": 34, "accessibility": true }`) and exposes
 it three ways:
 
-- **FQL fields** — target devices by capability in [Fleet Query Language](../README.md#fleet-query-language):
+- **FQL fields** — target devices by capability in [Fleet Query Language](../README.md#-fleet-query-language):
   `android_api`, and any `can.<feature>` (e.g. `can.screen_record`, `can.accessibility`,
   `can.root`, `can.input`, `can.notification_listener`). `can.<feature>` resolves against the
   capability map and is **open-ended** — an agent can advertise new keys without a backend change.

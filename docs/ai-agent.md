@@ -15,7 +15,7 @@ Three surfaces use the AI layer:
 1. **The per-device agent** — a persistent conversation that can call device actions as tools.
 2. **NL automation** — generate / refine / explain automations from plain English, plus self-heal.
 3. **Visual regression** — AI adjudication of screenshot diffs (see the
-   [README](../README.md#visual-regression-testing)).
+   [README](../README.md#️-visual-regression-testing)).
 
 ---
 
@@ -102,7 +102,7 @@ see the [SDK Reference](extensions/sdk-reference.md#ai) for how `is_write` drive
 ## NL automation & self-healing
 
 `NLAutomationMixin` (`backend/devicekit/mixins/nl_automation.py`) is the bridge between the AI layer
-and the [automation engine](../README.md#automation-engine). It uses Prompture conversations (no
+and the [automation engine](../README.md#-automation-engine). It uses Prompture conversations (no
 tools) primed with the full step-type schema, so generated steps are valid.
 
 | Endpoint | Does |
