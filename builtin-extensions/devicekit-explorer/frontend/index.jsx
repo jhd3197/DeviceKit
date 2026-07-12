@@ -235,7 +235,7 @@ export function FileBrowser({ deviceId }) {
                   <td className="p-3 border-b border-main">
                     <button className="flex items-center gap-2 text-left" onClick={() => openEntry(e)}>
                       <span className={e.is_dir ? 'text-amber-400' : 'text-zinc-500'}>{e.is_dir ? '📁' : '📄'}</span>
-                      <span className="text-zinc-200 group-hover:text-white truncate max-w-[22rem]">{e.name}</span>
+                      <span className="text-zinc-200 group-hover:text-strong truncate max-w-[22rem]">{e.name}</span>
                     </button>
                   </td>
                   <td className="p-3 border-b border-main text-zinc-500 mono text-xs">
@@ -337,7 +337,7 @@ export function ExplorerPage() {
         <select
           value={deviceId}
           onChange={(e) => setDeviceId(e.target.value)}
-          className="bg-black border border-main rounded px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-border-alt"
+          className="bg-body border border-main rounded px-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-border-alt"
         >
           <option value="">Select a device…</option>
           {devices.map((d) => (
