@@ -30,6 +30,7 @@ from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
 from devicekit.mixins.agent_survey import AgentSurveyMixin
 from devicekit.mixins.agent_ota import AgentOtaMixin
+from devicekit.mixins.onboarding import OnboardingMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.extension_ai import ExtensionAiMixin
@@ -68,6 +69,7 @@ class Client(
     AgentDeviceMixin,
     AgentSurveyMixin,
     AgentOtaMixin,
+    OnboardingMixin,
     PairingMixin,
     ExtensionsMixin,
     ExtensionAiMixin,
@@ -142,6 +144,13 @@ class Client(
             self.init_agent_ota()
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Agent OTA init skipped: {e}")
+
+        # Onboarding state machine (plan 25): register the advance job kind + events (after
+        # jobs + notifications are live; provisioning leans on fleet policy above).
+        try:
+            self.init_onboarding()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Onboarding init skipped: {e}")
 
         # Apply any persisted AI provider keys to the environment so Prompture picks them
         # up without a restart (plan 12 settings).

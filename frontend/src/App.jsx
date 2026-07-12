@@ -15,6 +15,7 @@ import {
   LineChart,
   GitBranch,
   Rocket,
+  ClipboardList,
   Puzzle,
   Briefcase,
   Bell,
@@ -41,6 +42,7 @@ import Extensions from './views/Extensions'
 import Jobs from './views/Jobs'
 import Notifications from './views/Notifications'
 import Enrollment from './views/Enrollment'
+import Onboarding from './views/Onboarding'
 import CommandHistory from './views/CommandHistory'
 import SettingsView from './views/Settings'
 
@@ -64,6 +66,7 @@ const navSections = [
       { to: '/fleet/compare', icon: BarChart3, label: 'Compare' },
       { to: '/fleet/monitor', icon: LineChart, label: 'Metrics Monitor' },
       { to: '/enrollment', icon: ShieldCheck, label: 'Enrollment' },
+      { to: '/onboarding', icon: ClipboardList, label: 'Onboarding' },
       { to: '/fleet/versions', icon: GitBranch, label: 'Agent Versions' },
       { to: '/fleet/updates', icon: Rocket, label: 'Agent Updates' },
       { to: '/command-history', icon: History, label: 'Command History' },
@@ -228,6 +231,7 @@ export default function App() {
           <Route path="/fleet/versions" element={<FleetVersions />} />
           <Route path="/fleet/updates" element={<AgentUpdates />} />
           <Route path="/enrollment" element={<Enrollment />} />
+          <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/command-history" element={<CommandHistory />} />
           <Route path="/profiles" element={<Profiles />} />
           <Route path="/profiles/new" element={<ProfileEditor />} />

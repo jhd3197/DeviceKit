@@ -586,6 +586,14 @@ export const api = {
       body: JSON.stringify({ paused }),
     }),
 
+  // Onboarding state machine (plan 25 part 4)
+  getOnboardingSessions: (state) =>
+    request(`/onboarding${state ? `?state=${state}` : ''}`),
+  getOnboardingSession: (id) => request(`/onboarding/${id}`),
+  restartOnboarding: (id) => request(`/onboarding/${id}/restart`, { method: 'POST' }),
+  onboardDevice: (deviceId) =>
+    request(`/agent-device/${deviceId}/onboard`, { method: 'POST', body: '{}' }),
+
   // Metrics History (plan 08)
   getMetricsCatalog: () => request('/metrics/catalog'),
   getDeviceMetrics: (id, metric = 'battery_pct', period = '24h') =>
@@ -746,6 +754,9 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('ota', (e) => {
     handlers.onOta?.(JSON.parse(e.data))
+  })
+  es.addEventListener('onboarding', (e) => {
+    handlers.onOnboarding?.(JSON.parse(e.data))
   })
   es.addEventListener('job', (e) => {
     handlers.onJob?.(JSON.parse(e.data))

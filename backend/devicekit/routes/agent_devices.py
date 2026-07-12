@@ -94,6 +94,14 @@ def make_blueprint(client, limiter):
         client.broadcast('device_connected', {'device_id': device_id, 'info': data})
         if not result['reconnected']:
             client.broadcast('device_new', {'device_id': device_id, 'info': data})
+            # A genuinely new device kicks off the formal onboarding state machine (plan 25):
+            # validate → provision (apply its group policy) → ready. Best-effort; a failure
+            # here never blocks the registration response.
+            try:
+                client.start_onboarding(device_id, serial=serial,
+                                        context={'trigger': 'register'})
+            except Exception as e:
+                logger.warning(f"Onboarding start skipped for {device_id}: {e}")
         elif result['was_offline']:
             client.broadcast('device_reconnected', {'device_id': device_id})
             client.notify_event(
