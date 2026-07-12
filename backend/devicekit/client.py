@@ -47,6 +47,7 @@ from devicekit.mixins.workspaces import WorkspacesMixin
 from devicekit.mixins.vault import VaultMixin
 from devicekit.mixins.account_security import AccountSecurityMixin
 from devicekit.mixins.fleet_policy import FleetPolicyMixin
+from devicekit.mixins.search import SearchMixin
 
 
 class Client(
@@ -88,6 +89,7 @@ class Client(
     VaultMixin,
     AccountSecurityMixin,
     FleetPolicyMixin,
+    SearchMixin,
     EventsMixin,
     ApiAppMixin,
     QueueMixin,

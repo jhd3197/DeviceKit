@@ -48,6 +48,7 @@ from devicekit.routes import (
     jobs,
     notifications,
     metrics,
+    search,
 )
 
 # Registration order does not affect URL matching (Flask matches by rule specificity),
@@ -89,6 +90,7 @@ BLUEPRINT_MODULES = [
     jobs,
     notifications,
     metrics,
+    search,
 ]
 
 

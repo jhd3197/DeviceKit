@@ -1,21 +1,25 @@
-// Command Palette (plan 10) — `Ctrl/Cmd+K` jump-to-anything.
+// Command Palette (plan 10, extended by plan 26) — jump-to-anything.
 //
-// One cmdk-backed dialog, mounted once in App.jsx, that merges several sources at open time:
-//   - Pages     — a static list mirroring App.jsx `navSections`.
-//   - Devices   — fetched from `/devices` on open; enter → `/node/<id>`.
-//   - Automations — fetched from `/automations` on open; enter → editor.
-// Sources are fetched only while the palette is open (not kept hot). We drive cmdk with our
-// own fuzzy scorer (`shouldFilter={false}`) so ranking is consistent across categories and a
-// three-letter serial fragment beats dashboard-scanning a 30-device fleet.
-//
-// Phase 2 adds Actions, localStorage recents, and extension `command_palette` contributions;
-// phase 3 adds FQL mode (a `>`-prefixed query runs `/fleet/query` inline).
+// One cmdk-backed dialog, mounted once in App.jsx. Open with `Ctrl/Cmd+K`, `Ctrl/Cmd+Shift+P`,
+// or `F1`. It merges several sources, driven by our own fuzzy scorer (`shouldFilter={false}`) so
+// ranking is consistent across categories and a three-letter serial fragment beats scanning a
+// fleet dashboard. Final score = fuzzy + category weight + capped frecency.
+//   - Pages / Actions — static lists mirroring the sidebar + common verbs.
+//   - Settings        — every indexed settings card; enter deep-links + flashes the card (plan 26).
+//   - Entities        — devices/automations/profiles/groups/extensions/jobs/(users/workspaces),
+//                       fetched from the authz-scoped `/search` on a 200 ms debounce, ≥2 chars
+//                       (plan 26 part 3) — no more fetch-every-table-on-open.
+//   - Extensions      — `command_palette` contributions from installed extensions.
+// Recents come from `utils/paletteFrecency.js` (14-day half-life). A `>`-prefixed query switches
+// to FQL mode and runs `/fleet/query` inline (plan 10). Admin-only results are dropped for
+// non-admins via `usePaletteAuthz`.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Command } from 'cmdk'
 import { useNavigate } from 'react-router-dom'
 import {
   LayoutGrid, Cpu, Terminal, Users, BarChart3, LineChart, ShieldCheck, History,
   Puzzle, PlayCircle, Workflow, Briefcase, Bell, Settings, Bot, Smartphone, Search, Plus,
+  Building2,
 } from 'lucide-react'
 import { api } from '../api'
 import { useContributions } from '../extensions/contributions'
@@ -113,6 +117,19 @@ function groupWeight(g) {
   return GROUP_WEIGHT[g] ?? 1
 }
 
+// Backend `/search` row type → palette category + icon (plan 26 part 3). The async omnisearch
+// replaces fetching whole tables on open, so entity rows arrive already matched + authz-scoped.
+const TYPE_META = {
+  device: { group: 'Devices', icon: Smartphone },
+  automation: { group: 'Automations', icon: Workflow },
+  profile: { group: 'Profiles', icon: Bot },
+  group: { group: 'Groups', icon: Users },
+  extension: { group: 'Extensions', icon: Puzzle },
+  job: { group: 'Jobs', icon: Briefcase },
+  user: { group: 'Users', icon: Users },
+  workspace: { group: 'Workspaces', icon: Building2 },
+}
+
 // Normalize a contribution's `keywords` (array or string) into a searchable string.
 function keywordString(kw) {
   if (Array.isArray(kw)) return kw.join(' ')
@@ -125,8 +142,8 @@ export default function CommandPalette() {
   const { allow } = usePaletteAuthz()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [devices, setDevices] = useState([])
-  const [automations, setAutomations] = useState([])
+  const [searchResults, setSearchResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const [recents, setRecents] = useState(() => recentEntries(RECENTS_MAX))
   const [fql, setFql] = useState({ matches: [], total: 0, loading: false, error: null })
 
@@ -157,19 +174,33 @@ export default function CommandPalette() {
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
 
-  // Fetch live sources each time the palette opens (not kept hot); reset query on close.
+  // Reset query on close; refresh the frecency-ranked recents on open. Entities are no longer
+  // pre-fetched here (plan 26 part 3) — they come from the debounced `/search` effect below.
   useEffect(() => {
     if (!open) {
       setQuery('')
+      setSearchResults([])
       return
     }
-    // Refresh the frecency-ranked recents each open so they reflect uses since last time.
     setRecents(recentEntries(RECENTS_MAX))
-    let cancelled = false
-    api.getDevices().then((r) => { if (!cancelled) setDevices(r.devices || []) }).catch(() => {})
-    api.getAutomations().then((r) => { if (!cancelled) setAutomations(r.automations || []) }).catch(() => {})
-    return () => { cancelled = true }
   }, [open])
+
+  // Debounced entity omnisearch (plan 26 part 3). Outside FQL mode, a ≥2-char query hits the
+  // authz-scoped `/search` once per 200 ms instead of pre-loading every table. Results arrive
+  // pre-matched + workspace/role-scoped; the client only ranks + buckets them.
+  useEffect(() => {
+    if (!open || fqlMode) { setSearchResults([]); setSearchLoading(false); return }
+    const q = query.trim()
+    if (q.length < 2) { setSearchResults([]); setSearchLoading(false); return }
+    setSearchLoading(true)
+    let cancelled = false
+    const t = setTimeout(() => {
+      api.search(q)
+        .then((r) => { if (!cancelled) { setSearchResults(r.results || []); setSearchLoading(false) } })
+        .catch(() => { if (!cancelled) { setSearchResults([]); setSearchLoading(false) } })
+    }, 200)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [open, fqlMode, query])
 
   // Debounced FQL execution — reuses the untouched `/fleet/query` endpoint. Runs only while the
   // palette is open and the query is a non-empty `>` expression.
@@ -211,38 +242,13 @@ export default function CommandPalette() {
 
   const extEntries = envelope.command_palette || []
 
-  // Build the flat item list from every source. Items with a `path` navigate on select and are
-  // eligible for recents; a custom `onRun` overrides.
+  // Build the flat item list of *static* sources (pages, actions, settings, extensions). Live
+  // entities (devices/automations/profiles/…) now come from the async `/search` provider below.
+  // Items with a `path` navigate on select and are eligible for recents; a custom `onRun` overrides.
   const items = useMemo(() => {
     const out = []
     for (const p of PAGES) {
       out.push({ id: `page:${p.to}`, group: 'Pages', label: p.label, keywords: p.keywords, icon: p.icon, path: p.to })
-    }
-    for (const d of devices) {
-      const id = d.device_id || d.serial
-      if (!id) continue
-      out.push({
-        id: `device:${id}`,
-        group: 'Devices',
-        label: d.model || d.name || id,
-        sublabel: id,
-        keywords: `${id} ${d.model || ''} ${d.manufacturer || ''}`,
-        icon: Smartphone,
-        online: d.online,
-        path: `/node/${id}`,
-      })
-    }
-    for (const a of automations) {
-      if (!a.id) continue
-      out.push({
-        id: `automation:${a.id}`,
-        group: 'Automations',
-        label: a.name || 'Untitled automation',
-        sublabel: a.description || `${(a.steps || []).length} steps`,
-        keywords: `${a.name || ''} ${a.description || ''}`,
-        icon: Workflow,
-        path: `/automations/${a.id}/edit`,
-      })
     }
     for (const ac of ACTIONS) {
       out.push({ id: ac.id, group: 'Actions', label: ac.label, keywords: ac.keywords, icon: ac.icon, path: ac.path })
@@ -286,7 +292,26 @@ export default function CommandPalette() {
     }
     // Authz: never surface something the user can't reach (admin-only cards for non-admins).
     return out.filter(allow)
-  }, [devices, automations, extEntries, allow])
+  }, [extEntries, allow])
+
+  // Live entity rows from the backend `/search` provider, mapped to palette categories. These are
+  // already matched + authz-scoped server-side, so they bypass the client fuzzy filter (floored
+  // at score 0) — a serial fragment always shows even if the label doesn't fuzzy-match.
+  const entityItems = useMemo(() => {
+    return searchResults.map((r, i) => {
+      const meta = TYPE_META[r.type] || { group: 'Results', icon: Search }
+      return {
+        id: `search:${r.type}:${r.path}:${i}`,
+        group: meta.group,
+        label: r.label,
+        sublabel: r.sublabel,
+        keywords: `${r.label} ${r.sublabel || ''}`,
+        icon: meta.icon,
+        path: r.path,
+        entity: true,
+      }
+    }).filter(allow)
+  }, [searchResults, allow])
 
   // Recent items (shown only on an empty query). Re-resolve each recent's live icon/action from
   // the current item list when possible; fall back to plain path navigation for stale entries.
@@ -344,15 +369,21 @@ export default function CommandPalette() {
       // those surface only once the user types (they'd flood the empty listing otherwise).
       list = [...recentItems, ...items.filter((it) => it.group !== 'Settings')]
     } else {
-      // Final score = fuzzy + category weight + capped frecency (plan 26): among comparable
-      // fuzzy matches, higher-signal groups and items you use often float up.
-      list = items
+      // Final score = fuzzy + category weight + capped frecency (plan 26). Static items are
+      // client fuzzy-filtered; entity rows from `/search` are pre-matched server-side so their
+      // fuzzy score is floored at 0 (a serial fragment always shows even without a label match).
+      const staticScored = items
         .map((it) => {
           const fuzzy = scoreItem(it, q)
           if (fuzzy < 0) return null
           return { it, score: fuzzy + groupWeight(it.group) + Math.min(frecencyScore(it.id), 10) }
         })
         .filter(Boolean)
+      const entityScored = entityItems.map((it) => {
+        const fuzzy = Math.max(scoreItem(it, q), 0)
+        return { it, score: fuzzy + groupWeight(it.group) + Math.min(frecencyScore(it.id), 10) }
+      })
+      list = [...staticScored, ...entityScored]
         .sort((a, b) => b.score - a.score)
         .map((x) => x.it)
     }
@@ -364,7 +395,7 @@ export default function CommandPalette() {
     return [...byGroup.keys()]
       .sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b))
       .map((g) => ({ group: g, items: byGroup.get(g) }))
-  }, [items, recentItems, query])
+  }, [items, entityItems, recentItems, query])
 
   // In FQL mode the fleet-query results replace the normal listing.
   const displayGroups = fqlMode
@@ -417,7 +448,7 @@ export default function CommandPalette() {
               )
             ) : (
               <Command.Empty className="px-3 py-8 text-center text-xs text-zinc-500">
-                No results found.
+                {searchLoading ? 'Searching…' : 'No results found.'}
               </Command.Empty>
             )}
 

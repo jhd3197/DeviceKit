@@ -364,6 +364,9 @@ export const api = {
     request(`/fleet/compare?devices=${deviceIds.join(',')}`),
   onboardDevice: (id) => request(`/devices/${id}/onboard`, { method: 'POST' }),
 
+  // Entity omnisearch (plan 26) — one authz-scoped call across all entities for the palette.
+  search: (q) => request(`/search?q=${encodeURIComponent(q)}`),
+
   // Fleet Query Language
   fleetQuery: (expression, format = 'json') =>
     request(`/fleet/query?q=${encodeURIComponent(expression)}&format=${format}`),

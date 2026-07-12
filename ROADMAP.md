@@ -414,7 +414,7 @@ See [docs/plans/10-command-palette.md](docs/plans/10-command-palette.md) and [do
 **Palette v2** (see [docs/plans/26-command-palette-v2.md](docs/plans/26-command-palette-v2.md)):
 - [x] `F1` + `Ctrl/Cmd+Shift+P` open bindings; frecency ranking (14-day half-life) replacing last-6 recents; footer hint row
 - [x] Settings card index + `?focus=setting:` deep-link flash + admin-only authz gating
-- [ ] Backend `GET /search` omnisearch (`SearchMixin`) + async entity provider with category weights/caps
+- [x] Backend `GET /search` omnisearch (`SearchMixin`) + async entity provider with category weights/caps
 
 ### Phase 32: Settings & Theming ✅
 **Goal**: A real `/settings` (the sidebar link currently 404s) and runtime accent theming.

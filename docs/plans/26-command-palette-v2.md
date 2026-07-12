@@ -1,6 +1,6 @@
 # Plan 26 — Command Palette v2: F1, Omnisearch & Settings Deep-Links
 
-**Status:** 🚧 in progress — phases 1 & 2 ✅ shipped
+**Status:** ✅ shipped — all 3 phases landed
 **Inspired by:** ServerKit's current palette stack — `layouts/DashboardLayout.jsx` (three
 open bindings), `components/CommandPalette.jsx` (prefix modes, category weights),
 `data/settingsIndex.js` + `hooks/useSettingFocus.js` (settings deep-links that *flash* the
@@ -82,7 +82,7 @@ grew four things DeviceKit's lacks, and the user's number-one ask is the first:
 |---|---|---|---|
 | 1 | F1 + Ctrl/Cmd+Shift+P bindings, frecency ranking replacing recents, footer hints | `F1` from any view opens the palette; most-used items float to the top of the empty screen | ✅ shipped — `utils/paletteFrecency.js` (14-day half-life), 3 open bindings, footer row. `?` docs mode deferred (no in-app docs route yet). |
 | 2 | Settings card index + `?focus=setting:` deep-link flash + authz gating | typing "retention" → enter lands on `/settings/bundles` with the retention card flashing; non-admins never see Vault/Users entries | ✅ shipped — `data/settingsIndex.js` (26 cards / 14 tabs), `hooks/useSettingFocus.js` + `.is-setting-focused` keyframe, `register()` on every pane, `usePaletteAuthz` drops admin-only cards, `scripts/check-settings-index.mjs` lint. |
-| 3 | `SearchMixin` + `GET /search`, async entity provider with weights/caps | with 200 devices, typing 3 chars of a serial returns in one debounced request instead of pre-fetching every table | ⏳ |
+| 3 | `SearchMixin` + `GET /search`, async entity provider with weights/caps | with 200 devices, typing 3 chars of a serial returns in one debounced request instead of pre-fetching every table | ✅ shipped — `mixins/search.py` (composed before `ApiAppMixin`) + `routes/search.py` (`GET /search`, mirrored under `/api/v1`), authz-scoped by workspace+role; palette async provider (200 ms debounce, ≥2 chars, type→category, entity score floored at 0) replaces fetch-all-on-open; 10 tests in `test_search.py`. |
 
 Phases are independent; 1 is a one-sitting win and should land first since it's the direct ask.
 
