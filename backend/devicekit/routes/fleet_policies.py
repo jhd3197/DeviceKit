@@ -50,6 +50,16 @@ def make_blueprint(client, limiter):
         data = request.get_json(silent=True) or {}
         return jsonify(client.validate_fleet_policy_yaml(data.get("yaml") or ""))
 
+    @bp.route("/fleet-policies/<policy_id>/plan", methods=["GET"])
+    def plan_policy(policy_id):
+        """Dry-run diff: ordered steps + issues + hard blockers. Never mutates."""
+        try:
+            plan = client.plan_fleet_policy(policy_id)
+        except ValueError as e:
+            status = 404 if "not found" in str(e) else 400
+            return jsonify({"error": str(e)}), status
+        return jsonify({"plan": plan})
+
     @bp.route("/fleet-policies/<policy_id>", methods=["GET"])
     def get_policy(policy_id):
         policy = client.get_fleet_policy(policy_id)

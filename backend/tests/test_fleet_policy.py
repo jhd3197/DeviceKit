@@ -160,3 +160,140 @@ def test_http_viewer_forbidden_to_write(http, client):
     assert http.get("/fleet-policies", headers=h).status_code == 200
     assert http.post("/fleet-policies", headers=h,
                      json={"yaml": YAML_ONE}).status_code == 403
+
+
+# --------------------------------------------------------------- plan (phase 3)
+class _StubbedClient(_PolicyClient):
+    """FleetPolicyMixin over canned live seams: one ADB device SER1 with brightness 40,
+    the VPN app absent, an existing automation with no schedule, and the vpn extension
+    active with an APK supplied."""
+
+    adb_log = None
+
+    def all_devices_for_query(self):
+        return [{"serial": "SER1", "device_id": "SER1", "online": True},
+                {"serial": "AGENT9", "device_id": "AGENT9", "online": True,
+                 "source": "agent"}]
+
+    def get_device_group(self, group_id):
+        return {"id": group_id, "device_ids": ["SER1"]} if group_id == "grp-1" else None
+
+    def execute_fleet_query(self, expression, devices=None):
+        return [d for d in devices or [] if d.get("source") != "agent"]
+
+    def get_extension(self, slug):
+        if slug != "devicekit-vpn":
+            return None
+        return {"slug": slug, "status": "active", "manifest": {"device_requirements": {
+            "package": "com.expressvpn.vpn", "supported_versions": ">=12",
+            "provision": "user_supplied_apk"}}}
+
+    def get_extension_config_raw(self, slug):
+        return {"apk_b64": "QUJD", "apk_version": "12.4.0"}
+
+    def get_extension_registry(self, force=False):
+        return [{"slug": "devicekit-vpn"}]
+
+    def get_automation(self, automation_id):
+        return None
+
+    def list_automations(self, workspace_id=None):
+        return [{"id": "a1", "name": "auto-1"}]
+
+    def list_schedules(self, automation_id=None):
+        return []
+
+    def run_adb_command(self, args, device=None):
+        (self.adb_log if self.adb_log is not None else []).append((device, args))
+        if args[:3] == ["shell", "dumpsys", "package"]:
+            return ""                                   # app not installed
+        if args[:3] == ["shell", "settings", "get"]:
+            return "40"
+        return ""
+
+
+POLICY_YAML = """
+version: 1
+target: {device: SER1}
+apps:
+  - {package: com.expressvpn.vpn, version: "12.4.0", extension: devicekit-vpn}
+automations:
+  - {automation: auto-1, schedule: {intervalMinutes: 30}}
+settings:
+  system: {screen_brightness: 128}
+extensions: [devicekit-vpn]
+"""
+
+
+@pytest.fixture
+def stubbed(fresh_db, monkeypatch):
+    monkeypatch.delenv("DEVICEKIT_ADMIN_USERNAME", raising=False)
+    c = _StubbedClient()
+    c.adb_log = []
+    c.init_identity()
+    return c
+
+
+def test_plan_end_to_end_over_stub_seams(stubbed):
+    p = stubbed.create_fleet_policy(POLICY_YAML)
+    plan = stubbed.plan_fleet_policy(p["id"])
+    assert plan["blockers"] == []
+    assert [s["kind"] for s in plan["steps"]] == [
+        "provision_app", "configure_setting", "enable_automation"]
+    assert plan["steps"][0]["desired_version"] == "12.4.0"
+    assert plan["steps"][1]["current"] == "40" and plan["steps"][1]["value"] == "128"
+    assert plan["steps"][2]["automation_id"] == "a1"    # resolved by name
+    # Live reads went to the right device over ADB.
+    assert all(dev == "SER1" for dev, _ in stubbed.adb_log)
+
+
+def test_plan_group_and_fql_targets_resolve(stubbed):
+    grp = stubbed.create_fleet_policy("version: 1\ntarget: {group: grp-1}\n")
+    assert stubbed.plan_fleet_policy(grp["id"])["devices"] == ["SER1"]
+    fql = stubbed.create_fleet_policy("version: 1\ntarget: {fql: 'online = true'}\n")
+    assert stubbed.plan_fleet_policy(fql["id"])["devices"] == ["SER1"]
+    missing = stubbed.create_fleet_policy("version: 1\ntarget: {group: nope}\n")
+    with pytest.raises(ValueError):
+        stubbed.plan_fleet_policy(missing["id"])
+
+
+def test_plan_agent_only_device_blocks_on_adb(stubbed):
+    p = stubbed.create_fleet_policy(POLICY_YAML.replace("SER1", "AGENT9"))
+    plan = stubbed.plan_fleet_policy(p["id"])
+    assert [b["code"] for b in plan["blockers"]] == ["adb_required"]
+
+
+def test_plan_resolves_fromsecret_through_vault(fresh_db, monkeypatch):
+    from devicekit.mixins.vault import VaultMixin
+
+    class _VaultedClient(VaultMixin, _StubbedClient):
+        pass
+
+    monkeypatch.delenv("DEVICEKIT_ADMIN_USERNAME", raising=False)
+    c = _VaultedClient()
+    c.adb_log = []
+    c.init_identity()
+    vault = c.create_vault("Fleet", slug="fleet")
+    c.set_secret(vault["id"], "PIN", "40")     # matches the stub's live value "40"
+    p = c.create_fleet_policy("""
+version: 1
+target: {device: SER1}
+settings:
+  system:
+    lock_pin: {fromSecret: {vault: fleet, key: PIN}}
+""")
+    assert c.plan_fleet_policy(p["id"])["empty"] is True
+
+    c.set_secret(vault["id"], "PIN", "9999")   # rotate → drift → masked step
+    plan = c.plan_fleet_policy(p["id"])
+    assert plan["steps"][0]["value"] == "••••••" and "9999" not in str(plan)
+
+
+def test_http_plan_route(http, client, monkeypatch):
+    monkeypatch.setattr(_PolicyClient, "plan_fleet_policy",
+                        lambda self, pid: {"steps": [], "issues": [], "blockers": [],
+                                           "devices": [], "empty": True,
+                                           "policy_id": pid}, raising=False)
+    p = http.post("/fleet-policies", json={"yaml": YAML_ONE}).get_json()["policy"]
+    r = http.get(f"/fleet-policies/{p['id']}/plan")
+    assert r.status_code == 200 and r.get_json()["plan"]["empty"] is True
