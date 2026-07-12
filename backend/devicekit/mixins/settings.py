@@ -46,7 +46,7 @@ SETTINGS_DEFAULTS = {
     "bundles.share_token_lifetime_minutes": 1440,   # 24h
     # Appearance
     "appearance.theme": "dark",
-    "appearance.accent": "#10b981",            # emerald — DeviceKit's historical accent
+    "appearance.accent": "#6d7cff",            # periwinkle — DeviceKit's brand purple (plan 27)
     # Account security (plan 20 part 6)
     "security.require_2fa": False,             # require TOTP 2FA for all users
     "security.require_2fa_enabled_at": None,   # stamped when the policy is turned on (grace anchor)

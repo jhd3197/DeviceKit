@@ -7,11 +7,16 @@
 // utility instantly with no re-render. The chosen hex is mirrored to localStorage so the
 // accent is correct on the very first paint after reload (before settings load over HTTP).
 
-export const DEFAULT_ACCENT = '#10b981' // emerald — DeviceKit's historical accent
+export const DEFAULT_ACCENT = '#6d7cff' // periwinkle — DeviceKit's brand purple (plan 27)
 const LS_KEY = 'devicekit_accent'
 
-// A few presets for the picker; users can also enter any hex.
+// A few presets for the picker; users can also enter any hex. Periwinkle (the brand default)
+// and Indigo lead — the same two-purples split the logo uses (#6d7cff live / #6366f1 deep).
+// Emerald stays available for users who prefer the historical accent; semantic emerald
+// (online/pass/success) is unaffected by this list — only brand chrome rides the accent ramp.
 export const ACCENT_PRESETS = [
+  { name: 'Periwinkle', hex: '#6d7cff' },
+  { name: 'Indigo', hex: '#6366f1' },
   { name: 'Emerald', hex: '#10b981' },
   { name: 'Blue', hex: '#3b82f6' },
   { name: 'Violet', hex: '#8b5cf6' },
