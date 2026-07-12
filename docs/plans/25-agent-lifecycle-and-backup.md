@@ -1,6 +1,6 @@
 # Plan 25 — Agent Lifecycle, OTA & Backup/DR
 
-**Status:** proposed
+**Status:** 🚧 in progress — phase 1 shipped (backend + Kotlin device-enforcement; APK rebuild pending)
 **Inspired by:** three ServerKit lessons — two for the agent, one for the platform's own
 durability.
 1. **The agent trust boundary** (`docs/AGENT_SURVEY_SPEC.md`): the agent enforces a **fixed
@@ -90,7 +90,7 @@ flashed by hand today** (`build-agent-apk` skill) — untenable past a handful o
 
 | Phase | Delivers | Proves |
 |---|---|---|
-| 1 | agent-enforced read-only primitive allowlist (server composes, never pushes shell) | device trust boundary |
+| 1 ✅ | agent-enforced read-only primitive allowlist (server composes, never pushes shell) | device trust boundary |
 | 2 | capability/version negotiation + fleet "agent version where" view | old agents work forever; batched probes opt-in |
 | 3 | OTA agent updates: signed APK versions + rollout policy (canary→staged→full+rollback) as jobs | reflash the fleet without touching it |
 | 4 | onboarding state machine (`pending→…→ready`) on the job bus | formal enrollment, policy-on-ready |

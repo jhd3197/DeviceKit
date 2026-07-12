@@ -553,7 +553,7 @@ See [docs/plans/24-fleet-health-and-remediation.md](docs/plans/24-fleet-health-a
 **Goal**: Operate the agent at fleet scale (enforced trust boundary, OTA updates, onboarding state machine) and make DeviceKit survive its own box dying (backup + restore drills).
 See [docs/plans/25-agent-lifecycle-and-backup.md](docs/plans/25-agent-lifecycle-and-backup.md).
 
-- [ ] Agent-enforced read-only primitive allowlist (server composes, never pushes shell)
+- [x] Agent-enforced read-only primitive allowlist (server composes, never pushes shell)
 - [ ] Capability/version negotiation + fleet "which agent version where" view
 - [ ] **OTA agent updates**: signed APK versions + rollout policy (canary→staged→full+rollback) as jobs *(greenfield)*
 - [ ] Onboarding state machine (`pending → validating → provisioning → ready | failed`) on the job bus

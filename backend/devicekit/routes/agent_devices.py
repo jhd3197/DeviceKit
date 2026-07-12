@@ -281,6 +281,43 @@ def make_blueprint(client, limiter):
             'count': client.count_device_commands(device_id=device_id, status=status),
         })
 
+    # -------------------------------------------------------------------
+    # Read-only survey primitives (plan 25 part 1 — the trust boundary)
+    # -------------------------------------------------------------------
+    @bp.route('/agent-device/primitives')
+    def agent_device_primitives():
+        """The fixed allowlist of read-only survey primitives the server may compose.
+
+        The panel is untrusted: it can only ask for these primitives (or a named probe that
+        combines them) — it can never name a shell command or read a whole file.
+        """
+        return jsonify(client.list_agent_primitives())
+
+    @bp.route('/agent-device/<device_id>/survey', methods=['POST'])
+    def agent_device_survey(device_id):
+        """Compose a survey: either a single ``primitive`` (+ ``args``) or a named ``probe``.
+
+        Validation happens before dispatch, so an off-allowlist name is a 400, never a
+        command that reaches the device.
+        """
+        from devicekit.agent_primitives import PrimitiveError
+        data = request.get_json(silent=True) or {}
+        timeout = data.get('timeout')
+        try:
+            if data.get('probe'):
+                result = client.compose_agent_probe(
+                    device_id, data['probe'], timeout=timeout)
+                return jsonify(result)
+            primitive = data.get('primitive')
+            if not primitive:
+                return jsonify({'error': 'primitive or probe required'}), 400
+            row = client.send_agent_primitive(
+                device_id, primitive, args=data.get('args') or {}, timeout=timeout)
+            code = 200 if row and row['status'] == 'completed' else 202
+            return jsonify(row), code
+        except PrimitiveError as e:
+            return jsonify({'error': str(e)}), 400
+
     @bp.route('/agent-device/<device_id>/metrics')
     def agent_device_metrics(device_id):
         """Return raw agent-sourced metrics for a device."""

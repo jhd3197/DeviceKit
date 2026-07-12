@@ -43,6 +43,7 @@ class BackgroundAgent : Service() {
     private val client = DeviceKitClient()
     private var heartbeatJob: Job? = null
     private var stateReportJob: Job? = null
+    private var commandPoller: CommandPoller? = null
     private var metricsCollector: MetricsCollector? = null
     private var httpServer: AgentHttpServer? = null
     private var discoveryService: DiscoveryService? = null
@@ -88,6 +89,7 @@ class BackgroundAgent : Service() {
                     LogBuffer.log("BackgroundAgent", "Connected to ${DeviceState.serverUrl}")
                     startHeartbeat()
                     startStateReporting()
+                    startCommandPolling()
                 } else {
                     LogBuffer.log("BackgroundAgent", "Server connection attempt $attempts/$maxAttempts failed", LogBuffer.Level.ERROR)
                     if (attempts < maxAttempts) {
@@ -178,6 +180,15 @@ class BackgroundAgent : Service() {
         }
     }
 
+    /** Poll the backend for read-only survey primitives (plan 25 part 1). */
+    private fun startCommandPolling() {
+        commandPoller?.stop()
+        commandPoller = CommandPoller(this, client, scope).also {
+            it.start { DeviceState.deviceId }
+        }
+        LogBuffer.log("BackgroundAgent", "Command poller started (survey primitives only)")
+    }
+
     private fun startHttpServer() {
         try {
             httpServer?.stop()
@@ -232,6 +243,8 @@ class BackgroundAgent : Service() {
         super.onDestroy()
         isRunning = false
         DeviceState.isConnected = false
+        commandPoller?.stop()
+        commandPoller = null
         discoveryService?.stop()
         discoveryService = null
         httpServer?.stop()

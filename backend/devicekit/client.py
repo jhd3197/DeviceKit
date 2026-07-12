@@ -28,6 +28,7 @@ from devicekit.mixins.visual_regression import VisualRegressionMixin
 from devicekit.mixins.fleet_query import FleetQueryMixin
 from devicekit.mixins.debug_bundle import DebugBundleMixin
 from devicekit.mixins.agent_device import AgentDeviceMixin
+from devicekit.mixins.agent_survey import AgentSurveyMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.extension_ai import ExtensionAiMixin
@@ -64,6 +65,7 @@ class Client(
     VisualRegressionMixin,
     DebugBundleMixin,
     AgentDeviceMixin,
+    AgentSurveyMixin,
     PairingMixin,
     ExtensionsMixin,
     ExtensionAiMixin,
