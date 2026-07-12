@@ -43,7 +43,7 @@ const PAGES = [
   { to: '/automations', label: 'Automations', icon: Workflow, keywords: 'automation flows steps' },
   { to: '/jobs', label: 'Jobs', icon: Briefcase, keywords: 'jobs scheduler queue' },
   { to: '/notifications', label: 'Notifications', icon: Bell, keywords: 'alerts notifications channels' },
-  { to: '/settings', label: 'SamanLabs Config', icon: Settings, keywords: 'settings config' },
+  { to: '/settings', label: 'Settings', icon: Settings, keywords: 'settings config samanlabs' },
   { to: '/profiles', label: 'Profiles', icon: Bot, keywords: 'ai profiles agent model' },
 ]
 
