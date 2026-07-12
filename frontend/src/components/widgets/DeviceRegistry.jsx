@@ -71,6 +71,7 @@ function DeviceCard({ device, spark, onOpen }) {
         color={battery != null && battery < 20 ? '#ef4444' : '#10b981'}
         width={240}
         height={30}
+        fluid
       />
 
       <div className="space-y-1.5">

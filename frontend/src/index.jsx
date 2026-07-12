@@ -7,6 +7,13 @@ import { bootAccent, bootTheme } from './theme'
 import { AuthProvider } from './auth/AuthContext'
 import AuthGate from './auth/AuthGate'
 
+// Demo/screenshot build (`vite --mode mock`): install the fetch/EventSource mocks
+// so the whole UI renders on a fictional fleet with no backend, before anything
+// makes a request. See src/mock/ and scripts/capture-screenshots.mjs.
+if (import.meta.env.MODE === 'mock') {
+  await import('./mock')
+}
+
 // Paint with the saved accent + theme mode before React mounts (avoids an emerald flash and
 // a dark→light flash on reload). Both read localStorage; /settings reconciles them later.
 bootAccent()

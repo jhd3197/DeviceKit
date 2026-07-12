@@ -16,7 +16,7 @@ export default function MetricCard({ label, value, unit, valueClass = '', spark,
       </div>
       {spark && spark.length >= 2 && (
         <div className="mt-2 -mb-1">
-          <Sparkline values={spark} color={sparkColor} width={160} height={26} />
+          <Sparkline values={spark} color={sparkColor} width={160} height={26} fluid />
         </div>
       )}
     </div>

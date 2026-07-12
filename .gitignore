@@ -242,3 +242,6 @@ docs/plans/prompt.md
 .pr/
 image.png
 *.png
+# …but the README/demo screenshots are committed (captured via `npm run shots`).
+!docs/screenshots/*.png
+!docs/assets/*.png

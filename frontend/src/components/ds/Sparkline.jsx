@@ -12,13 +12,18 @@ export default function Sparkline({
   height = 24,
   strokeWidth = 1.25,
   fill = true,
+  fluid = false,
   min,
   max,
 }) {
+  // `fluid` stretches the line to fill its container width (preserveAspectRatio="none"
+  // keeps the viewBox coordinates), so KPI/device cards get an edge-to-edge trend
+  // instead of a fixed-pixel line that overflows narrow cards or falls short in wide ones.
+  const svgStyle = { width: fluid ? '100%' : width, height, display: 'block' }
   const data = (values || []).filter((v) => typeof v === 'number')
   if (data.length < 2) {
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width, height }} className="opacity-40">
+      <svg viewBox={`0 0 ${width} ${height}`} style={svgStyle} preserveAspectRatio="none" className="opacity-40">
         <line
           x1="0"
           y1={height / 2}
@@ -49,7 +54,7 @@ export default function Sparkline({
   const gradId = `spark-${color.replace('#', '')}-${n}`
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width, height }} preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${width} ${height}`} style={svgStyle} preserveAspectRatio="none">
       {fill && (
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
