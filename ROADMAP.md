@@ -514,7 +514,7 @@ See [docs/plans/21-public-api-and-mcp-server.md](docs/plans/21-public-api-and-mc
 - [x] `/api/v1` mount + dual auth (session or `dk_` key) + `require_scope` (pass-through for session) + device scope catalog
 - [x] Auto-OpenAPI generator over the blueprint `url_map` + `/api/v1/openapi.json` + docs page
 - [x] **MCP server** (stdio + HTTP): curated tool set, per-tool scope gating, plan-13 confirmation gate on writes *(greenfield)*
-- [ ] Generated client + `devicekit` CLI (token auth, completions)
+- [x] Generated client + `devicekit` CLI (token auth, completions)
 
 ### Phase 42: Automation Engine v2 — DAG + Triggers
 **Goal**: Replace the linear step engine with a branching graph (loops, sub-flows, parallel device fan-out) and four trigger types.

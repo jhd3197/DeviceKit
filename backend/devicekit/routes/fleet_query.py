@@ -13,10 +13,29 @@ def make_blueprint(client, limiter):
     bp = Blueprint('fleet_query', __name__)
 
     def _get_all_devices():
-        """Helper to get merged ADB + agent device list for queries."""
+        """Merged ADB + agent device list for queries.
+
+        Mirrors the ``/devices`` route's enrichment: an ADB-listed device is ``online`` by
+        definition, and when it's also agent-registered its model/metrics are folded in.
+        Without this, FQL over ``online``/``model``/``battery`` never matched ADB-only rows
+        (they lack those keys) — the query surface must see what the fleet list sees."""
         connected = client.get_devices()
         adb_ids = {d.get('serial') or d.get('device_id') for d in connected if d}
         now = time.time()
+        for d in connected:
+            if not d:
+                continue
+            d['online'] = True
+            agent = client.find_agent_device(d.get('serial') or d.get('device_id') or '')
+            if not agent:
+                continue
+            info = agent.get('info') or {}
+            metrics = (agent.get('state') or {}).get('metrics') or {}
+            if not d.get('model') and info.get('model'):
+                d['model'] = info['model']
+            for key in ('battery_level', 'cpu_percent', 'ram_used_mb', 'ram_total_mb'):
+                if d.get(key) is None and metrics.get(key) is not None:
+                    d[key] = metrics[key]
         for agent_id, agent_data in client._agent_device_states.items():
             if agent_id in adb_ids:
                 continue

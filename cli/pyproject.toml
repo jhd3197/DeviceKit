@@ -1,0 +1,24 @@
+# Local tool: the project name `devicekit-cli` is a placeholder — bare `devicekit`
+# on PyPI is permanently blocked, and this package is installed from the repo
+# (`pip install -e cli/`), not published.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devicekit-cli"
+version = "0.1.0"
+description = "Command-line client for the DeviceKit /api/v1 surface, generated from its OpenAPI spec."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "requests>=2.28",
+    "click>=8",
+]
+
+[project.scripts]
+devicekit = "devicekit_cli.main:cli"
+
+[tool.setuptools]
+packages = ["devicekit_cli"]

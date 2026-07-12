@@ -1,6 +1,6 @@
 # Plan 21 — Public API `/api/v1`, Scoped Keys, OpenAPI & MCP Server
 
-**Status:** in progress (phases 1–2 ✅)
+**Status:** ✅ shipped (all 4 phases)
 **Inspired by:** ServerKit serves everything under `/api/v1` with **dual auth** — session/JWT for
 the UI, `X-API-Key: sk_…` for machines — and **auto-generates** its OpenAPI 3.0 spec by walking
 the Flask `url_map` (`backend/app/services/openapi_service.py`: blueprint → tag, view docstring →
@@ -74,7 +74,7 @@ tools already annotated read vs write — the MCP tool gate reuses that annotati
 | 1 | `/api/v1` mount + dual auth (session or `dk_` key) + `require_scope` (pass-through for session) + device scope catalog | one endpoint serves UI + machines | ✅ `d727033` |
 | 2 | Auto-OpenAPI generator over the blueprint `url_map` + `/api/v1/openapi.json` + docs page | spec stays in sync, no hand-maintenance | ✅ `dd1549e` |
 | 3 | MCP server (stdio + HTTP) over the scoped API: curated tools, per-tool scope gating, plan-13 gate on writes | Claude can drive the fleet, safely | ✅ |
-| 4 | Generated client + `devicekit` CLI (token auth, completions) | external + human consumers | 🚧 |
+| 4 | Generated client + `devicekit` CLI (token auth, completions) | external + human consumers | ✅ |
 
 **Deviation notes (as shipped):**
 - Phase 1: scope enforcement is central (the auth gate maps path→scope for `dk_` keys, reads
@@ -89,7 +89,26 @@ tools already annotated read vs write — the MCP tool gate reuses that annotati
 - Phase 3: writes flow through `POST /api/v1/actions/invoke`, which wraps the plan-13 gate
   (`source="api"`); `provision_app` was dropped — plan 18 shipped provisioning as an
   extension-SDK concern with no core endpoint to wrap. Autonomous auto-approval is the
-  exact-match `mcp:autonomous` key scope (wildcards deliberately don't grant it).
+  exact-match `mcp:autonomous` key scope (wildcards deliberately don't grant it). Hardening
+  found during review: `/actions/invoke` folds the action class onto the plan-20 role matrix
+  for session users (a viewer can't invoke writes the direct routes deny), and a scoped `dk_`
+  key can never approve a gated action (`POST /devices/<id>/agent/confirm` 403s scoped keys) —
+  no self-approval side door.
+- Phase 4: the CLI lives in a standalone top-level `cli/` package (`pip install -e cli/`,
+  console script `devicekit`); `generate_client.py` walks the committed
+  `cli/openapi.snapshot.json` (or `--url` a live backend) to emit `devicekit_cli/client.py`
+  (259 methods, byte-deterministic). Two backend bugs surfaced by the CLI E2E and fixed here
+  since they degrade this plan's own headline tools: `_get_all_devices()` in `fleet_query.py`
+  didn't stamp `online`/`model`/metrics onto ADB rows (so the `query_fleet` MCP tool returned
+  0 matches for `online = true`) — now mirrors the `/devices` enrichment; and the dev
+  `devicekit.db` was missing `automations.workspace_id` (plan-20 drift), reconciled additively.
+
+**End-to-end proof (live, both real phones):** an MCP stdio client with a scoped `dk_` key
+enumerated the fleet (2 devices), ran `query_fleet("online = true")` (2/2 after the fix), read
+`get_device_state` (Samsung, real battery/CPU), and issued `send_command` tap on the Samsung —
+which raised a plan-13 pending action, rejected the key's own self-approval attempt, took a
+human approval, and executed on-device (`Tapped at (360, 800)`). Backend suite 408 passed;
+frontend build clean.
 
 Phase 1 needs plan 20's keys. Phases 2→3→4 are sequential-ish (3 curates over the surface 1
 exposes; 4 rides 2's spec).
