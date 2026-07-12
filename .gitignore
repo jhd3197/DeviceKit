@@ -241,3 +241,4 @@ docs/plans/prompt.md
 # Generated PR descriptions (create-pr skill output — local scratch)
 .pr/
 image.png
+*.png

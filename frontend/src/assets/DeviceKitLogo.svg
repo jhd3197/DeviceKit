@@ -6,16 +6,11 @@
       <stop offset="100%" stop-color="#4f46e5"/>
     </linearGradient>
   </defs>
-  <!-- White tile behind the mark (matches the outer squircle silhouette) -->
-  <rect x="150" y="150" width="1748" height="1748" rx="150" fill="white"/>
-  <!-- Outer squircle ring: outer rounded square minus inner squircle (evenodd donut) -->
-  <path fill="url(#brandGradient)" fill-rule="evenodd" d="M378,70 H1670 A308,308 0 0 1 1978,378 V1670 A308,308 0 0 1 1670,1978 H378 A308,308 0 0 1 70,1670 V378 A308,308 0 0 1 378,70 Z M450,220 A230,230 0 0 0 220,450 V1598 A230,230 0 0 0 450,1828 H1598 A230,230 0 0 0 1828,1598 V450 A230,230 0 0 0 1598,220 Z"/>
-  <!-- Phone body with screen cutout (evenodd hole reveals the white tile as the screen) -->
-  <path fill="url(#brandGradient)" fill-rule="evenodd" d="M804,434 H1244 A100,100 0 0 1 1344,534 V1514 A100,100 0 0 1 1244,1614 H804 A100,100 0 0 1 704,1514 V534 A100,100 0 0 1 804,434 Z M810,560 A30,30 0 0 0 780,590 V1390 A30,30 0 0 0 810,1420 H1240 A30,30 0 0 0 1270,1390 V590 A30,30 0 0 0 1240,560 Z"/>
-  <!-- Speaker slot on the top bezel -->
-  <rect x="944" y="481" width="160" height="32" rx="16" fill="white"/>
-  <!-- Home indicator on the bottom bezel -->
-  <rect x="924" y="1501" width="200" height="32" rx="16" fill="white"/>
+  <!-- Solid accent squircle badge -->
+  <path fill="url(#brandGradient)" d="M598,128 H1450 A470,470 0 0 1 1920,598 V1450 A470,470 0 0 1 1450,1920 H598 A470,470 0 0 1 128,1450 V598 A470,470 0 0 1 598,128 Z"/>
+  <!-- White phone glyph: solid body with screen, speaker slot, and home indicator cut out
+       (evenodd) so the accent badge shows through as the screen and bezel details. -->
+  <path fill="white" fill-rule="evenodd" d="M870,520 H1178 A110,110 0 0 1 1288,630 V1418 A110,110 0 0 1 1178,1528 H870 A110,110 0 0 1 760,1418 V630 A110,110 0 0 1 870,520 Z M876,680 H1172 A44,44 0 0 1 1216,724 V1324 A44,44 0 0 1 1172,1368 H876 A44,44 0 0 1 832,1324 V724 A44,44 0 0 1 876,680 Z M978,584 H1070 A14,14 0 0 1 1084,598 A14,14 0 0 1 1070,612 H978 A14,14 0 0 1 964,598 A14,14 0 0 1 978,584 Z M958,1436 H1090 A14,14 0 0 1 1104,1450 A14,14 0 0 1 1090,1464 H958 A14,14 0 0 1 944,1450 A14,14 0 0 1 958,1436 Z"/>
   <!-- Green status LED (family continuity with the Android accent) -->
-  <circle cx="1210" cy="632" r="28" fill="#3ddc97"/>
+  <circle cx="1150" cy="740" r="30" fill="#3ddc97"/>
 </svg>

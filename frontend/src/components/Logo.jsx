@@ -1,6 +1,8 @@
-// DeviceKit brand mark — the purple phone-in-squircle (plan 27). This is the JSX twin of
-// assets/DeviceKitLogo.svg: identical geometry, but the gradient stops read the accent CSS
-// ramp (plan 12) so the mark re-tints live when the user changes their accent color.
+// DeviceKit brand mark — a white phone glyph on a solid accent-filled squircle badge, mirroring
+// the ServerKit lockup (plan 27, retinted plan 28). The mark used to sit on a white plate with a
+// purple phone, which read as a sticker on the dark sidebar and vanished on a purple background.
+// Now the badge itself carries the accent gradient (so it still re-tints live with the user's
+// accent, plan 12) and the phone is a flat white glyph cut out of it — legible on any background.
 //
 // Two gotchas baked in here:
 //  1. Unique gradient id per instance via useId(). Multiple logos render at once (sidebar +
@@ -51,20 +53,20 @@ export default function Logo({ size = 64, className = '' }) {
           <stop offset="100%" stopColor="rgb(var(--accent-dim, 79 70 229))" />
         </linearGradient>
       </defs>
-      <rect x="150" y="150" width="1748" height="1748" rx="150" fill="white" />
+      {/* Solid accent squircle badge (fills with the live accent gradient) */}
       <path
         fill={fill}
-        fillRule="evenodd"
-        d="M378,70 H1670 A308,308 0 0 1 1978,378 V1670 A308,308 0 0 1 1670,1978 H378 A308,308 0 0 1 70,1670 V378 A308,308 0 0 1 378,70 Z M450,220 A230,230 0 0 0 220,450 V1598 A230,230 0 0 0 450,1828 H1598 A230,230 0 0 0 1828,1598 V450 A230,230 0 0 0 1598,220 Z"
+        d="M598,128 H1450 A470,470 0 0 1 1920,598 V1450 A470,470 0 0 1 1450,1920 H598 A470,470 0 0 1 128,1450 V598 A470,470 0 0 1 598,128 Z"
       />
+      {/* White phone glyph: solid body with screen, speaker slot, and home indicator cut out
+          (evenodd) so the accent badge shows through as the screen and bezel details. */}
       <path
-        fill={fill}
+        fill="white"
         fillRule="evenodd"
-        d="M804,434 H1244 A100,100 0 0 1 1344,534 V1514 A100,100 0 0 1 1244,1614 H804 A100,100 0 0 1 704,1514 V534 A100,100 0 0 1 804,434 Z M810,560 A30,30 0 0 0 780,590 V1390 A30,30 0 0 0 810,1420 H1240 A30,30 0 0 0 1270,1390 V590 A30,30 0 0 0 1240,560 Z"
+        d="M870,520 H1178 A110,110 0 0 1 1288,630 V1418 A110,110 0 0 1 1178,1528 H870 A110,110 0 0 1 760,1418 V630 A110,110 0 0 1 870,520 Z M876,680 H1172 A44,44 0 0 1 1216,724 V1324 A44,44 0 0 1 1172,1368 H876 A44,44 0 0 1 832,1324 V724 A44,44 0 0 1 876,680 Z M978,584 H1070 A14,14 0 0 1 1084,598 A14,14 0 0 1 1070,612 H978 A14,14 0 0 1 964,598 A14,14 0 0 1 978,584 Z M958,1436 H1090 A14,14 0 0 1 1104,1450 A14,14 0 0 1 1090,1464 H958 A14,14 0 0 1 944,1450 A14,14 0 0 1 958,1436 Z"
       />
-      <rect x="944" y="481" width="160" height="32" rx="16" fill="white" />
-      <rect x="924" y="1501" width="200" height="32" rx="16" fill="white" />
-      <circle cx="1210" cy="632" r="28" fill="#3ddc97" />
+      {/* Green status LED (family continuity with the Android accent) */}
+      <circle cx="1150" cy="740" r="30" fill="#3ddc97" />
     </svg>
   )
 }
