@@ -12,7 +12,7 @@ export default function AuthGate({ children }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-zinc-500">
+      <div className="min-h-screen flex items-center justify-center bg-body text-zinc-500">
         <Loader2 className="w-5 h-5 animate-spin" />
       </div>
     )

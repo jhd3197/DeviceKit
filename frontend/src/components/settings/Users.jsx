@@ -34,7 +34,7 @@ const FALLBACK_ROLES = ['admin', 'operator', 'viewer']
 const ROLE_BADGE = {
   admin: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   operator: 'bg-zinc-800 text-zinc-300 border-alt',
-  viewer: 'bg-zinc-900 text-zinc-500 border-alt',
+  viewer: 'bg-hover text-zinc-500 border-alt',
 }
 
 const INVITE_STATUS = {
@@ -81,7 +81,7 @@ function CopyButton({ text }) {
       type="button"
       onClick={copy}
       title="Copy"
-      className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md shrink-0"
+      className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md shrink-0"
     >
       {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
     </button>
@@ -111,7 +111,7 @@ function PermMatrix({ features, initial, busy, onSave }) {
     })
 
   return (
-    <div className="border border-main rounded-md bg-black p-3">
+    <div className="border border-main rounded-md bg-body p-3">
       <table className="w-full text-xs">
         <thead>
           <tr className="text-zinc-500">
@@ -157,7 +157,7 @@ function PermMatrix({ features, initial, busy, onSave }) {
           <button
             type="button"
             onClick={() => setMatrix(build())}
-            className="text-xs text-zinc-400 hover:text-white px-2 py-1.5"
+            className="text-xs text-zinc-400 hover:text-strong px-2 py-1.5"
           >
             Discard
           </button>
@@ -203,7 +203,7 @@ function UserRow({ user, roleOptions, features, onChanged, onError }) {
           type="button"
           onClick={() => setOpen((o) => !o)}
           title={open ? 'Collapse' : 'Edit user'}
-          className="text-zinc-500 hover:text-white shrink-0"
+          className="text-zinc-500 hover:text-strong shrink-0"
         >
           {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
@@ -257,7 +257,7 @@ function UserRow({ user, roleOptions, features, onChanged, onError }) {
               type="button"
               onClick={resetPassword}
               disabled={busy}
-              className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:text-white flex items-center gap-1.5 disabled:opacity-40"
+              className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:text-strong flex items-center gap-1.5 disabled:opacity-40"
             >
               <KeyRound className="w-4 h-4" /> Reset password
             </button>
@@ -276,7 +276,7 @@ function UserRow({ user, roleOptions, features, onChanged, onError }) {
               <button
                 type="button"
                 onClick={() => setShowPerms((s) => !s)}
-                className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 mb-2"
+                className="text-xs text-zinc-400 hover:text-strong flex items-center gap-1 mb-2"
               >
                 {showPerms ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 Permission overrides
@@ -481,7 +481,7 @@ export default function Users({ settings, save, register }) {
               setShowAdd((s) => !s)
               setUserErr(null)
             }}
-            className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:text-white flex items-center gap-1.5"
+            className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:text-strong flex items-center gap-1.5"
           >
             <UserPlus className="w-4 h-4" /> Add user
           </button>
@@ -490,7 +490,7 @@ export default function Users({ settings, save, register }) {
         {userErr && <div className="text-xs text-red-400 mb-2">{userErr}</div>}
 
         {showAdd && (
-          <div className="border border-main rounded-md bg-zinc-950 p-4 mb-3 space-y-4">
+          <div className="border border-main rounded-md bg-card p-4 mb-3 space-y-4">
             <Field label="Username" htmlFor="nu-username">
               <TextInput
                 id="nu-username"
@@ -538,7 +538,7 @@ export default function Users({ settings, save, register }) {
               <button
                 type="button"
                 onClick={() => setShowAdd(false)}
-                className="text-sm text-zinc-400 hover:text-white px-2 py-2"
+                className="text-sm text-zinc-400 hover:text-strong px-2 py-2"
               >
                 Cancel
               </button>
@@ -546,7 +546,7 @@ export default function Users({ settings, save, register }) {
           </div>
         )}
 
-        <div className="border border-main rounded-md bg-zinc-950 divide-y divide-zinc-800">
+        <div className="border border-main rounded-md bg-card divide-y divide-zinc-800">
           {users.map((u) => (
             <UserRow
               key={u.id}
@@ -576,7 +576,7 @@ export default function Users({ settings, save, register }) {
               setShowInviteForm((s) => !s)
               setInviteErr(null)
             }}
-            className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:text-white flex items-center gap-1.5"
+            className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:text-strong flex items-center gap-1.5"
           >
             <UserPlus className="w-4 h-4" /> Create invite
           </button>
@@ -590,7 +590,7 @@ export default function Users({ settings, save, register }) {
               Invite created — copy this link now, it will not be shown again.
             </p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 truncate font-mono text-xs text-zinc-200 bg-black border border-alt rounded-md px-2 py-2">
+              <code className="flex-1 truncate font-mono text-xs text-zinc-200 bg-body border border-alt rounded-md px-2 py-2">
                 {inviteLink}
               </code>
               <CopyButton text={inviteLink} />
@@ -599,7 +599,7 @@ export default function Users({ settings, save, register }) {
         )}
 
         {showInviteForm && (
-          <div className="border border-main rounded-md bg-zinc-950 p-4 mb-3 space-y-4">
+          <div className="border border-main rounded-md bg-card p-4 mb-3 space-y-4">
             <Field label="Role" help="Granted to whoever accepts the invite." htmlFor="inv-role">
               <div className="w-full">
                 <Select
@@ -639,7 +639,7 @@ export default function Users({ settings, save, register }) {
               <button
                 type="button"
                 onClick={() => setShowInviteForm(false)}
-                className="text-sm text-zinc-400 hover:text-white px-2 py-2"
+                className="text-sm text-zinc-400 hover:text-strong px-2 py-2"
               >
                 Cancel
               </button>
@@ -647,7 +647,7 @@ export default function Users({ settings, save, register }) {
           </div>
         )}
 
-        <div className="border border-main rounded-md bg-zinc-950 divide-y divide-zinc-800">
+        <div className="border border-main rounded-md bg-card divide-y divide-zinc-800">
           {invites.map((inv) => (
             <InviteRow key={inv.id} invite={inv} onChanged={refreshInvites} onError={setInviteErr} />
           ))}

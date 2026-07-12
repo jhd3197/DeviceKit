@@ -84,7 +84,7 @@ export function WebhookNotifyPage() {
             onChange={(e) => setMessage(e.target.value)}
             rows={3}
             placeholder="Fleet alert: {message}"
-            className="w-full bg-black border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt resize-none"
+            className="w-full bg-body border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt resize-none"
           />
           <div className="flex items-center gap-3">
             <button

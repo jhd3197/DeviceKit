@@ -185,7 +185,7 @@ export default function Workspaces({ settings, save, register }) {
 
       {/* Active workspace banner */}
       <div
-        className="flex items-center justify-between rounded-md border border-main bg-zinc-950 px-4 py-3"
+        className="flex items-center justify-between rounded-md border border-main bg-card px-4 py-3"
         {...reg('active-workspace')}
       >
         <div className="flex items-center gap-2 text-sm">
@@ -203,7 +203,7 @@ export default function Workspaces({ settings, save, register }) {
           <button
             type="button"
             onClick={clearActive}
-            className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-white"
+            className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-strong"
           >
             Clear
           </button>
@@ -223,7 +223,7 @@ export default function Workspaces({ settings, save, register }) {
             <div className="px-4 py-6 text-sm text-zinc-500">No workspaces yet. Create one below.</div>
           )}
           {workspaces.map((w) => (
-            <div key={w.id} className={w.id === selectedId ? 'bg-zinc-900/60' : 'bg-zinc-950'}>
+            <div key={w.id} className={w.id === selectedId ? 'bg-zinc-900/60' : 'bg-card'}>
               <div
                 role="button"
                 tabIndex={0}
@@ -254,7 +254,7 @@ export default function Workspaces({ settings, save, register }) {
                       e.stopPropagation()
                       makeActive(w.id)
                     }}
-                    className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-white shrink-0"
+                    className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-strong shrink-0"
                   >
                     Set active
                   </button>
@@ -293,7 +293,7 @@ export default function Workspaces({ settings, save, register }) {
                       {members.map((m) => (
                         <div
                           key={m.id}
-                          className="flex items-center gap-3 rounded-md border border-alt bg-black px-3 py-2"
+                          className="flex items-center gap-3 rounded-md border border-alt bg-body px-3 py-2"
                         >
                           <div className="flex-1 min-w-0">
                             <div className="text-sm text-zinc-200 truncate">
@@ -343,7 +343,7 @@ export default function Workspaces({ settings, save, register }) {
                           type="button"
                           disabled={!addUserId || adding}
                           onClick={addMember}
-                          className="flex items-center gap-1.5 border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-200 hover:text-white disabled:opacity-40"
+                          className="flex items-center gap-1.5 border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-200 hover:text-strong disabled:opacity-40"
                         >
                           {adding ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -372,7 +372,7 @@ export default function Workspaces({ settings, save, register }) {
             if (e.key === 'Enter') create()
           }}
           placeholder="New workspace name"
-          className="flex-1 bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+          className="flex-1 bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
         />
         <button
           type="button"

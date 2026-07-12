@@ -77,7 +77,7 @@ export default function FleetMonitor() {
         </div>
         <button
           onClick={load}
-          className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white border border-main px-3 py-1.5 rounded transition-colors"
+          className="flex items-center gap-2 text-xs text-zinc-400 hover:text-strong border border-main px-3 py-1.5 rounded transition-colors"
         >
           <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
@@ -236,14 +236,14 @@ function AlertRulesPanel({ metrics }) {
         <select
           value={form.metric}
           onChange={(e) => setForm({ ...form, metric: e.target.value })}
-          className="bg-black border border-main px-2 py-1.5 text-xs rounded focus:outline-none"
+          className="bg-body border border-main px-2 py-1.5 text-xs rounded focus:outline-none"
         >
           {metrics.map((m) => <option key={m} value={m}>{METRIC_META[m]?.label || m}</option>)}
         </select>
         <select
           value={form.op}
           onChange={(e) => setForm({ ...form, op: e.target.value })}
-          className="bg-black border border-main px-2 py-1.5 text-xs rounded focus:outline-none mono"
+          className="bg-body border border-main px-2 py-1.5 text-xs rounded focus:outline-none mono"
         >
           {ops.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -251,13 +251,13 @@ function AlertRulesPanel({ metrics }) {
           type="number"
           value={form.value}
           onChange={(e) => setForm({ ...form, value: e.target.value })}
-          className="bg-black border border-main px-2 py-1.5 text-xs rounded focus:outline-none w-24 mono"
+          className="bg-body border border-main px-2 py-1.5 text-xs rounded focus:outline-none w-24 mono"
           placeholder="value"
         />
         <input
           value={form.event_key}
           onChange={(e) => setForm({ ...form, event_key: e.target.value })}
-          className="bg-black border border-main px-2 py-1.5 text-xs rounded focus:outline-none w-56 mono"
+          className="bg-body border border-main px-2 py-1.5 text-xs rounded focus:outline-none w-56 mono"
           placeholder="event key (e.g. device.battery.low)"
         />
         <button

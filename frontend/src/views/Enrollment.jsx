@@ -148,7 +148,7 @@ export default function Enrollment() {
               onChange={(e) => setManualCode(e.target.value.toUpperCase())}
               placeholder="ABC123"
               maxLength={6}
-              className="w-40 bg-black border border-main rounded px-3 py-2 text-lg mono tracking-widest text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50"
+              className="w-40 bg-body border border-main rounded px-3 py-2 text-lg mono tracking-widest text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <div>
@@ -160,7 +160,7 @@ export default function Enrollment() {
               value={manualPass}
               onChange={(e) => setManualPass(e.target.value)}
               placeholder="••••••"
-              className="w-48 bg-black border border-main rounded px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50"
+              className="w-48 bg-body border border-main rounded px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
           <button
@@ -190,11 +190,11 @@ export default function Enrollment() {
           Pending agents{pending.length > 0 ? ` (${pending.length})` : ''}
         </p>
         {loading ? (
-          <div className="bg-zinc-900 border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
+          <div className="bg-hover border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
             <Loader2 className="w-4 h-4 animate-spin inline" /> Loading…
           </div>
         ) : pending.length === 0 ? (
-          <div className="bg-zinc-900 border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
+          <div className="bg-hover border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
             <ShieldCheck className="w-6 h-6 mx-auto mb-2 opacity-40" />
             No agents waiting to pair
           </div>
@@ -205,7 +205,7 @@ export default function Enrollment() {
               return (
                 <div
                   key={p.id}
-                  className="bg-zinc-900 border border-main rounded-lg p-4 space-y-3"
+                  className="bg-hover border border-main rounded-lg p-4 space-y-3"
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded bg-zinc-800 border border-main flex items-center justify-center shrink-0">

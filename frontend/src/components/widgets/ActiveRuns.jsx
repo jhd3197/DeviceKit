@@ -60,7 +60,7 @@ export default function ActiveRuns() {
         <div className="flex items-center gap-2">
           <button
             onClick={load}
-            className="text-zinc-500 hover:text-white transition-colors"
+            className="text-zinc-500 hover:text-strong transition-colors"
             title="Refresh now"
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -68,7 +68,7 @@ export default function ActiveRuns() {
           <select
             value={refreshInterval}
             onChange={(e) => onIntervalChange(parseInt(e.target.value, 10))}
-            className="bg-black border border-main text-[10px] mono rounded px-1.5 py-1 focus:outline-none focus:border-zinc-500"
+            className="bg-body border border-main text-[10px] mono rounded px-1.5 py-1 focus:outline-none focus:border-zinc-500"
             title="Auto-refresh interval"
           >
             {REFRESH_OPTIONS.map(o => (

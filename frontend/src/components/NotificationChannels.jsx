@@ -108,7 +108,7 @@ function ChannelCard({ data, onChanged }) {
             type="checkbox"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
-            className="rounded border-zinc-600 bg-black text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+            className="rounded border-zinc-600 bg-body text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
           />
           <span className="text-xs text-zinc-400">Enabled</span>
         </label>
@@ -124,7 +124,7 @@ function ChannelCard({ data, onChanged }) {
               <select
                 value={config[f.key] ?? f.options[0]}
                 onChange={(e) => setField(f.key, e.target.value)}
-                className="w-full bg-black border border-main rounded px-2 py-1.5 text-xs text-zinc-200 focus:border-alt outline-none"
+                className="w-full bg-body border border-main rounded px-2 py-1.5 text-xs text-zinc-200 focus:border-alt outline-none"
               >
                 {f.options.map((o) => (
                   <option key={o} value={o}>{o}</option>
@@ -136,7 +136,7 @@ function ChannelCard({ data, onChanged }) {
                 value={config[f.key] ?? ''}
                 placeholder={f.placeholder || ''}
                 onChange={(e) => setField(f.key, e.target.value)}
-                className="w-full bg-black border border-main rounded px-2 py-1.5 text-xs text-zinc-200 mono focus:border-alt outline-none"
+                className="w-full bg-body border border-main rounded px-2 py-1.5 text-xs text-zinc-200 mono focus:border-alt outline-none"
               />
             )}
           </div>
@@ -155,7 +155,7 @@ function ChannelCard({ data, onChanged }) {
           onClick={test}
           disabled={busy || !enabled}
           title={enabled ? 'Send a test notification' : 'Enable and save first'}
-          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-main text-zinc-300 hover:text-white disabled:opacity-40"
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-main text-zinc-300 hover:text-strong disabled:opacity-40"
         >
           <Send className="w-3.5 h-3.5" /> Test
         </button>

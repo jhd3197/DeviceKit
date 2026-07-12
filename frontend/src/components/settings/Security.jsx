@@ -106,7 +106,7 @@ export default function Security({ settings, save, register }) {
       description="Your own account security: two-factor authentication and session sign-out."
     >
       {/* Current account */}
-      <div className="rounded-md border border-main bg-zinc-950 px-4 py-3">
+      <div className="rounded-md border border-main bg-card px-4 py-3">
         <div className="text-sm text-zinc-200 font-medium">
           {principal?.username || 'Not signed in'}
         </div>
@@ -115,7 +115,7 @@ export default function Security({ settings, save, register }) {
 
       {/* Require-2FA policy warning */}
       {twofa?.must_enroll && (
-        <div className="rounded-md border border-main bg-zinc-950 px-4 py-3 text-sm text-amber-400">
+        <div className="rounded-md border border-main bg-card px-4 py-3 text-sm text-amber-400">
           Your account must enable two-factor authentication to keep full access.
         </div>
       )}
@@ -150,7 +150,7 @@ export default function Security({ settings, save, register }) {
             Disable 2FA
           </button>
         ) : setup ? (
-          <div className="rounded-md border border-main bg-zinc-950 p-4 space-y-4">
+          <div className="rounded-md border border-main bg-card p-4 space-y-4">
             <p className="text-xs text-zinc-500 leading-relaxed">
               Enter this secret in your authenticator app (or open the provisioning link on a
               device with one), then confirm with the 6-digit code it generates.
@@ -162,14 +162,14 @@ export default function Security({ settings, save, register }) {
                   type="text"
                   readOnly
                   value={setup.secret || ''}
-                  className="w-full bg-black border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none"
+                  className="w-full bg-body border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 font-mono focus:outline-none"
                 />
               </div>
               <button
                 type="button"
                 onClick={copySecret}
                 title="Copy secret"
-                className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md"
+                className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
               </button>
@@ -196,7 +196,7 @@ export default function Security({ settings, save, register }) {
                   if (e.key === 'Enter') confirm()
                 }}
                 placeholder="6-digit code"
-                className="w-36 bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+                className="w-36 bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
               />
               <button
                 type="button"
@@ -213,7 +213,7 @@ export default function Security({ settings, save, register }) {
                   setSetup(null)
                   setCode('')
                 }}
-                className="text-sm text-zinc-400 hover:text-white px-2 py-2"
+                className="text-sm text-zinc-400 hover:text-strong px-2 py-2"
               >
                 Cancel
               </button>
@@ -233,7 +233,7 @@ export default function Security({ settings, save, register }) {
 
         {/* One-time backup codes */}
         {backupCodes && (
-          <div className="rounded-md border border-alt bg-zinc-900 p-4 space-y-3">
+          <div className="rounded-md border border-alt bg-hover p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium text-amber-400">
               <ShieldCheck className="w-4 h-4" /> Save these backup codes — they are shown only once.
             </div>
@@ -244,7 +244,7 @@ export default function Security({ settings, save, register }) {
               {backupCodes.map((c) => (
                 <div
                   key={c}
-                  className="bg-black border border-alt rounded-md px-3 py-2 text-sm font-mono text-zinc-200 text-center"
+                  className="bg-body border border-alt rounded-md px-3 py-2 text-sm font-mono text-zinc-200 text-center"
                 >
                   {c}
                 </div>
@@ -253,7 +253,7 @@ export default function Security({ settings, save, register }) {
             <button
               type="button"
               onClick={() => setBackupCodes(null)}
-              className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-white"
+              className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-strong"
             >
               I saved them
             </button>
@@ -267,7 +267,7 @@ export default function Security({ settings, save, register }) {
           type="button"
           onClick={signOut}
           disabled={signingOut}
-          className="flex items-center gap-1.5 border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-white disabled:opacity-40"
+          className="flex items-center gap-1.5 border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-strong disabled:opacity-40"
         >
           {signingOut ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
           Sign out

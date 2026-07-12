@@ -10,6 +10,78 @@
 export const DEFAULT_ACCENT = '#6d7cff' // periwinkle — DeviceKit's brand purple (plan 27)
 const LS_KEY = 'devicekit_accent'
 
+// ---------------------------------------------------------------------------
+// Theme mode (plan 28 part 2) — dark / light / system.
+//
+// The mode is written to <html data-theme="..."> and the light values live in a
+// [data-theme="light"] token sheet in index.css; `system` resolves via a
+// prefers-color-scheme media block (pure CSS — no JS needed to recolor). Mode is
+// mirrored to localStorage so first paint is correct on reload (before /settings loads),
+// exactly like the accent flow above. The Appearance pane reconciles the server's saved
+// `appearance.theme` over localStorage on load, so the choice follows the user cross-browser.
+// ---------------------------------------------------------------------------
+
+export const THEME_MODES = ['dark', 'light', 'system']
+const LS_THEME_KEY = 'devicekit_theme'
+const THEME_EVENT = 'devicekit-theme-change'
+
+export function getStoredThemeMode() {
+  const m = localStorage.getItem(LS_THEME_KEY)
+  return THEME_MODES.includes(m) ? m : 'dark'
+}
+
+// Resolve a mode to the concrete look actually rendered ('dark' | 'light'); `system` reads
+// the OS preference. Used by the palette toggle and any component that shows the live look.
+export function resolveThemeMode(mode) {
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return mode === 'light' ? 'light' : 'dark'
+}
+
+// Write the mode onto <html>. [data-theme="light"] / the system media block in index.css
+// do the actual recoloring; returns the applied mode.
+export function applyThemeMode(mode) {
+  const m = THEME_MODES.includes(mode) ? mode : 'dark'
+  document.documentElement.setAttribute('data-theme', m)
+  return m
+}
+
+// Persist + apply. Storing first keeps the reload paint correct. Fires a window event so
+// open components (the Appearance picker, palette) can sync without a shared context.
+export function setThemeMode(mode) {
+  const m = applyThemeMode(mode)
+  localStorage.setItem(LS_THEME_KEY, m)
+  window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: { mode: m } }))
+  return m
+}
+
+// Flip between the two concrete looks (used by the command-palette action). A `system`
+// user resolves to their current OS look first, then toggles to the opposite concrete mode.
+export function toggleTheme() {
+  const current = resolveThemeMode(getStoredThemeMode())
+  return setThemeMode(current === 'dark' ? 'light' : 'dark')
+}
+
+// Subscribe to mode changes (own setThemeMode calls + live OS changes while in `system`).
+// Returns an unsubscribe fn. Lets a component re-render on theme change with no context.
+export function subscribeTheme(cb) {
+  const onEvent = () => cb(getStoredThemeMode())
+  window.addEventListener(THEME_EVENT, onEvent)
+  const mq = window.matchMedia('(prefers-color-scheme: dark)')
+  const onMedia = () => { if (getStoredThemeMode() === 'system') cb('system') }
+  mq.addEventListener('change', onMedia)
+  return () => {
+    window.removeEventListener(THEME_EVENT, onEvent)
+    mq.removeEventListener('change', onMedia)
+  }
+}
+
+// Apply the locally-stored mode as early as possible (before first paint), next to bootAccent.
+export function bootTheme() {
+  applyThemeMode(getStoredThemeMode())
+}
+
 // A few presets for the picker; users can also enter any hex. Periwinkle (the brand default)
 // and Indigo lead — the same two-purples split the logo uses (#6d7cff live / #6366f1 deep).
 // Emerald stays available for users who prefer the historical accent; semantic emerald

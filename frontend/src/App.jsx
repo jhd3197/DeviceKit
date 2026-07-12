@@ -148,7 +148,7 @@ function Sidebar() {
   const sections = mergeNav(envelope.nav)
 
   return (
-    <aside className="w-64 border-r border-main flex flex-col bg-black shrink-0">
+    <aside className="w-64 border-r border-main flex flex-col bg-body shrink-0">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3 border-b border-main">
         <Logo size={32} className="rounded shrink-0" />
@@ -173,8 +173,8 @@ function Sidebar() {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                     isActive
-                      ? 'bg-zinc-900 text-white'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                      ? 'bg-hover text-strong'
+                      : 'text-zinc-400 hover:text-strong hover:bg-hover'
                   }`
                 }
               >

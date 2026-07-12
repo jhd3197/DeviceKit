@@ -144,16 +144,16 @@ export default function Backups() {
       )}
 
       {loading ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
           <Loader2 className="w-4 h-4 animate-spin inline" /> Loading…
         </div>
       ) : backups.length === 0 ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
           <DatabaseBackup className="w-6 h-6 mx-auto mb-2 opacity-40" />
           No backups yet — create one to start
         </div>
       ) : (
-        <div className="bg-zinc-900 border border-main rounded-lg overflow-hidden">
+        <div className="bg-hover border border-main rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>

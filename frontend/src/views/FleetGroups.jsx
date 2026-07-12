@@ -151,7 +151,7 @@ export default function FleetGroups() {
   return (
     <>
       {/* Header */}
-      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-body shrink-0">
         <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">
           Device Groups
         </h2>
@@ -170,7 +170,7 @@ export default function FleetGroups() {
           placeholder="Filter by name or tag..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full max-w-md bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+          className="w-full max-w-md bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
         />
 
         {/* Groups table */}
@@ -237,7 +237,7 @@ export default function FleetGroups() {
                       <div className="flex justify-end gap-1">
                         <button
                           onClick={() => openEdit(g)}
-                          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-strong transition-colors"
                           title="Edit"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -276,7 +276,7 @@ export default function FleetGroups() {
               </h3>
               <button
                 onClick={() => setEditDialog(null)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-500 hover:text-strong transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -290,7 +290,7 @@ export default function FleetGroups() {
                 <input
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none"
+                  className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none"
                   placeholder="Group name..."
                 />
               </div>
@@ -301,7 +301,7 @@ export default function FleetGroups() {
                 <textarea
                   value={formDesc}
                   onChange={(e) => setFormDesc(e.target.value)}
-                  className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none h-16"
+                  className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none resize-none h-16"
                   placeholder="Optional description..."
                 />
               </div>
@@ -329,7 +329,7 @@ export default function FleetGroups() {
                 <input
                   value={formTags}
                   onChange={(e) => setFormTags(e.target.value)}
-                  className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none"
+                  className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none"
                   placeholder="production, qa, staging..."
                 />
               </div>
@@ -337,14 +337,14 @@ export default function FleetGroups() {
                 <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
                   Devices
                 </label>
-                <div className="max-h-40 overflow-y-auto bg-black border border-main rounded p-2 space-y-1">
+                <div className="max-h-40 overflow-y-auto bg-body border border-main rounded p-2 space-y-1">
                   {devices.length === 0 ? (
                     <p className="text-[10px] text-zinc-600 p-1">No devices available</p>
                   ) : (
                     devices.map((d) => (
                       <label
                         key={d.device_id}
-                        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-900 cursor-pointer text-xs"
+                        className="flex items-center gap-2 px-2 py-1 rounded hover:bg-hover cursor-pointer text-xs"
                       >
                         <input
                           type="checkbox"
@@ -368,7 +368,7 @@ export default function FleetGroups() {
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={() => setEditDialog(null)}
-                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-strong transition-colors"
               >
                 Cancel
               </button>
@@ -395,7 +395,7 @@ export default function FleetGroups() {
               </h3>
               <button
                 onClick={() => setBulkDialog(null)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-500 hover:text-strong transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -413,7 +413,7 @@ export default function FleetGroups() {
                 <select
                   value={bulkAction}
                   onChange={(e) => setBulkAction(e.target.value)}
-                  className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none"
+                  className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none"
                 >
                   <option value="command">Run Command</option>
                   <option value="install">Install Agent</option>
@@ -429,7 +429,7 @@ export default function FleetGroups() {
                   <input
                     value={bulkCommand}
                     onChange={(e) => setBulkCommand(e.target.value)}
-                    className="w-full bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none mono"
+                    className="w-full bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none mono"
                     placeholder="getprop ro.product.model"
                   />
                 </div>
@@ -449,7 +449,7 @@ export default function FleetGroups() {
 
               {/* Results table */}
               {bulkResults && (
-                <div className="bg-black border border-main rounded overflow-hidden">
+                <div className="bg-body border border-main rounded overflow-hidden">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-main text-[10px] text-zinc-500 uppercase">
@@ -483,7 +483,7 @@ export default function FleetGroups() {
             <div className="flex justify-end mt-4">
               <button
                 onClick={() => setBulkDialog(null)}
-                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-strong transition-colors"
               >
                 Close
               </button>

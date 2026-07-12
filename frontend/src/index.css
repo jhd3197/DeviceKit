@@ -29,6 +29,7 @@
   --border-main: 26 26 26; /* #1a1a1a */
   --border-alt: 46 46 46; /* #2e2e2e */
   /* Text */
+  --text-strong: 255 255 255; /* #ffffff — pure-white emphasis (active tab, key headings) */
   --text-primary: 237 237 237; /* #ededed */
   --text-secondary: 161 161 170; /* #a1a1aa — zinc-400 */
   /* Semantic (theme-independent by default; light may darken for contrast) */
@@ -98,7 +99,57 @@
   .tab-active {
     /* Active-tab indicator = brand accent (not a success state), so it tracks the ramp. */
     border-bottom: 2px solid rgb(var(--accent));
-    color: #fff;
+    color: rgb(var(--text-strong));
+  }
+}
+
+/* Light theme (plan 28 part 2). Overrides only the surface/border/text/semantic tokens —
+   ported from ServerKit's #f6f7fb-family sheet, adapted to DeviceKit's tokens. The accent
+   ramp is theme-independent (JS-injected, plan 12), so it isn't redefined here. Status
+   colors darken to their -600 shades for legible contrast on white cards. */
+:root[data-theme='light'] {
+  /* Surfaces */
+  --bg-body: 246 247 251; /* #f6f7fb */
+  --bg-card: 255 255 255; /* #ffffff */
+  --bg-card-alt: 241 243 249; /* #f1f3f9 — subtle gray beneath white cards */
+  --bg-hover: 238 241 247; /* #eef1f7 */
+  --bg-terminal: 13 16 23; /* #0d1017 — the console stays dark in light mode (VS Code-style) */
+  /* Borders */
+  --border-main: 226 230 239; /* #e2e6ef */
+  --border-alt: 205 211 224; /* #cdd3e0 */
+  /* Text */
+  --text-strong: 22 26 35; /* #161a23 */
+  --text-primary: 22 26 35; /* #161a23 */
+  --text-secondary: 81 90 107; /* #515a6b */
+  /* Semantic — darkened to -600 shades so they read on white surfaces */
+  --ok: 5 150 105; /* emerald-600 #059669 */
+  --warn: 217 119 6; /* amber-600 #d97706 */
+  --err: 220 38 38; /* red-600 #dc2626 */
+  --info: 37 99 235; /* blue-600 #2563eb */
+  /* Scrollbar */
+  --scrollbar-thumb: 205 211 224; /* #cdd3e0 */
+}
+
+/* System mode = follow the OS. The dark defaults in :root already cover the OS-dark case;
+   this block re-applies the light overrides only when the OS prefers light. Kept in sync
+   with the [data-theme='light'] block above. */
+@media (prefers-color-scheme: light) {
+  :root[data-theme='system'] {
+    --bg-body: 246 247 251;
+    --bg-card: 255 255 255;
+    --bg-card-alt: 241 243 249;
+    --bg-hover: 238 241 247;
+    --bg-terminal: 13 16 23;
+    --border-main: 226 230 239;
+    --border-alt: 205 211 224;
+    --text-strong: 22 26 35;
+    --text-primary: 22 26 35;
+    --text-secondary: 81 90 107;
+    --ok: 5 150 105;
+    --warn: 217 119 6;
+    --err: 220 38 38;
+    --info: 37 99 235;
+    --scrollbar-thumb: 205 211 224;
   }
 }
 

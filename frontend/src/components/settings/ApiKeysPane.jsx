@@ -33,7 +33,7 @@ function CopyButton({ text, title = 'Copy' }) {
       type="button"
       onClick={copy}
       title={title}
-      className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md"
+      className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md"
     >
       {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
     </button>
@@ -60,13 +60,13 @@ function StatusBadge({ status }) {
 // Shown once after create/rotate — the only time the raw key exists client-side.
 function RawKeyBox({ action, rawKey, onDismiss }) {
   return (
-    <div className="rounded-md border border-emerald-400/40 bg-zinc-950 p-4 space-y-2">
+    <div className="rounded-md border border-emerald-400/40 bg-card p-4 space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium text-emerald-400">
         <KeyRound className="w-4 h-4" />
         {action === 'rotated' ? 'Key rotated' : 'Key created'} — copy it now
       </div>
       <div className="flex items-center gap-2">
-        <code className="flex-1 font-mono text-sm text-zinc-200 bg-black border border-alt rounded-md px-3 py-2 break-all">
+        <code className="flex-1 font-mono text-sm text-zinc-200 bg-body border border-alt rounded-md px-3 py-2 break-all">
           {rawKey}
         </code>
         <CopyButton text={rawKey} title="Copy key" />
@@ -75,7 +75,7 @@ function RawKeyBox({ action, rawKey, onDismiss }) {
         This is the only time the full key is shown. Store it somewhere safe — you won't see it
         again.
       </p>
-      <button type="button" onClick={onDismiss} className="text-xs text-zinc-400 hover:text-white">
+      <button type="button" onClick={onDismiss} className="text-xs text-zinc-400 hover:text-strong">
         Dismiss
       </button>
     </div>
@@ -209,7 +209,7 @@ export default function ApiKeysPane({ register }) {
           return (
             <div
               key={k.id}
-              className={`border border-main rounded-md bg-zinc-950 p-4 ${
+              className={`border border-main rounded-md bg-card p-4 ${
                 inactive ? 'opacity-50' : ''
               }`}
             >
@@ -226,7 +226,7 @@ export default function ApiKeysPane({ register }) {
                         onClick={() => rotate(k)}
                         disabled={busyId === k.id}
                         title="Rotate (issues a new key, revokes this one)"
-                        className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-white disabled:opacity-40 flex items-center gap-1.5"
+                        className="border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:text-strong disabled:opacity-40 flex items-center gap-1.5"
                       >
                         {busyId === k.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -253,7 +253,7 @@ export default function ApiKeysPane({ register }) {
                 {(k.scopes || []).map((s) => (
                   <span
                     key={s}
-                    className="font-mono text-[10px] bg-zinc-900 border border-main rounded px-1.5 py-0.5 text-zinc-400"
+                    className="font-mono text-[10px] bg-hover border border-main rounded px-1.5 py-0.5 text-zinc-400"
                   >
                     {s}
                   </span>
@@ -280,7 +280,7 @@ export default function ApiKeysPane({ register }) {
       ) : (
         <form
           onSubmit={create}
-          className="border border-main rounded-md bg-zinc-950 p-4 space-y-4"
+          className="border border-main rounded-md bg-card p-4 space-y-4"
         >
           <div className="text-sm font-medium text-zinc-200 flex items-center gap-1.5">
             <Plus className="w-4 h-4" /> Create key
@@ -295,7 +295,7 @@ export default function ApiKeysPane({ register }) {
             <p className="text-xs text-zinc-500 mt-0.5 mb-2">
               What this key may do. <span className="font-mono">*</span> grants full access.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto border border-main rounded-md bg-black p-3">
+            <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto border border-main rounded-md bg-body p-3">
               {scopeCatalog.map((s) => (
                 <label
                   key={s}
@@ -349,7 +349,7 @@ export default function ApiKeysPane({ register }) {
                 setShowCreate(false)
                 setCreateError(null)
               }}
-              className="text-sm text-zinc-400 hover:text-white px-2 py-2"
+              className="text-sm text-zinc-400 hover:text-strong px-2 py-2"
             >
               Cancel
             </button>

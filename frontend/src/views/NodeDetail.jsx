@@ -640,7 +640,7 @@ export default function NodeDetail() {
   return (
     <>
       {/* Header */}
-      <header className="h-14 border-b border-main flex items-center justify-between px-6 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-6 bg-body shrink-0">
         <div className="flex items-center gap-3 text-xs">
           <span
             className="text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors"
@@ -659,7 +659,7 @@ export default function NodeDetail() {
             className={`flex items-center gap-2 border px-3 py-1.5 rounded text-xs font-bold transition-all ${
               recording
                 ? 'bg-red-950 border-red-900/50 text-red-400 hover:bg-red-900'
-                : 'border-main text-zinc-400 hover:bg-zinc-900'
+                : 'border-main text-zinc-400 hover:bg-hover'
             }`}
           >
             <Disc className={`w-3 h-3 ${recording ? 'animate-pulse text-red-500' : ''}`} />
@@ -667,11 +667,11 @@ export default function NodeDetail() {
           </button>
           <button
             onClick={() => api.reboot(deviceId)}
-            className="flex items-center gap-2 border border-main px-3 py-1.5 rounded text-xs text-zinc-400 hover:bg-zinc-900 transition-all"
+            className="flex items-center gap-2 border border-main px-3 py-1.5 rounded text-xs text-zinc-400 hover:bg-hover transition-all"
           >
             <RotateCw className="w-3 h-3" /> Hard Reboot
           </button>
-          <button className="bg-red-950 text-red-400 border border-red-900/50 px-3 py-1.5 rounded text-xs font-bold hover:bg-red-900 hover:text-white transition-all">
+          <button className="bg-red-950 text-red-400 border border-red-900/50 px-3 py-1.5 rounded text-xs font-bold hover:bg-red-900 hover:text-strong transition-all">
             Terminate Session
           </button>
         </div>
@@ -694,12 +694,12 @@ export default function NodeDetail() {
                 </div>
 
                 {/* Phone frame */}
-                <div className={`w-[260px] h-[560px] bg-black relative overflow-hidden flex items-center justify-center select-none shadow-2xl shadow-black/60 border-[3px] border-[#222] ${screenLoaded ? 'rounded-2xl' : 'rounded-[2.5rem]'} transition-all duration-300`}>
+                <div className={`w-[260px] h-[560px] bg-body relative overflow-hidden flex items-center justify-center select-none shadow-2xl shadow-black/60 border-[3px] border-[#222] ${screenLoaded ? 'rounded-2xl' : 'rounded-[2.5rem]'} transition-all duration-300`}>
                   {!screenLoaded && (
                     <div className="absolute top-2 w-24 h-5 bg-[#111] rounded-full z-20" />
                   )}
                   {!screenLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-hover z-10">
                       <Smartphone className="w-16 h-16 text-zinc-800 opacity-20" />
                       <span className="text-[10px] mono text-zinc-600 mt-2">
                         CONNECTING TO STREAM...
@@ -757,7 +757,7 @@ export default function NodeDetail() {
                   <button
                     key={btn.action}
                     onClick={() => handlePress(btn.action)}
-                    className="w-16 flex flex-col items-center gap-0.5 py-2 bg-zinc-900/80 border border-zinc-800 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-all group"
+                    className="w-16 flex flex-col items-center gap-0.5 py-2 bg-zinc-900/80 border border-zinc-800 rounded-xl hover:bg-zinc-800 text-zinc-500 hover:text-strong transition-all group"
                     title={`${btn.label} (${btn.key})`}
                   >
                     <btn.icon className="w-4 h-4" />
@@ -845,7 +845,7 @@ export default function NodeDetail() {
 
               {/* Playback modal */}
               {playbackSession && (
-                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 space-y-2">
+                <div className="w-full bg-hover border border-zinc-800 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-[9px] font-bold text-zinc-400">Playback</p>
                     <button
@@ -856,7 +856,7 @@ export default function NodeDetail() {
                     </button>
                   </div>
                   {/* Playback canvas */}
-                  <div className="w-full aspect-[9/16] bg-black rounded overflow-hidden relative">
+                  <div className="w-full aspect-[9/16] bg-body rounded overflow-hidden relative">
                     <img
                       src={api.getStreamFrameUrl(deviceId, playbackSession.session_id, playbackFrame)}
                       alt={`Frame ${playbackFrame}`}
@@ -903,7 +903,7 @@ export default function NodeDetail() {
                   {/* Controls */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <button onClick={togglePlayback} className="text-zinc-400 hover:text-white">
+                      <button onClick={togglePlayback} className="text-zinc-400 hover:text-strong">
                         {playbackPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                       </button>
                       <span className="text-[9px] mono text-zinc-500">
@@ -1085,7 +1085,7 @@ export default function NodeDetail() {
                       </span>
                       <span className="text-[10px] text-zinc-600">{MODE_META[agentMode]?.hint}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1 bg-zinc-900 border border-main rounded p-1">
+                    <div className="grid grid-cols-3 gap-1 bg-hover border border-main rounded p-1">
                       {['observe', 'supervised', 'autonomous'].map((m) => {
                         const meta = MODE_META[m]
                         const Icon = meta.icon
@@ -1186,7 +1186,7 @@ export default function NodeDetail() {
                       value={commandInput}
                       onChange={(e) => setCommandInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendCommand()}
-                      className="flex-1 bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-white"
+                      className="flex-1 bg-hover border border-main rounded px-3 py-2 text-xs text-white"
                       placeholder="Send command to agent..."
                     />
                     <button
@@ -1194,7 +1194,7 @@ export default function NodeDetail() {
                       className={`p-2 rounded border text-xs ${
                         urgentCommand
                           ? 'bg-amber-950 border-amber-900/50 text-amber-400'
-                          : 'bg-zinc-900 border-main text-zinc-500'
+                          : 'bg-hover border-main text-zinc-500'
                       }`}
                       title="Toggle urgent priority"
                     >
@@ -1266,7 +1266,7 @@ export default function NodeDetail() {
                   <div className="relative">
                     <button
                       onClick={() => setShowModelSelector(!showModelSelector)}
-                      className="w-full flex items-center justify-between bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 transition-all"
+                      className="w-full flex items-center justify-between bg-hover border border-main rounded px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 transition-all"
                     >
                       <span className="flex items-center gap-2">
                         <Cpu className="w-3 h-3" />
@@ -1275,7 +1275,7 @@ export default function NodeDetail() {
                       <ChevronDown className="w-3 h-3" />
                     </button>
                     {showModelSelector && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-main rounded shadow-lg z-10">
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-hover border border-main rounded shadow-lg z-10">
                         {[
                           'claude/claude-sonnet-4-20250514',
                           'openai/gpt-4o',
@@ -1290,7 +1290,7 @@ export default function NodeDetail() {
                               setShowModelSelector(false)
                               fetchAgent()
                             }}
-                            className="w-full text-left px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white transition-all mono"
+                            className="w-full text-left px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-strong transition-all mono"
                           >
                             {m}
                           </button>
@@ -1331,7 +1331,7 @@ export default function NodeDetail() {
                         }
                         setShowConversation(!showConversation)
                       }}
-                      className="flex-1 flex items-center justify-center gap-2 bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 transition-all"
+                      className="flex-1 flex items-center justify-center gap-2 bg-hover border border-main rounded px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800 transition-all"
                     >
                       <MessageSquare className="w-3 h-3" />
                       {showConversation ? 'Hide' : 'Show'} Conversation ({conversationHistory.length})
@@ -1343,7 +1343,7 @@ export default function NodeDetail() {
                           setConversationHistory([])
                         } catch {}
                       }}
-                      className="flex items-center gap-1 bg-zinc-900 border border-main rounded px-3 py-2 text-xs text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all"
+                      className="flex items-center gap-1 bg-hover border border-main rounded px-3 py-2 text-xs text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all"
                       title="Clear conversation memory"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -1359,7 +1359,7 @@ export default function NodeDetail() {
                         conversationHistory.map((msg, i) => (
                           <div key={i} className={`text-[10px] p-2 rounded ${
                             msg.role === 'assistant'
-                              ? 'bg-zinc-900 text-zinc-300'
+                              ? 'bg-hover text-zinc-300'
                               : msg.role === 'user'
                               ? 'bg-zinc-800 text-zinc-400'
                               : 'bg-zinc-900/50 text-zinc-500'
@@ -1392,12 +1392,12 @@ export default function NodeDetail() {
         </div>
 
         {/* ADB Shell sidebar */}
-        <div className="w-[400px] border-l border-main bg-black flex flex-col shrink-0">
+        <div className="w-[400px] border-l border-main bg-body flex flex-col shrink-0">
           <div className="p-4 border-b border-main flex items-center justify-between">
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
               <Terminal className="w-3 h-3" /> ADB System Shell
             </span>
-            <Maximize2 className="w-3 h-3 text-zinc-600 hover:text-white cursor-pointer" />
+            <Maximize2 className="w-3 h-3 text-zinc-600 hover:text-strong cursor-pointer" />
           </div>
           <div
             ref={shellRef}
@@ -1445,7 +1445,7 @@ export default function NodeDetail() {
                     setShellInput(m.cmd)
                     inputRef.current?.focus()
                   }}
-                  className="text-[10px] border border-main p-2 rounded hover:bg-zinc-900 text-zinc-400"
+                  className="text-[10px] border border-main p-2 rounded hover:bg-hover text-zinc-400"
                 >
                   {m.label}
                 </button>
@@ -1462,7 +1462,7 @@ function SideButton({ icon: Icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="w-9 h-9 flex flex-col items-center justify-center bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-700 hover:border-zinc-600 text-zinc-500 hover:text-white transition-all"
+      className="w-9 h-9 flex flex-col items-center justify-center bg-hover border border-zinc-800 rounded-lg hover:bg-zinc-700 hover:border-zinc-600 text-zinc-500 hover:text-strong transition-all"
       title={label}
     >
       <Icon className="w-3.5 h-3.5" />
@@ -1477,7 +1477,7 @@ function ProgressBar({ label, value, color, valueText }) {
         <span className="text-zinc-500 uppercase">{label}</span>
         <span className="text-white">{valueText}</span>
       </div>
-      <div className="w-full h-1 bg-zinc-900 rounded-full">
+      <div className="w-full h-1 bg-hover rounded-full">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${value}%` }} />
       </div>
     </div>

@@ -82,7 +82,7 @@ function SecretInput({ label, envHint, present, placeholder, onSave, onClear }) 
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={present ? '•••••••• (leave blank to keep)' : placeholder}
-          className="mt-1 w-full bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+          className="mt-1 w-full bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
         />
       </div>
       <div className="flex flex-col gap-1 pt-6">
@@ -152,7 +152,7 @@ function HubStatus({ health, probing, onProbe }) {
           type="button"
           onClick={onProbe}
           disabled={probing}
-          className="ml-auto text-xs text-zinc-400 hover:text-white flex items-center gap-1 disabled:opacity-40"
+          className="ml-auto text-xs text-zinc-400 hover:text-strong flex items-center gap-1 disabled:opacity-40"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${probing ? 'animate-spin' : ''}`} />
           Test

@@ -8,17 +8,17 @@ import { api, setSessionToken } from '../api'
 import { useAuth } from './AuthContext'
 
 const inputCls =
-  'w-full bg-black border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent'
+  'w-full bg-body border border-alt rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent'
 
 function Card({ children }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black px-4">
+    <div className="min-h-screen flex items-center justify-center bg-body px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3 mb-8 justify-center">
           <Logo size={36} className="rounded shrink-0" />
           <span className="font-bold tracking-tight text-xl">DeviceKit</span>
         </div>
-        <div className="border border-main rounded-lg bg-zinc-950 p-6">{children}</div>
+        <div className="border border-main rounded-lg bg-card p-6">{children}</div>
       </div>
     </div>
   )

@@ -146,7 +146,7 @@ export default function DeviceCompare() {
           <select
             value={pickValue}
             onChange={(e) => setPickValue(e.target.value)}
-            className="bg-black border border-main px-3 py-2 text-xs rounded focus:outline-none w-64"
+            className="bg-body border border-main px-3 py-2 text-xs rounded focus:outline-none w-64"
           >
             <option value="">Select a device...</option>
             {available.map((d) => (
@@ -248,7 +248,7 @@ export default function DeviceCompare() {
                     </div>
                     <button
                       onClick={() => removeDevice(d.device_id)}
-                      className="text-zinc-600 hover:text-white transition-colors"
+                      className="text-zinc-600 hover:text-strong transition-colors"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>

@@ -170,8 +170,8 @@ export default function Settings() {
                   onClick={() => navigate(`/settings/${t.id}`)}
                   className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                     t.id === activeId
-                      ? 'bg-zinc-900 text-white'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                      ? 'bg-hover text-strong'
+                      : 'text-zinc-400 hover:text-strong hover:bg-hover'
                   }`}
                 >
                   <t.icon className="w-4 h-4" />

@@ -138,11 +138,11 @@ export default function AutomationRunDetail() {
   return (
     <>
       {/* Header */}
-      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-body shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/automations')}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="text-zinc-400 hover:text-strong transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -345,7 +345,7 @@ export default function AutomationRunDetail() {
 
                         <a
                           href={api.downloadDebugBundleUrl(sr.debug_bundle_id)}
-                          className="ml-auto flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white border border-main px-2 py-0.5 rounded transition-colors"
+                          className="ml-auto flex items-center gap-1 text-[10px] text-zinc-400 hover:text-strong border border-main px-2 py-0.5 rounded transition-colors"
                           download
                         >
                           <Download className="w-3 h-3" /> Download ZIP
@@ -362,7 +362,7 @@ export default function AutomationRunDetail() {
 
                         <button
                           onClick={() => handleShareBundle(sr.debug_bundle_id)}
-                          className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-white border border-main px-2 py-0.5 rounded transition-colors"
+                          className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-strong border border-main px-2 py-0.5 rounded transition-colors"
                         >
                           <Share2 className="w-3 h-3" /> Share
                         </button>

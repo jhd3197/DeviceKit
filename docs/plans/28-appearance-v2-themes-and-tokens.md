@@ -1,6 +1,6 @@
 # Plan 28 — Appearance v2: Theme Modes, Design Tokens & White-Label
 
-**Status:** 🚧 in progress — Phase 1 ✅ (tokens + Tailwind var mapping, dark byte-identical)
+**Status:** 🚧 in progress — Phase 1 ✅ · Phase 2 ✅ (Light/System modes + token sweep)
 **Inspired by:** ServerKit's theming stack — `styles/_theme-variables.scss` (one token
 sheet: `:root` dark defaults, `[data-theme="light"]` overrides, a `prefers-color-scheme`
 block for `system`), `contexts/ThemeContext.jsx` (mode = `data-theme` attribute on `<html>`
@@ -87,9 +87,32 @@ Plan 12 shipped the accent ramp but deliberately deferred everything else:
 | Phase | Delivers | Proves |
 |---|---|---|
 | 1 ✅ | Surface/border/text/semantic tokens + Tailwind var mapping, dark values unchanged | pixel-identical dark UI (screenshot diff a few views); every color now has one source of truth |
-| 2 | Light + System modes, `bootTheme()`, `appearance.theme` wired, mode picker | switching to Light recolors instantly with no reload and survives restart in another browser; System follows an OS toggle live |
+| 2 ✅ | Light + System modes, `bootTheme()`, `appearance.theme` wired, mode picker | switching to Light recolors instantly with no reload and survives restart in another browser; System follows an OS toggle live |
 | 3 | 8+1 presets + color input, white-label brand name/logo, palette toggle-theme action | an admin renames the instance and uploads a mark; login + sidebar + tab title follow; reset returns to the purple phone |
 
+> **Phase 2 landed (2026-07-12).** `theme.js` grew `setThemeMode/getStoredThemeMode/
+> resolveThemeMode/toggleTheme/subscribeTheme/bootTheme` (localStorage `devicekit_theme`,
+> `<html data-theme>`, window event so open components sync without a context); `bootTheme()`
+> runs next to `bootAccent()` in `index.jsx`. `index.css` gained a `:root[data-theme='light']`
+> sheet (ServerKit's `#f6f7fb` family; status colors darkened to `-600` for white-card
+> contrast; `--text-strong` added) and a `@media (prefers-color-scheme: light)
+> :root[data-theme='system']` mirror. Appearance pane got a Dark/Light/System segmented
+> picker with mini previews, wired to `appearance.theme` with server reconcile (plan-12 flow).
+> **Token sweep (dark-safe):** across all `.jsx`, bare `bg-black`→`bg-body` (0 0 0=0 0 0),
+> `bg-zinc-900`→`bg-hover` (24 24 27=24 24 27), `bg-zinc-950`→`bg-card` (≈), and
+> `hover:/group-hover:/aria-selected:text-white`→`…text-strong` (dark `#fff`); shell active-nav
+> `text-white`→`text-strong`. New Tailwind colors: `body`, `hover`, `ok/warn/err/info`.
+> **Deviations / logged stragglers (follow-up polish pass):**
+> - **~60 bare `text-white`** across ~22 views remain (headings/labels + on-color button
+>   text). Not blanket-swept because on-accent/on-red button labels should stay white while
+>   on-surface headings should adapt — needs per-occurrence judgement. On a light surface a
+>   bare `text-white` heading is currently low-contrast; core shell (sidebar, settings tabs,
+>   login) is fixed. Heaviest: `ProfileEditor` (11), `NodeDetail` (8), `Extensions`/
+>   `Automations`/`AutomationEditor` (5 each).
+> - **79 dark opacity washes** (`bg-black/70`, `bg-zinc-900/40`, …) intentionally left dark:
+>   modal scrims must stay dark; ambiguous surface washes deferred rather than mis-converted.
+> - **tramo `--tr-*`** still pinned dark (embedded dark editor in light app — accepted v1).
+>
 > **Phase 1 landed (2026-07-12).** Token block added to `index.css :root` as `R G B`
 > triplets (dark = today's exact pure-black values); `body`, the `.bg-card/.bg-card-alt/
 > .border-main/.border-alt/.terminal-bg` component classes, scrollbar thumb, and the

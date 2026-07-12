@@ -130,7 +130,7 @@ export default function AgentPlugins() {
           onChange={(e) => setDraft(e.target.value)}
           rows={12}
           spellCheck={false}
-          className="w-full bg-black border border-main rounded px-3 py-2 text-xs mono text-zinc-200 focus:outline-none focus:border-purple-500/50"
+          className="w-full bg-body border border-main rounded px-3 py-2 text-xs mono text-zinc-200 focus:outline-none focus:border-purple-500/50"
         />
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -169,11 +169,11 @@ export default function AgentPlugins() {
 
       {/* Declared plugins */}
       {loading ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
           <Loader2 className="w-4 h-4 animate-spin inline" /> Loading…
         </div>
       ) : plugins.length === 0 ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
           <Puzzle className="w-6 h-6 mx-auto mb-2 opacity-40" /> No plugins declared
         </div>
       ) : (
@@ -183,7 +183,7 @@ export default function AgentPlugins() {
             const caps = m.capabilities || {}
             const perms = m.permissions || {}
             return (
-              <div key={p.id} className="bg-zinc-900 border border-main rounded-lg p-4 space-y-2">
+              <div key={p.id} className="bg-hover border border-main rounded-lg p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-sm font-semibold text-zinc-100">{p.name}</span>

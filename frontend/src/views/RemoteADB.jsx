@@ -139,7 +139,7 @@ export default function RemoteADB() {
   return (
     <>
       {/* Header */}
-      <header className="h-12 border-b border-main flex items-center justify-between px-6 bg-black shrink-0">
+      <header className="h-12 border-b border-main flex items-center justify-between px-6 bg-body shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
@@ -163,7 +163,7 @@ export default function RemoteADB() {
           <span className="text-[10px] font-bold text-zinc-600 uppercase">
             Latency: 4ms
           </span>
-          <button className="bg-zinc-900 border border-main text-zinc-400 px-3 py-1 rounded text-[10px] font-bold hover:text-white transition-all">
+          <button className="bg-hover border border-main text-zinc-400 px-3 py-1 rounded text-[10px] font-bold hover:text-strong transition-all">
             RESTART ADB SERVER
           </button>
         </div>
@@ -173,7 +173,7 @@ export default function RemoteADB() {
         {/* Terminal area */}
         <div className="flex-1 flex flex-col border-r border-main">
           {/* Tabs */}
-          <div className="flex bg-zinc-950 px-4 border-b border-main shrink-0">
+          <div className="flex bg-card px-4 border-b border-main shrink-0">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -229,7 +229,7 @@ export default function RemoteADB() {
 
         {/* Right panel: Device Explorer + Presets */}
         <div className="w-96 bg-card-alt flex flex-col shrink-0">
-          <div className="p-4 border-b border-main flex justify-between items-center bg-black">
+          <div className="p-4 border-b border-main flex justify-between items-center bg-body">
             <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
               Device Explorer
             </h3>
@@ -252,8 +252,8 @@ export default function RemoteADB() {
           </div>
 
           {/* Search input */}
-          <div className="px-4 pt-3 pb-2 border-b border-main bg-zinc-950">
-            <div className="flex items-center gap-2 bg-zinc-900 border border-main rounded px-2 py-1.5">
+          <div className="px-4 pt-3 pb-2 border-b border-main bg-card">
+            <div className="flex items-center gap-2 bg-hover border border-main rounded px-2 py-1.5">
               <Search className="w-3 h-3 text-zinc-500 shrink-0" />
               <input
                 type="text"
@@ -295,7 +295,7 @@ export default function RemoteADB() {
                           handleDownload(entry.path)
                         }
                       }}
-                      className="flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group"
+                      className="flex items-center gap-2 p-2 rounded hover:bg-hover cursor-pointer group"
                     >
                       {entry.is_dir ? (
                         <Folder className="w-4 h-4 text-zinc-500" />
@@ -319,7 +319,7 @@ export default function RemoteADB() {
                         const parent = filePath.split('/').slice(0, -1).join('/') || '/'
                         setFilePath(parent)
                       }}
-                      className="flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group"
+                      className="flex items-center gap-2 p-2 rounded hover:bg-hover cursor-pointer group"
                     >
                       <Folder className="w-4 h-4 text-zinc-500" />
                       <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors italic">
@@ -337,7 +337,7 @@ export default function RemoteADB() {
                           handleDownload(entry.path)
                         }
                       }}
-                      className={`flex items-center gap-2 p-2 rounded hover:bg-zinc-900 cursor-pointer group ${
+                      className={`flex items-center gap-2 p-2 rounded hover:bg-hover cursor-pointer group ${
                         !entry.is_dir ? 'pl-6' : ''
                       }`}
                     >
@@ -371,7 +371,7 @@ export default function RemoteADB() {
           </div>
 
           {/* Command presets */}
-          <div className="p-4 border-t border-main bg-black">
+          <div className="p-4 border-t border-main bg-body">
             <p className="text-[10px] font-bold text-zinc-600 uppercase mb-4 tracking-tighter">
               Command Presets
             </p>
@@ -380,7 +380,7 @@ export default function RemoteADB() {
                 <button
                   key={p.label}
                   onClick={() => setShellInput(p.cmd)}
-                  className="text-[9px] font-bold bg-zinc-900 border border-main p-2 rounded text-zinc-400 hover:text-white hover:border-zinc-500"
+                  className="text-[9px] font-bold bg-hover border border-main p-2 rounded text-zinc-400 hover:text-strong hover:border-zinc-500"
                 >
                   {p.label}
                 </button>
@@ -391,7 +391,7 @@ export default function RemoteADB() {
       </div>
 
       {/* Footer */}
-      <footer className="h-10 border-t border-main bg-zinc-950 flex items-center px-6 gap-6 shrink-0">
+      <footer className="h-10 border-t border-main bg-card flex items-center px-6 gap-6 shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
           <span className="text-[10px] mono text-emerald-500 font-bold">

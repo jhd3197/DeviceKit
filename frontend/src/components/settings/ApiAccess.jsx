@@ -58,14 +58,14 @@ export default function ApiAccess({ register }) {
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder="No key set (dev mode)"
-              className="w-full bg-black border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+              className="w-full bg-body border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-accent"
             />
           </div>
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
             title={show ? 'Hide' : 'Show'}
-            className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md"
+            className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md"
           >
             {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
@@ -74,7 +74,7 @@ export default function ApiAccess({ register }) {
             onClick={copy}
             disabled={!value}
             title="Copy"
-            className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md disabled:opacity-40"
+            className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md disabled:opacity-40"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
           </button>

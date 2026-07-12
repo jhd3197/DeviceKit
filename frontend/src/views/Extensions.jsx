@@ -275,11 +275,11 @@ export default function Extensions() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setUrlDialog(true)}
-            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded border border-main text-zinc-300 hover:bg-zinc-900 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded border border-main text-zinc-300 hover:bg-hover transition-colors"
           >
             <Link2 className="w-3.5 h-3.5" /> From URL
           </button>
-          <label className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded border border-main text-zinc-300 hover:bg-zinc-900 transition-colors cursor-pointer">
+          <label className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded border border-main text-zinc-300 hover:bg-hover transition-colors cursor-pointer">
             <UploadCloud className="w-3.5 h-3.5" /> Upload
             <input
               type="file"
@@ -293,7 +293,7 @@ export default function Extensions() {
           </label>
           <button
             onClick={loadAll}
-            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded border border-main text-zinc-300 hover:bg-zinc-900 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded border border-main text-zinc-300 hover:bg-hover transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
@@ -474,7 +474,7 @@ function BrowseTab({
               className="text-left bg-card border border-main rounded-lg p-4 hover:border-border-alt transition-colors group"
             >
               <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded bg-zinc-900 border border-main flex items-center justify-center shrink-0 overflow-hidden">
+                <div className="w-11 h-11 rounded bg-hover border border-main flex items-center justify-center shrink-0 overflow-hidden">
                   <CoverArt entry={e} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -524,7 +524,7 @@ function DetailModal({ entry, busy, onClose, onInstall }) {
   return (
     <Modal onClose={onClose} wide>
       <div className="flex items-start gap-4">
-        <div className="w-14 h-14 rounded bg-zinc-900 border border-main flex items-center justify-center shrink-0 overflow-hidden">
+        <div className="w-14 h-14 rounded bg-hover border border-main flex items-center justify-center shrink-0 overflow-hidden">
           <CoverArt entry={entry} />
         </div>
         <div className="min-w-0 flex-1">
@@ -599,7 +599,7 @@ function DetailModal({ entry, busy, onClose, onInstall }) {
       <div className="mt-6 flex items-center justify-end gap-2">
         <button
           onClick={onClose}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-main text-zinc-300 hover:bg-zinc-900"
+          className="px-3 py-1.5 text-xs font-medium rounded border border-main text-zinc-300 hover:bg-hover"
         >
           Cancel
         </button>
@@ -657,12 +657,12 @@ function UrlInstallDialog({ busy, onClose, onInstall }) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://…/extension.zip"
-          className="flex-1 bg-black border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt"
+          className="flex-1 bg-body border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt"
         />
         <button
           onClick={doPreview}
           disabled={!url || previewing}
-          className="px-3 py-2 text-xs font-semibold rounded border border-main text-zinc-300 hover:bg-zinc-900 disabled:opacity-50"
+          className="px-3 py-2 text-xs font-semibold rounded border border-main text-zinc-300 hover:bg-hover disabled:opacity-50"
         >
           {previewing ? 'Resolving…' : 'Preview'}
         </button>
@@ -739,7 +739,7 @@ function InstalledTab({ installed, updates, busy, onToggle, onUpdate, onConfigur
             key={ext.slug}
             className="bg-card border border-main rounded-lg p-4 flex items-center gap-4"
           >
-            <div className="w-10 h-10 rounded bg-zinc-900 border border-main flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded bg-hover border border-main flex items-center justify-center shrink-0">
               <CategoryGlyph category={ext.category} className="w-5 h-5 text-zinc-400" />
             </div>
             <div className="min-w-0 flex-1">
@@ -767,7 +767,7 @@ function InstalledTab({ installed, updates, busy, onToggle, onUpdate, onConfigur
                   onClick={() => onUpdate(ext.slug)}
                   disabled={busy}
                   title="Update"
-                  className="p-1.5 rounded border border-main text-blue-400 hover:bg-zinc-900 disabled:opacity-50"
+                  className="p-1.5 rounded border border-main text-blue-400 hover:bg-hover disabled:opacity-50"
                 >
                   <Download className="w-4 h-4" />
                 </button>
@@ -776,7 +776,7 @@ function InstalledTab({ installed, updates, busy, onToggle, onUpdate, onConfigur
                 <button
                   onClick={() => onConfigure(ext)}
                   title="Configure"
-                  className="p-1.5 rounded border border-main text-zinc-300 hover:bg-zinc-900"
+                  className="p-1.5 rounded border border-main text-zinc-300 hover:bg-hover"
                 >
                   <Settings2 className="w-4 h-4" />
                 </button>
@@ -785,7 +785,7 @@ function InstalledTab({ installed, updates, busy, onToggle, onUpdate, onConfigur
                 onClick={() => onToggle(ext)}
                 disabled={busy || ext.status === 'error'}
                 title={ext.status === 'active' ? 'Disable' : 'Enable'}
-                className={`p-1.5 rounded border border-main hover:bg-zinc-900 disabled:opacity-40 ${
+                className={`p-1.5 rounded border border-main hover:bg-hover disabled:opacity-40 ${
                   ext.status === 'active' ? 'text-emerald-400' : 'text-zinc-500'
                 }`}
               >
@@ -875,7 +875,7 @@ function ConfigModal({ ext, onClose, onSaved }) {
       <div className="mt-6 flex justify-end gap-2">
         <button
           onClick={onClose}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-main text-zinc-300 hover:bg-zinc-900"
+          className="px-3 py-1.5 text-xs font-medium rounded border border-main text-zinc-300 hover:bg-hover"
         >
           Cancel
         </button>
@@ -918,7 +918,7 @@ function ConfigField({ name, spec, value, onChange }) {
         <select
           value={value ?? ''}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-black border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt"
+          className="w-full bg-body border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt"
         >
           <option value="">— select —</option>
           {spec.options.map((o) => (
@@ -942,7 +942,7 @@ function ConfigField({ name, spec, value, onChange }) {
         value={value ?? ''}
         onChange={(e) => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
         placeholder={spec.secret ? '••••••' : ''}
-        className="w-full bg-black border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt"
+        className="w-full bg-body border border-main rounded px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-border-alt"
       />
     </div>
   )
@@ -977,7 +977,7 @@ function UninstallDialog({ ext, busy, onClose, onConfirm }) {
       <div className="mt-6 flex justify-end gap-2">
         <button
           onClick={onClose}
-          className="px-3 py-1.5 text-xs font-medium rounded border border-main text-zinc-300 hover:bg-zinc-900"
+          className="px-3 py-1.5 text-xs font-medium rounded border border-main text-zinc-300 hover:bg-hover"
         >
           Cancel
         </button>
@@ -1001,7 +1001,7 @@ function Modal({ children, onClose, wide }) {
       onClick={onClose}
     >
       <div
-        className={`bg-black border border-main rounded-xl p-6 w-full ${
+        className={`bg-body border border-main rounded-xl p-6 w-full ${
           wide ? 'max-w-2xl' : 'max-w-lg'
         } max-h-[85vh] overflow-y-auto shadow-2xl`}
         onClick={(e) => e.stopPropagation()}

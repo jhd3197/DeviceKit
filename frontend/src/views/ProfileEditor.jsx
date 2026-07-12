@@ -96,9 +96,9 @@ export default function ProfileEditor() {
 
   return (
     <>
-      <header className="h-14 border-b border-main flex items-center justify-between px-6 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-6 bg-body shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/profiles')} className="text-zinc-500 hover:text-white">
+          <button onClick={() => navigate('/profiles')} className="text-zinc-500 hover:text-strong">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <h1 className="text-sm font-bold">{isEdit ? 'Edit Profile' : 'New Profile'}</h1>
@@ -129,7 +129,7 @@ export default function ProfileEditor() {
                 <select
                   value={form.device_id}
                   onChange={(e) => set('device_id', e.target.value)}
-                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                  className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 >
                   <option value="">Select device...</option>
                   {devices.map((d) => (
@@ -144,7 +144,7 @@ export default function ProfileEditor() {
                 <input
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
-                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                  className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                   placeholder="e.g. Alex the Fitness Guru"
                 />
               </div>
@@ -154,7 +154,7 @@ export default function ProfileEditor() {
               <input
                 value={form.niche}
                 onChange={(e) => set('niche', e.target.value)}
-                className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 placeholder="e.g. fitness, cooking, tech"
               />
             </div>
@@ -176,7 +176,7 @@ export default function ProfileEditor() {
                 onChange={(e) => {
                   if (e.target.value !== '__custom__') set('model_name', e.target.value)
                 }}
-                className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
               >
                 <option value="">Default (from server config)</option>
                 <option value="claude/claude-sonnet-4-20250514">claude/claude-sonnet-4-20250514</option>
@@ -196,7 +196,7 @@ export default function ProfileEditor() {
                 <input
                   value={form.model_name}
                   onChange={(e) => set('model_name', e.target.value)}
-                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white mono"
+                  className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white mono"
                   placeholder="provider/model-name"
                 />
               </div>
@@ -210,7 +210,7 @@ export default function ProfileEditor() {
               value={form.personality}
               onChange={(e) => set('personality', e.target.value)}
               rows={4}
-              className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white resize-none"
+              className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white resize-none"
               placeholder="Describe this persona's personality, how they browse, what they engage with..."
             />
           </div>
@@ -223,7 +223,7 @@ export default function ProfileEditor() {
                 value={interestInput}
                 onChange={(e) => setInterestInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
-                className="flex-1 bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                className="flex-1 bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 placeholder="Add an interest..."
               />
               <button onClick={addInterest} className="p-2 bg-zinc-800 border border-main rounded hover:bg-zinc-700">
@@ -251,7 +251,7 @@ export default function ProfileEditor() {
                 <select
                   value={form.behavior_patterns.scroll_speed}
                   onChange={(e) => setBehavior('scroll_speed', e.target.value)}
-                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                  className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 >
                   <option value="slow">Slow</option>
                   <option value="medium">Medium</option>
@@ -278,7 +278,7 @@ export default function ProfileEditor() {
                   type="number"
                   value={form.behavior_patterns.session_duration_min}
                   onChange={(e) => setBehavior('session_duration_min', parseInt(e.target.value) || 0)}
-                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                  className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 />
               </div>
               <div>
@@ -287,7 +287,7 @@ export default function ProfileEditor() {
                   type="number"
                   value={form.behavior_patterns.break_between_sessions_min}
                   onChange={(e) => setBehavior('break_between_sessions_min', parseInt(e.target.value) || 0)}
-                  className="w-full bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                  className="w-full bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 />
               </div>
             </div>
@@ -301,7 +301,7 @@ export default function ProfileEditor() {
                 value={appInput}
                 onChange={(e) => setAppInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addApp())}
-                className="flex-1 bg-zinc-900 border border-main rounded px-3 py-2 text-sm text-white"
+                className="flex-1 bg-hover border border-main rounded px-3 py-2 text-sm text-white"
                 placeholder="com.instagram.android"
               />
               <button onClick={addApp} className="p-2 bg-zinc-800 border border-main rounded hover:bg-zinc-700">
@@ -309,7 +309,7 @@ export default function ProfileEditor() {
               </button>
             </div>
             {form.apps.map((app, i) => (
-              <div key={i} className="flex items-center justify-between bg-zinc-900 border border-main rounded px-3 py-2">
+              <div key={i} className="flex items-center justify-between bg-hover border border-main rounded px-3 py-2">
                 <span className="mono text-xs">{app.package}</span>
                 <button onClick={() => removeApp(i)} className="text-zinc-500 hover:text-red-400">
                   <X className="w-3 h-3" />

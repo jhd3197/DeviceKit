@@ -211,7 +211,7 @@ export default function Automations() {
   return (
     <>
       {/* Header */}
-      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-black shrink-0">
+      <header className="h-14 border-b border-main flex items-center justify-between px-8 bg-body shrink-0">
         <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">
           Automations
         </h2>
@@ -225,7 +225,7 @@ export default function Automations() {
           />
           <button
             onClick={() => importRef.current?.click()}
-            className="border border-main text-zinc-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
+            className="border border-main text-zinc-400 hover:text-strong text-xs font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-2"
           >
             <Upload className="w-3 h-3" /> Import
           </button>
@@ -245,7 +245,7 @@ export default function Automations() {
           placeholder="Filter by name or tag..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="w-full max-w-md bg-black border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
+          className="w-full max-w-md bg-body border border-main px-3 py-1.5 text-xs rounded focus:outline-none"
         />
 
         {/* Automations table */}
@@ -311,7 +311,7 @@ export default function Automations() {
                         </button>
                         <button
                           onClick={() => navigate(`/automations/${a.id}/edit`)}
-                          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                          className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-strong transition-colors"
                           title="Edit"
                         >
                           <Pencil className="w-3.5 h-3.5" />
@@ -319,7 +319,7 @@ export default function Automations() {
                         <button
                           onClick={() => navigate(`/automations/${a.id}/graph`)}
                           className={`p-1.5 rounded hover:bg-zinc-800 transition-colors ${
-                            a.graph ? 'text-accent hover:text-accent-hover' : 'text-zinc-400 hover:text-white'
+                            a.graph ? 'text-accent hover:text-accent-hover' : 'text-zinc-400 hover:text-strong'
                           }`}
                           title={a.graph ? 'Edit graph' : 'Open as graph'}
                         >
@@ -451,7 +451,7 @@ export default function Automations() {
                         <div className="flex justify-end gap-1">
                           <button
                             onClick={() => handleToggleSchedule(s)}
-                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                            className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-strong transition-colors"
                             title={s.enabled ? 'Pause' : 'Resume'}
                           >
                             {s.enabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -482,7 +482,7 @@ export default function Automations() {
               <h3 className="text-sm font-bold">Run Automation</h3>
               <button
                 onClick={() => setRunDialog(null)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-500 hover:text-strong transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -500,7 +500,7 @@ export default function Automations() {
               <select
                 value={selectedDevice}
                 onChange={(e) => setSelectedDevice(e.target.value)}
-                className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+                className="w-full bg-body border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
               >
                 {devices.map((d) => (
                   <option key={d.device_id} value={d.device_id}>
@@ -516,7 +516,7 @@ export default function Automations() {
                 type="checkbox"
                 checked={selfHeal}
                 onChange={(e) => setSelfHeal(e.target.checked)}
-                className="rounded border-zinc-600 bg-black text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
+                className="rounded border-zinc-600 bg-body text-amber-500 focus:ring-amber-500 focus:ring-offset-0"
               />
               <span className="text-xs text-zinc-400 group-hover:text-zinc-300 transition-colors flex items-center gap-1.5">
                 <HeartPulse className="w-3 h-3 text-amber-500" />
@@ -530,7 +530,7 @@ export default function Automations() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setRunDialog(null)}
-                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-strong transition-colors"
               >
                 Cancel
               </button>
@@ -559,7 +559,7 @@ export default function Automations() {
               <h3 className="text-sm font-bold">Schedule Automation</h3>
               <button
                 onClick={() => setScheduleDialog(null)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-500 hover:text-strong transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -576,7 +576,7 @@ export default function Automations() {
               <select
                 value={schedDevice}
                 onChange={(e) => setSchedDevice(e.target.value)}
-                className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+                className="w-full bg-body border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
               >
                 {schedDevices.map((d) => (
                   <option key={d.device_id} value={d.device_id}>
@@ -593,12 +593,12 @@ export default function Automations() {
               min={1}
               value={schedInterval}
               onChange={(e) => setSchedInterval(e.target.value)}
-              className="w-full bg-black border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
+              className="w-full bg-body border border-main px-3 py-2 text-xs rounded mb-4 focus:outline-none"
             />
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setScheduleDialog(null)}
-                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-strong transition-colors"
               >
                 Cancel
               </button>
@@ -630,7 +630,7 @@ export default function Automations() {
               </h3>
               <button
                 onClick={() => setExplainModal(null)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-500 hover:text-strong transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -647,7 +647,7 @@ export default function Automations() {
             <div className="flex justify-end mt-4">
               <button
                 onClick={() => setExplainModal(null)}
-                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-white transition-colors"
+                className="px-4 py-1.5 text-xs rounded border border-main text-zinc-400 hover:text-strong transition-colors"
               >
                 Close
               </button>

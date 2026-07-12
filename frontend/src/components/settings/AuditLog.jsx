@@ -74,7 +74,7 @@ export default function AuditLog({ settings, save, register }) {
               if (e.key === 'Enter') refresh()
             }}
             placeholder="Filter by action (e.g. login, user.create)"
-            className="w-full bg-black border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
+            className="w-full bg-body border border-alt rounded-md pl-9 pr-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-accent"
           />
         </div>
         <div className="w-32 shrink-0">
@@ -84,7 +84,7 @@ export default function AuditLog({ settings, save, register }) {
           type="button"
           onClick={refresh}
           disabled={loading}
-          className="flex items-center gap-1.5 border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-200 hover:text-white disabled:opacity-40 shrink-0"
+          className="flex items-center gap-1.5 border border-alt rounded-md px-3 py-1.5 text-sm text-zinc-200 hover:text-strong disabled:opacity-40 shrink-0"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -102,7 +102,7 @@ export default function AuditLog({ settings, save, register }) {
           <Loader2 className="w-4 h-4 animate-spin" /> Loading audit log…
         </div>
       ) : rows.length === 0 ? (
-        <div className="flex items-center gap-2 rounded-md border border-main bg-zinc-950 px-4 py-6 text-sm text-zinc-500">
+        <div className="flex items-center gap-2 rounded-md border border-main bg-card px-4 py-6 text-sm text-zinc-500">
           <History className="w-4 h-4" /> No audit entries match.
         </div>
       ) : (
@@ -110,7 +110,7 @@ export default function AuditLog({ settings, save, register }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-zinc-950 text-left text-xs uppercase tracking-wide text-zinc-500">
+                <tr className="bg-card text-left text-xs uppercase tracking-wide text-zinc-500">
                   <th className="px-3 py-2 font-medium">Time</th>
                   <th className="px-3 py-2 font-medium">Who</th>
                   <th className="px-3 py-2 font-medium">Action</th>
@@ -120,7 +120,7 @@ export default function AuditLog({ settings, save, register }) {
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
                 {rows.map((r) => (
-                  <tr key={r.id} className="bg-black hover:bg-zinc-900/40">
+                  <tr key={r.id} className="bg-body hover:bg-zinc-900/40">
                     <td className="px-3 py-2 text-zinc-400 whitespace-nowrap">{fmtTime(r.created_at)}</td>
                     <td className="px-3 py-2 text-zinc-200 whitespace-nowrap">
                       {r.username || r.principal_kind || '—'}
@@ -137,7 +137,7 @@ export default function AuditLog({ settings, save, register }) {
               </tbody>
             </table>
           </div>
-          <div className="border-t border-main bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+          <div className="border-t border-main bg-card px-3 py-2 text-xs text-zinc-500">
             Showing {rows.length} of {count} entries
           </div>
         </div>

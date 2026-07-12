@@ -30,7 +30,7 @@ function CopyButton({ text, title = 'Copy' }) {
       type="button"
       onClick={copy}
       title={title}
-      className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md"
+      className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md"
     >
       {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
     </button>
@@ -245,8 +245,8 @@ export default function Vault({ register }) {
                 onClick={() => setSelectedId(v.id)}
                 className={`w-full text-left px-3 py-2 rounded-md border transition-colors ${
                   selectedId === v.id
-                    ? 'border-zinc-500 bg-zinc-900'
-                    : 'border-main bg-zinc-950 hover:border-alt'
+                    ? 'border-zinc-500 bg-hover'
+                    : 'border-main bg-card hover:border-alt'
                 }`}
               >
                 <div className="flex items-center gap-1.5 pr-6">
@@ -275,7 +275,7 @@ export default function Vault({ register }) {
 
           <form
             onSubmit={createVaultSubmit}
-            className="border border-main rounded-md bg-zinc-950 p-3 space-y-2"
+            className="border border-main rounded-md bg-card p-3 space-y-2"
           >
             <div className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
               <Plus className="w-4 h-4" /> Create vault
@@ -300,7 +300,7 @@ export default function Vault({ register }) {
         {/* Right: selected vault's secrets */}
         <div className="space-y-4 min-w-0">
           {!selectedVault ? (
-            <div className="rounded-md border border-main bg-zinc-950 p-6 text-sm text-zinc-500">
+            <div className="rounded-md border border-main bg-card p-6 text-sm text-zinc-500">
               Select a vault to view its secrets.
             </div>
           ) : (
@@ -329,7 +329,7 @@ export default function Vault({ register }) {
                     return (
                       <div
                         key={s.id ?? s.key}
-                        className={`border border-main rounded-md bg-zinc-950 p-3 ${
+                        className={`border border-main rounded-md bg-card p-3 ${
                           s.expired ? 'opacity-50' : ''
                         }`}
                       >
@@ -346,7 +346,7 @@ export default function Vault({ register }) {
                               onClick={() => toggleReveal(s.key)}
                               disabled={revealBusy === s.key}
                               title={shown ? 'Hide value' : 'Reveal value'}
-                              className="p-2 text-zinc-400 hover:text-white border border-alt rounded-md disabled:opacity-40"
+                              className="p-2 text-zinc-400 hover:text-strong border border-alt rounded-md disabled:opacity-40"
                             >
                               {revealBusy === s.key ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -375,7 +375,7 @@ export default function Vault({ register }) {
                         {s.description && (
                           <p className="text-xs text-zinc-500 mt-1">{s.description}</p>
                         )}
-                        <code className="mt-2 block font-mono text-sm text-zinc-200 bg-black border border-alt rounded-md px-3 py-2 break-all">
+                        <code className="mt-2 block font-mono text-sm text-zinc-200 bg-body border border-alt rounded-md px-3 py-2 break-all">
                           {shown ? r.value : MASK}
                         </code>
                       </div>
@@ -387,7 +387,7 @@ export default function Vault({ register }) {
               {/* Add / rotate secret */}
               <form
                 onSubmit={addSecret}
-                className="border border-main rounded-md bg-zinc-950 p-4 space-y-2"
+                className="border border-main rounded-md bg-card p-4 space-y-2"
               >
                 <div className="text-xs font-medium text-zinc-400 flex items-center gap-1.5">
                   <Plus className="w-4 h-4" /> Add secret

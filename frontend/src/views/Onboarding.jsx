@@ -88,11 +88,11 @@ export default function Onboarding() {
       </div>
 
       {loading ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
           <Loader2 className="w-4 h-4 animate-spin inline" /> Loading…
         </div>
       ) : sessions.length === 0 ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
           <ClipboardList className="w-6 h-6 mx-auto mb-2 opacity-40" />
           No onboarding sessions — a device starts one when it first registers
         </div>
@@ -101,7 +101,7 @@ export default function Onboarding() {
           {sessions.map((s) => {
             const byStep = Object.fromEntries((s.steps || []).map((st) => [st.step, st]))
             return (
-              <div key={s.id} className="bg-zinc-900 border border-main rounded-lg p-4 space-y-3">
+              <div key={s.id} className="bg-hover border border-main rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-3">
                     <Smartphone className="w-4 h-4 text-zinc-400" />

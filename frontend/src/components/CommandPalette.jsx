@@ -411,7 +411,7 @@ export default function CommandPalette() {
     >
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-xl bg-zinc-900 border border-main rounded-xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-xl bg-hover border border-main rounded-xl shadow-2xl overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <Command shouldFilter={false} label="Command Palette" className="flex flex-col">
@@ -465,7 +465,7 @@ export default function CommandPalette() {
                       key={it.id}
                       value={it.id}
                       onSelect={() => runItem(it)}
-                      className="flex items-center gap-3 px-2 py-2 rounded-md text-sm text-zinc-300 cursor-pointer aria-selected:bg-zinc-800 aria-selected:text-white"
+                      className="flex items-center gap-3 px-2 py-2 rounded-md text-sm text-zinc-300 cursor-pointer aria-selected:bg-zinc-800 aria-selected:text-strong"
                     >
                       {Icon ? (
                         <Icon className="w-4 h-4 shrink-0 text-zinc-400" />

@@ -166,11 +166,11 @@ function GraphSurface({ id, pack, automation, flowRefs, onBack }) {
   const running = currentRun && ['queued', 'running'].includes(currentRun.status)
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-black workflow-editor">
+    <div className="flex-1 flex flex-col overflow-hidden bg-body workflow-editor">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-main bg-card shrink-0">
         <button onClick={onBack}
-                className="p-1.5 rounded hover:bg-zinc-900 text-zinc-400">
+                className="p-1.5 rounded hover:bg-hover text-zinc-400">
           <ArrowLeft className="w-4 h-4" />
         </button>
         <WorkflowIcon className="w-4 h-4 text-accent" />
@@ -210,12 +210,12 @@ function GraphSurface({ id, pack, automation, flowRefs, onBack }) {
 
         {hasWebhookTrigger && (
           <button onClick={showWebhook}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-main text-zinc-300 hover:bg-zinc-900">
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-main text-zinc-300 hover:bg-hover">
             <Webhook className="w-3.5 h-3.5" /> Webhook URL
           </button>
         )}
         <button onClick={validate}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-main text-zinc-300 hover:bg-zinc-900">
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-main text-zinc-300 hover:bg-hover">
           <ShieldCheck className="w-3.5 h-3.5" /> Validate
         </button>
 
@@ -249,7 +249,7 @@ function GraphSurface({ id, pack, automation, flowRefs, onBack }) {
           <span className="text-zinc-500">POST</span>
           <code className="mono text-zinc-300">{webhook.url}</code>
           <button onClick={copyWebhook}
-                  className="p-1 rounded hover:bg-zinc-900 text-zinc-400" title="Copy full URL">
+                  className="p-1 rounded hover:bg-hover text-zinc-400" title="Copy full URL">
             <Copy className="w-3 h-3" />
           </button>
           {copied && <span className="text-emerald-400">copied</span>}

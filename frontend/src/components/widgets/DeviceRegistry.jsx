@@ -121,7 +121,7 @@ export default function DeviceRegistry({ devices = [], sparklines = {}, queryRes
             placeholder="Filter by ID..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="bg-black border border-main px-3 py-1 text-xs rounded focus:outline-none focus:border-zinc-500 w-48"
+            className="bg-body border border-main px-3 py-1 text-xs rounded focus:outline-none focus:border-zinc-500 w-48"
           />
           <div className="flex border border-main rounded overflow-hidden">
             <button
@@ -243,7 +243,7 @@ export default function DeviceRegistry({ devices = [], sparklines = {}, queryRes
                     <td className="p-4 border-b border-main text-right">
                       <button
                         onClick={() => navigate(`/node/${d.device_id}`)}
-                        className="text-xs font-semibold text-zinc-500 hover:text-white transition-colors"
+                        className="text-xs font-semibold text-zinc-500 hover:text-strong transition-colors"
                       >
                         Open
                       </button>

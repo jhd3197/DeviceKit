@@ -20,7 +20,7 @@ export default function FleetHealth({ fleetHealth }) {
       <div className="p-4 space-y-3">
         {total > 0 ? (
           <>
-            <div className="flex h-3 rounded-full overflow-hidden bg-zinc-900">
+            <div className="flex h-3 rounded-full overflow-hidden bg-hover">
               {dist.healthy > 0 && (
                 <div
                   className="bg-emerald-500 transition-all"

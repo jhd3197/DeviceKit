@@ -72,18 +72,18 @@ export default function FleetVersions() {
 
       {/* Version rollup */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-zinc-900 border border-main rounded-lg p-3">
+        <div className="bg-hover border border-main rounded-lg p-3">
           <div className="text-[10px] uppercase font-bold text-zinc-500">Devices</div>
           <div className="text-2xl font-bold mono">{devices.length}</div>
         </div>
-        <div className="bg-zinc-900 border border-main rounded-lg p-3">
+        <div className="bg-hover border border-main rounded-lg p-3">
           <div className="text-[10px] uppercase font-bold text-zinc-500">Versions</div>
           <div className="text-2xl font-bold mono">{distinct_versions}</div>
         </div>
       </div>
 
       {loading ? (
-        <div className="bg-zinc-900 border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
+        <div className="bg-hover border border-main rounded-lg px-4 py-10 text-center text-zinc-500">
           <Loader2 className="w-4 h-4 animate-spin inline" /> Loading…
         </div>
       ) : (
@@ -94,13 +94,13 @@ export default function FleetVersions() {
               <Layers className="w-3.5 h-3.5" /> By version
             </p>
             {versions.length === 0 ? (
-              <div className="bg-zinc-900 border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
+              <div className="bg-hover border border-main rounded-lg px-4 py-12 text-center text-zinc-500">
                 No agent devices registered
               </div>
             ) : (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {versions.map((v) => (
-                  <div key={v.version} className="bg-zinc-900 border border-main rounded-lg p-4 space-y-2">
+                  <div key={v.version} className="bg-hover border border-main rounded-lg p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="mono text-sm font-semibold text-blue-300">{v.version}</span>
                       <span className="text-[10px] text-zinc-500">
@@ -121,7 +121,7 @@ export default function FleetVersions() {
             <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500 mb-3">
               Devices
             </p>
-            <div className="bg-zinc-900 border border-main rounded-lg overflow-hidden">
+            <div className="bg-hover border border-main rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
