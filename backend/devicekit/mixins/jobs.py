@@ -97,6 +97,8 @@ class JobsMixin:
         # Domain handlers live on their own mixins; register whichever the composite provides.
         if hasattr(self, "_job_run_automation"):
             self.register_job_kind("automation.run", self._job_run_automation)
+        if hasattr(self, "_job_run_graph"):
+            self.register_job_kind("automation.run_graph", self._job_run_graph)
         if hasattr(self, "_job_schedule_tick"):
             self.register_job_kind("automation.schedule.tick", self._job_schedule_tick)
         self.register_job_kind("bundle.retention.prune", self._job_prune_bundles)

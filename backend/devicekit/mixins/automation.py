@@ -428,7 +428,8 @@ class AutomationMixin:
     # ---------------------------------------------------------------
     # Automation CRUD
     # ---------------------------------------------------------------
-    def create_automation(self, name, description="", steps=None, tags=None, workspace_id=None):
+    def create_automation(self, name, description="", steps=None, tags=None,
+                          workspace_id=None, graph=None):
         now = time.time()
         with session_scope() as s:
             automation = Automation(
@@ -440,6 +441,7 @@ class AutomationMixin:
                 created_at=now,
                 updated_at=now,
                 workspace_id=workspace_id,   # born-in-workspace (plan 20 part 4); None = global
+                graph=graph,                 # plan 22: a tramo WorkflowDoc, or None (linear)
             )
             s.add(automation)
             s.flush()
@@ -495,6 +497,12 @@ class AutomationMixin:
         automation = self.get_automation(automation_id)
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
+
+        # Graph automations (plan 22) run on the workflow engine; every caller of this
+        # method (routes, MCP actions, schedules) funnels through without changes.
+        if automation.get("graph") and hasattr(self, "_enqueue_graph_run"):
+            return self._enqueue_graph_run(automation, device_id, "manual", None,
+                                           self_heal=self_heal)
 
         steps = automation.get("steps", [])
         run_record = {
@@ -917,6 +925,8 @@ class AutomationMixin:
             row.step_results = run_record.get("step_results", [])
             row.error = run_record.get("error")
             row.self_heal = run_record.get("self_heal", False)
+            row.kind = run_record.get("kind", "linear")
+            row.trigger = run_record.get("trigger")
 
     def get_automation_run(self, run_id):
         with session_scope() as s:
@@ -1132,6 +1142,7 @@ class AutomationMixin:
             description=automation.get("description", ""),
             steps=steps,
             tags=list(automation.get("tags", [])),
+            graph=copy.deepcopy(automation.get("graph")),
         )
         logger.info(f"Cloned automation '{automation['name']}' -> '{cloned['name']}'")
         return cloned
@@ -1141,8 +1152,11 @@ class AutomationMixin:
         if not automation:
             raise ValueError(f"Automation {automation_id} not found")
         exported = copy.deepcopy(automation)
-        for key in ("id", "created_at", "updated_at"):
+        # webhook_token is credential-like (the token *is* the auth) — never export it.
+        for key in ("id", "created_at", "updated_at", "webhook_token"):
             exported.pop(key, None)
+        if exported.get("graph") is None:
+            exported.pop("graph", None)
         for step in exported.get("steps", []):
             step.pop("id", None)
         return exported
@@ -1154,4 +1168,5 @@ class AutomationMixin:
             description=data.get("description", ""),
             steps=data.get("steps", []),
             tags=data.get("tags", []),
+            graph=data.get("graph"),
         )

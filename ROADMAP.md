@@ -520,7 +520,7 @@ See [docs/plans/21-public-api-and-mcp-server.md](docs/plans/21-public-api-and-mc
 **Goal**: Replace the linear step engine with a branching graph (loops, sub-flows, parallel device fan-out) and four trigger types.
 See [docs/plans/22-automation-engine-v2.md](docs/plans/22-automation-engine-v2.md).
 
-- [ ] nodes+edges model + Kahn cycle-validation + topo executor + linear→graph compat shim (no user migration) + AST interpolation (not `eval`)
+- [x] nodes+edges model + Kahn cycle-validation + topo executor + linear→graph compat shim (no user migration) + AST interpolation (not `eval`)
 - [ ] Control-flow nodes: `logic_if`, bounded `for_each`, `sub_automation`, typed step variables
 - [ ] Error contract: per-node retry/backoff + `on_failure` edge + compensation node
 - [ ] Triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run`

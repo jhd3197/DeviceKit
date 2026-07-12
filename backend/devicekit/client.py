@@ -15,6 +15,7 @@ from devicekit.mixins.queue import QueueMixin
 from devicekit.mixins.alerts import AlertMixin
 from devicekit.mixins.activity import ActivityMixin
 from devicekit.mixins.automation import AutomationMixin
+from devicekit.mixins.workflow import WorkflowMixin
 from devicekit.mixins.profile import ProfileMixin
 from devicekit.mixins.prompture_agent import PromptureAgentMixin
 from devicekit.mixins.agent_gate import AgentGateMixin
@@ -50,6 +51,7 @@ class Client(
     DynamodbMixin,
     AwsStorageMixin,
     AutomationMixin,
+    WorkflowMixin,
     ProfileMixin,
     NLAutomationMixin,
     PromptureAgentMixin,

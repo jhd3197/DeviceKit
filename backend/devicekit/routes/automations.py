@@ -67,13 +67,55 @@ def make_blueprint(client, limiter):
             return '', 204
         return jsonify({'error': 'Automation not found'}), 404
 
+    # ── Workflow graph (plan 22) ──
+    @bp.route('/automations/<automation_id>/graph')
+    @require_scope('automations:read')
+    def automations_graph_get(automation_id):
+        result = client.get_automation_graph(automation_id)
+        if result is None:
+            return jsonify({'error': 'Automation not found'}), 404
+        return jsonify(result)
+
+    @bp.route('/automations/<automation_id>/graph', methods=['PUT'])
+    @require_scope('automations:write')
+    def automations_graph_save(automation_id):
+        data = request.get_json(silent=True) or {}
+        doc = data.get('graph', data if data.get('nodes') is not None else None)
+        if not isinstance(doc, dict):
+            return jsonify({'error': 'graph document is required'}), 400
+        try:
+            result = client.save_automation_graph(automation_id, doc)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        if result is None:
+            return jsonify({'error': 'Automation not found'}), 404
+        return jsonify(result)
+
+    @bp.route('/automations/<automation_id>/validate', methods=['POST'])
+    @require_scope('automations:read')
+    def automations_graph_validate(automation_id):
+        data = request.get_json(silent=True) or {}
+        doc = data.get('graph')
+        if not isinstance(doc, dict):
+            stored = client.get_automation_graph(automation_id)
+            if stored is None:
+                return jsonify({'error': 'Automation not found'}), 404
+            doc = stored['graph']
+        return jsonify(client.validate_workflow_doc(doc))
+
     @bp.route('/automations/<automation_id>/run', methods=['POST'])
     @require_scope('automations:run')
     def automations_run(automation_id):
         data = request.get_json(silent=True) or {}
         device_id = data.get('device_id')
         if not device_id:
-            return jsonify({'error': 'device_id is required'}), 400
+            # Graph automations may run deviceless (fan-out/trigger nodes carry their
+            # own targeting); linear step runs still need a bound device.
+            automation = client.get_automation(automation_id)
+            if not automation:
+                return jsonify({'error': 'Automation not found'}), 404
+            if not automation.get('graph'):
+                return jsonify({'error': 'device_id is required'}), 400
         self_heal = bool(data.get('self_heal', False))
         try:
             run_record = client.execute_automation(automation_id, device_id, self_heal=self_heal)

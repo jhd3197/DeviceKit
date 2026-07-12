@@ -21,6 +21,12 @@ class Automation(Base):
     updated_at = Column(Float, nullable=False)
     # plan 20 part 4: born-in-workspace. NULL = global (unscoped, pre-plan-20 behavior).
     workspace_id = Column(String, nullable=True, index=True)
+    # plan 22: a tramo WorkflowDoc ({version, nodes, edges, meta}). NULL = linear
+    # automation (the `steps` list stays authoritative); set = graph automation.
+    graph = Column(JSON, nullable=True)
+    # plan 22 part 4: per-automation inbound webhook token — the id *is* the auth
+    # (POST /hooks/<token>). NULL until a webhook trigger is enabled.
+    webhook_token = Column(String, nullable=True, index=True, unique=True)
 
     def to_dict(self):
         return {
@@ -32,6 +38,8 @@ class Automation(Base):
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "workspace_id": self.workspace_id,
+            "graph": self.graph,
+            "webhook_token": self.webhook_token,
         }
 
 
@@ -51,6 +59,11 @@ class AutomationRun(Base):
     step_results = Column(JSON, default=list)
     error = Column(Text, nullable=True)
     self_heal = Column(Boolean, default=False)
+    # plan 22: 'linear' (step-list run) or 'graph' (WorkflowDoc run). For graph runs,
+    # step_results holds per-node records and `trigger` the payload that started it
+    # ({type: manual|webhook|cron|event, ...}).
+    kind = Column(String, default="linear")
+    trigger = Column(JSON, nullable=True)
 
     def to_dict(self):
         return {
@@ -67,6 +80,8 @@ class AutomationRun(Base):
             "step_results": self.step_results or [],
             "error": self.error,
             "self_heal": bool(self.self_heal),
+            "kind": self.kind or "linear",
+            "trigger": self.trigger,
         }
 
 
