@@ -1,6 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, subscribeToEvents } from '../api'
 
+// Collapse per-device sparkline series into one fleet-average series, aligning devices
+// from the most recent point backwards so short histories still contribute their tail.
+function averageSeries(sparkMap = {}) {
+  const arrays = Object.values(sparkMap).filter((a) => Array.isArray(a) && a.length >= 2)
+  if (!arrays.length) return []
+  const len = Math.max(...arrays.map((a) => a.length))
+  const out = []
+  for (let i = 0; i < len; i++) {
+    const vals = arrays
+      .map((a) => a[a.length - len + i])
+      .filter((v) => typeof v === 'number')
+    if (vals.length) out.push(vals.reduce((s, v) => s + v, 0) / vals.length)
+  }
+  return out
+}
+
 // Centralizes the fleet-wide data every dashboard widget shares: stats, the device list,
 // fleet health, aggregate AI cost, 24h battery sparklines, and the live SSE connection.
 // Extracted out of Dashboard.jsx so widgets stay self-contained while the composer owns a
@@ -15,6 +31,7 @@ export default function useFleetData() {
   const [fleetHealth, setFleetHealth] = useState(null)
   const [fleetAiCost, setFleetAiCost] = useState(0)
   const [sparklines, setSparklines] = useState({}) // device_id -> [battery %] over 24h (plan 08)
+  const [trends, setTrends] = useState({ battery: [], cpu: [] }) // fleet-average 24h series
   const [toasts, setToasts] = useState([])
 
   const fetchData = useCallback(async () => {
@@ -50,11 +67,19 @@ export default function useFleetData() {
   // Initial fetch
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Battery sparklines for the fleet (24h) — one cheap batch call, refreshed periodically.
+  // Battery + CPU sparklines for the fleet (24h) — cheap batch calls, refreshed
+  // periodically. Per-device battery series feed the registry rows; the fleet-average
+  // series feed the KPI tiles' trend lines.
   useEffect(() => {
     const loadSparks = () => {
       api.getFleetSparklines('battery_pct', null, '24h')
-        .then((r) => setSparklines(r.sparklines || {}))
+        .then((r) => {
+          setSparklines(r.sparklines || {})
+          setTrends((prev) => ({ ...prev, battery: averageSeries(r.sparklines) }))
+        })
+        .catch(() => {})
+      api.getFleetSparklines('cpu_load', null, '24h')
+        .then((r) => setTrends((prev) => ({ ...prev, cpu: averageSeries(r.sparklines) })))
         .catch(() => {})
     }
     loadSparks()
@@ -103,7 +128,7 @@ export default function useFleetData() {
   }, [])
 
   return {
-    stats, devices, fleetHealth, fleetAiCost, sparklines, sseConnected,
+    stats, devices, fleetHealth, fleetAiCost, sparklines, trends, sseConnected,
     loading, error, toasts, dismissToast, refresh: fetchData,
   }
 }

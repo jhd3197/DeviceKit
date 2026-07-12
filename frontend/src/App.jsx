@@ -177,20 +177,6 @@ function Sidebar() {
         ))}
       </nav>
 
-      {/* User card */}
-      <div className="p-4 border-t border-main">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-zinc-800 border border-main flex items-center justify-center text-xs font-bold text-zinc-400">
-            JD
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-xs font-semibold truncate">Juan Denis</p>
-            <p className="text-[10px] text-zinc-500 mono uppercase">
-              Fort Lauderdale Node
-            </p>
-          </div>
-        </div>
-      </div>
     </aside>
   )
 }
