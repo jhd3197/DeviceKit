@@ -46,6 +46,17 @@ in their plans — places DeviceKit would lead rather than follow.
 | 24 | [Fleet health & remediation](24-fleet-health-and-remediation.md) | `fleet_sweep` bounded fan-out + doctor/repair allowlist + drift + z-score anomaly + regression forecast (finishes Phase 22); reframes "scale" as discipline not multi-node | 05, 07, 08, 06 |
 | 25 | [Agent lifecycle & backup/DR](25-agent-lifecycle-and-backup.md) | Agent-enforced read-only primitive allowlist, capability negotiation, **OTA agent updates** (greenfield), onboarding state machine, agent-plugin contract, backup + **restore drills** | 07, 05, 08 |
 
+### Third wave (26–28) — palette parity & visual identity
+
+Plans 10 and 12 shipped the first-generation command palette and theming; ServerKit's have
+since grown past them, and DeviceKit never had a real logo. These close both gaps.
+
+| # | Plan | What it borrows | Depends on |
+|---|------|-----------------|------------|
+| 26 | [Command palette v2](26-command-palette-v2.md) | `F1`/`Ctrl+Shift+P` bindings, settings-card index + deep-link flash, frecency ranking, backend `/search` omnisearch (extends 10) | 10, 12, 20 |
+| 27 | [Brand identity: purple phone logo](27-brand-identity-purple-phone.md) | Master-SVG pipeline (squircle + indigo gradient), accent-tinted JSX logo, favicon redraw, Android adaptive-icon alignment, purple default accent | 12, 25 (soft) |
+| 28 | [Appearance v2: themes & tokens](28-appearance-v2-themes-and-tokens.md) | One CSS-token sheet, dark/light/system via `data-theme` + `matchMedia`, 8-preset + custom accent picker, white-label (extends 12) | 12, 27 |
+
 ## Executing a plan
 
 - A local **plan-executor prompt** (`docs/plans/prompt.md`, git-ignored because it
