@@ -115,7 +115,14 @@ properly as one master SVG in ServerKit's style, and roll it out to every surfac
 |---|---|---|
 | 1 ✅ | Master SVG + `Logo.jsx` + sidebar/login/About swap + favicon + manifest | one mark everywhere on web; changing the accent re-tints the sidebar logo live |
 | 2 ✅ | Purple default accent (`#6d7cff`), presets updated, settings default | a fresh install boots purple; an existing user's chosen accent survives |
-| 3 | Android adaptive-icon gradient + glyph alignment + APK rebuild | the launcher icon on a real device matches the web favicon family |
+| 3 🚧 | Android adaptive-icon gradient + glyph alignment + APK rebuild | the launcher icon on a real device matches the web favicon family |
+
+**Phase 3 notes:** `ic_launcher_background.xml` solid `#6366F1` → aapt `<gradient>` diagonal
+`#6366f1 → #4f46e5` (matches the master). `ic_launcher_foreground.xml` redrawn to the master's
+proportions — white phone frame, see-through screen (reveals the gradient), home-indicator pill,
+and the green `#3DDC97` LED. `ic_notification.xml` left as-is (system alpha-masks + tints
+notification icons, so color/LED is dropped; the existing phone glyph is the same family — no
+drift). APK rebuild/flash tracked below.
 
 **Phase 1 notes (shipped):** `Logo.jsx` wires stop 1 → `--accent`, stop 2 → `--accent-dim`
 (not `--accent-hover` as the plan sketched — DeviceKit's `--accent-hover` is *brighter* than
