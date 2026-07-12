@@ -11,7 +11,8 @@ import { Pane, Field, SaveBar } from './fields'
 
 const LS_KEY = 'devicekit_api_key'
 
-export default function ApiAccess() {
+export default function ApiAccess({ register }) {
+  const reg = register || (() => ({}))
   const [value, setValue] = useState(() => localStorage.getItem(LS_KEY) || '')
   const [baseline, setBaseline] = useState(value)
   const [show, setShow] = useState(false)
@@ -46,6 +47,7 @@ export default function ApiAccess() {
         label="API key"
         help="Stored in this browser only. Reloads pick it up automatically."
         htmlFor="api-key"
+        register={reg('api-key')}
       >
         <div className="flex items-center gap-2 w-full">
           <div className="relative flex-1">

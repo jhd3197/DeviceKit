@@ -344,7 +344,8 @@ function InviteRow({ invite, onChanged, onError }) {
   )
 }
 
-export default function Users({ settings, save }) {
+export default function Users({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const [users, setUsers] = useState([])
   const [invites, setInvites] = useState([])
   const [schema, setSchema] = useState(null)
@@ -468,7 +469,7 @@ export default function Users({ settings, save }) {
       description="Manage accounts, roles, per-user permissions, and invitation links. Admin only."
     >
       {/* ------------------------------ Accounts ------------------------------ */}
-      <section>
+      <section {...reg('users-accounts')}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
             <UsersIcon className="w-4 h-4 text-zinc-500" /> Accounts
@@ -563,7 +564,7 @@ export default function Users({ settings, save }) {
       </section>
 
       {/* ---------------------------- Invitations ----------------------------- */}
-      <section>
+      <section {...reg('user-invitations')}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
             <Mail className="w-4 h-4 text-zinc-500" /> Invitations

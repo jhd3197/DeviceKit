@@ -15,7 +15,8 @@ function InfoRow({ label, children }) {
   )
 }
 
-export default function About({ settings }) {
+export default function About({ settings, register }) {
+  const reg = register || (() => ({}))
   const [sdkVersion, setSdkVersion] = useState(null)
   const [health, setHealth] = useState('checking') // checking | ok | down
 
@@ -48,7 +49,7 @@ export default function About({ settings }) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-main bg-card px-5">
+      <div className="rounded-lg border border-main bg-card px-5" {...reg('about-version')}>
         <InfoRow label="App version">v{APP_VERSION}</InfoRow>
         <InfoRow label="Extension SDK">
           {sdkVersion == null ? <Loader2 className="w-4 h-4 animate-spin inline" /> : sdkVersion}

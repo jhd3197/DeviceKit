@@ -9,7 +9,8 @@ import { usePaneForm } from './usePaneForm'
 
 const KEYS = ['bundles.retention_days', 'bundles.share_token_lifetime_minutes']
 
-export default function Bundles({ settings, save }) {
+export default function Bundles({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const f = usePaneForm(settings, KEYS, save)
 
   return (
@@ -21,6 +22,7 @@ export default function Bundles({ settings, save }) {
         label="Retention window"
         help="Bundles older than this are deleted on the next cleanup pass."
         htmlFor="bundle-retention"
+        register={reg('retention')}
       >
         <NumberInput
           id="bundle-retention"
@@ -36,6 +38,7 @@ export default function Bundles({ settings, save }) {
         label="Share-link lifetime"
         help="Default expiry for a bundle share link when no explicit duration is given."
         htmlFor="share-lifetime"
+        register={reg('share-link-lifetime')}
       >
         <NumberInput
           id="share-lifetime"

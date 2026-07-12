@@ -93,6 +93,29 @@
   box-shadow: 0 0 15px -5px rgb(var(--accent) / 0.2);
 }
 
+/* Settings deep-link flash (plan 26). A palette settings result navigates to
+   /settings/<tab>?focus=setting:<id>; useSettingFocus scrolls the card into view and toggles
+   this class for ~2s so a ring + wash draws the eye. Accent-tinted so it tracks the ramp. */
+@keyframes setting-focus-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgb(var(--accent) / 0);
+    background-color: rgb(var(--accent) / 0);
+  }
+  15% {
+    box-shadow: 0 0 0 2px rgb(var(--accent) / 0.7);
+    background-color: rgb(var(--accent) / 0.1);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--accent) / 0);
+    background-color: rgb(var(--accent) / 0);
+  }
+}
+.is-setting-focused {
+  animation: setting-focus-flash 2s ease-out;
+  border-radius: 0.5rem;
+  scroll-margin: 6rem;
+}
+
 /* Test result borders */
 .test-pass {
   color: #10b981;

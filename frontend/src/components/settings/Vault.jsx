@@ -38,7 +38,8 @@ function CopyButton({ text, title = 'Copy' }) {
 }
 
 // Receives { settings, save } like every Settings pane; this pane manages its own data.
-export default function Vault() {
+export default function Vault({ register }) {
+  const reg = register || (() => ({}))
   const [vaults, setVaults] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -231,7 +232,7 @@ export default function Vault() {
     >
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="grid grid-cols-[14rem_1fr] gap-6 items-start">
+      <div className="grid grid-cols-[14rem_1fr] gap-6 items-start" {...reg('vault-secrets')}>
         {/* Left: vault list + create */}
         <div className="space-y-3">
           {vaults.length === 0 && (

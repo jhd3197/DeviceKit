@@ -83,7 +83,8 @@ function RawKeyBox({ action, rawKey, onDismiss }) {
 }
 
 // Receives { settings, save } like every Settings pane; this pane manages its own data.
-export default function ApiKeysPane() {
+export default function ApiKeysPane({ register }) {
+  const reg = register || (() => ({}))
   const [keys, setKeys] = useState([])
   const [scopeCatalog, setScopeCatalog] = useState([])
   const [loading, setLoading] = useState(true)
@@ -199,7 +200,7 @@ export default function ApiKeysPane() {
       )}
 
       {/* Key list */}
-      <div className="space-y-3">
+      <div className="space-y-3" {...reg('api-keys')}>
         {keys.length === 0 && (
           <p className="text-sm text-zinc-500">No API keys yet. Create one to get started.</p>
         )}

@@ -189,7 +189,8 @@ function HubStatus({ health, probing, onProbe }) {
   )
 }
 
-export default function AiSettings({ settings, save }) {
+export default function AiSettings({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const f = usePaneForm(settings, KEYS, save)
   const overrides = f.draft['ai.model_overrides'] || {}
   const setOverride = (feature, value) =>
@@ -228,6 +229,7 @@ export default function AiSettings({ settings, save }) {
         label="Backend"
         help="Direct uses provider keys stored here. Prompture Hub routes every AI call through a self-hosted gateway holding the real keys — DeviceKit only stores one scoped hub key."
         htmlFor="ai-backend"
+        register={reg('ai-backend')}
       >
         <Select
           id="ai-backend"
@@ -246,6 +248,7 @@ export default function AiSettings({ settings, save }) {
             label="Hub URL"
             help="Where prompture-hub is running. The backend probes it server-side."
             htmlFor="ai-hub-url"
+            register={reg('ai-hub-url')}
           >
             <TextInput
               id="ai-hub-url"
@@ -274,6 +277,7 @@ export default function AiSettings({ settings, save }) {
             : "e.g. claude/claude-sonnet-4-20250514. Blank uses the server's PROMPTURE_DEFAULT_MODEL."
         }
         htmlFor="ai-default-model"
+        register={reg('ai-default-model')}
       >
         <ModelInput
           id="ai-default-model"
@@ -284,7 +288,7 @@ export default function AiSettings({ settings, save }) {
         />
       </Field>
 
-      <div className="pt-2">
+      <div className="pt-2" {...reg('ai-model-overrides')}>
         <div className="flex items-center gap-2 mb-3">
           <Sparkles className="w-4 h-4 text-accent" />
           <h3 className="text-sm font-semibold text-zinc-200">Per-feature overrides</h3>
@@ -308,7 +312,7 @@ export default function AiSettings({ settings, save }) {
       <SaveBar dirty={f.dirty} saving={f.saving} savedAt={f.savedAt} onSave={f.persist} onReset={f.reset} />
 
       {backend === 'direct' && (
-        <div className="pt-6 border-t border-main">
+        <div className="pt-6 border-t border-main" {...reg('ai-provider-keys')}>
           <ProviderKeys settings={settings} save={save} />
         </div>
       )}

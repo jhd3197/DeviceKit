@@ -26,7 +26,8 @@ function statusClass(status) {
   return 'text-zinc-400'
 }
 
-export default function AuditLog({ settings, save }) {
+export default function AuditLog({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const [rows, setRows] = useState([])
   const [count, setCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -62,7 +63,7 @@ export default function AuditLog({ settings, save }) {
       description="Security-relevant actions recorded by the backend: who did what, from where, and whether it succeeded. Admin-only and read-only."
     >
       {/* Filter bar */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" {...reg('audit-log')}>
         <div className="relative flex-1">
           <Filter className="w-4 h-4 text-zinc-600 absolute left-3 top-1/2 -translate-y-1/2" />
           <input

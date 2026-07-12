@@ -16,7 +16,8 @@ import { Pane } from './fields'
 import { api } from '../../api'
 import { useAuth } from '../../auth/AuthContext'
 
-export default function Security({ settings, save }) {
+export default function Security({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const { principal, twofa, logout, refresh } = useAuth()
 
   const [setup, setSetup] = useState(null) // { secret, provisioning_uri }
@@ -122,7 +123,7 @@ export default function Security({ settings, save }) {
       {error && <div className="text-sm text-red-400">{error}</div>}
 
       {/* Two-factor authentication */}
-      <div className="space-y-4">
+      <div className="space-y-4" {...reg('two-factor-auth')}>
         <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
           {enrolled ? (
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -261,7 +262,7 @@ export default function Security({ settings, save }) {
       </div>
 
       {/* Sign out */}
-      <div className="flex items-center pt-4 mt-2 border-t border-main">
+      <div className="flex items-center pt-4 mt-2 border-t border-main" {...reg('sign-out')}>
         <button
           type="button"
           onClick={signOut}

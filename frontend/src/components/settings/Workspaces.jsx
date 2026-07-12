@@ -22,7 +22,8 @@ function fmtTime(ts) {
   return new Date(n * 1000).toLocaleString()
 }
 
-export default function Workspaces({ settings, save }) {
+export default function Workspaces({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const [workspaces, setWorkspaces] = useState([])
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -183,7 +184,10 @@ export default function Workspaces({ settings, save }) {
       {error && <div className="text-sm text-red-400">{error}</div>}
 
       {/* Active workspace banner */}
-      <div className="flex items-center justify-between rounded-md border border-main bg-zinc-950 px-4 py-3">
+      <div
+        className="flex items-center justify-between rounded-md border border-main bg-zinc-950 px-4 py-3"
+        {...reg('active-workspace')}
+      >
         <div className="flex items-center gap-2 text-sm">
           <Building2 className="w-4 h-4 text-zinc-500" />
           {activeId ? (
@@ -211,7 +215,10 @@ export default function Workspaces({ settings, save }) {
           <Loader2 className="w-4 h-4 animate-spin" /> Loading workspaces…
         </div>
       ) : (
-        <div className="rounded-md border border-main divide-y divide-zinc-800/60 overflow-hidden">
+        <div
+          className="rounded-md border border-main divide-y divide-zinc-800/60 overflow-hidden"
+          {...reg('workspaces')}
+        >
           {workspaces.length === 0 && (
             <div className="px-4 py-6 text-sm text-zinc-500">No workspaces yet. Create one below.</div>
           )}

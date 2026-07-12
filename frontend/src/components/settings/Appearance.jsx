@@ -15,7 +15,8 @@ import {
   getStoredAccent,
 } from '../../theme'
 
-export default function Appearance({ settings, save }) {
+export default function Appearance({ settings, save, register }) {
+  const reg = register || (() => ({}))
   const serverAccent = normalizeHex(settings?.['appearance.accent']) || null
   const [accent, setLocal] = useState(() => serverAccent || getStoredAccent())
   const [hexInput, setHexInput] = useState(accent)
@@ -45,7 +46,11 @@ export default function Appearance({ settings, save }) {
 
   return (
     <Pane title="Appearance" description="Personalize the accent color used across DeviceKit.">
-      <Field label="Accent color" help="Recolors buttons, links, active states, and charts.">
+      <Field
+        label="Accent color"
+        help="Recolors buttons, links, active states, and charts."
+        register={reg('accent-color')}
+      >
         <div className="flex items-center gap-2">
           <span
             className="w-8 h-8 rounded-md border border-alt shrink-0"

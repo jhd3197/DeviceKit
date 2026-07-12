@@ -27,6 +27,7 @@ import {
 
 import { api } from '../api'
 import { useAuth } from '../auth/AuthContext'
+import { useSettingFocus } from '../hooks/useSettingFocus'
 import { useContributions } from '../extensions/contributions'
 import ExtensionSlot from '../extensions/ExtensionSlot'
 import General from '../components/settings/General'
@@ -104,6 +105,9 @@ export default function Settings() {
   const navigate = useNavigate()
   const { envelope } = useContributions()
   const { isAdmin } = useAuth()
+  // Palette settings deep-links (plan 26): reads ?focus=setting:<id> and hands panes a
+  // register(id) they attach to their cards so the target scrolls into view and flashes.
+  const { register } = useSettingFocus()
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -187,7 +191,7 @@ export default function Settings() {
           ) : error ? (
             <p className="text-red-400 text-sm">{error}</p>
           ) : (
-            <Pane settings={settings} save={save} />
+            <Pane settings={settings} save={save} register={register} />
           )}
         </div>
       </div>

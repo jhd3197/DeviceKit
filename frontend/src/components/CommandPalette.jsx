@@ -21,6 +21,8 @@ import { api } from '../api'
 import { useContributions } from '../extensions/contributions'
 import ExtensionIcon from '../extensions/ExtensionIcon'
 import { recordUse, frecencyScore, recentEntries } from '../utils/paletteFrecency'
+import { SETTINGS_INDEX } from '../data/settingsIndex'
+import { usePaletteAuthz } from '../hooks/usePaletteAuthz'
 
 // Static pages — mirrors the sidebar `navSections` in App.jsx. Keep in sync when nav changes.
 const PAGES = [
@@ -120,6 +122,7 @@ function keywordString(kw) {
 export default function CommandPalette() {
   const navigate = useNavigate()
   const { envelope } = useContributions()
+  const { allow } = usePaletteAuthz()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [devices, setDevices] = useState([])
@@ -267,8 +270,23 @@ export default function CommandPalette() {
         path: e.path,
       })
     }
-    return out
-  }, [devices, automations, extEntries])
+    // Settings omnisearch (plan 26): every indexed settings card. Selecting one deep-links to
+    // `/settings/<tab>?focus=setting:<id>`, where useSettingFocus scrolls it in + flashes it.
+    for (const s of SETTINGS_INDEX) {
+      out.push({
+        id: `setting:${s.id}`,
+        group: 'Settings',
+        label: s.label,
+        sublabel: s.tab,
+        keywords: `${s.label} ${s.description || ''} ${s.keywords || ''} ${s.tab} settings`,
+        icon: Settings,
+        adminOnly: s.adminOnly,
+        path: `/settings/${s.tab}?focus=setting:${s.id}`,
+      })
+    }
+    // Authz: never surface something the user can't reach (admin-only cards for non-admins).
+    return out.filter(allow)
+  }, [devices, automations, extEntries, allow])
 
   // Recent items (shown only on an empty query). Re-resolve each recent's live icon/action from
   // the current item list when possible; fall back to plain path navigation for stale entries.
@@ -322,7 +340,9 @@ export default function CommandPalette() {
     const q = query.trim()
     let list
     if (!q) {
-      list = [...recentItems, ...items]
+      // Empty state browses recents + destinations, but not the ~dozens of settings cards —
+      // those surface only once the user types (they'd flood the empty listing otherwise).
+      list = [...recentItems, ...items.filter((it) => it.group !== 'Settings')]
     } else {
       // Final score = fuzzy + category weight + capped frecency (plan 26): among comparable
       // fuzzy matches, higher-signal groups and items you use often float up.
