@@ -327,16 +327,26 @@ class FleetPolicyMixin:
                 return a
         return None
 
+    def _adb_read(self, args, device_id, attempts=3, delay=0.5):
+        """ADB read with retry-on-empty. A competing adb install restarting the shared
+        server makes ``run_adb_command`` intermittently return "" (observed live on a host
+        with SDK + standalone + adbutils-bundled adb); reads are safe to repeat."""
+        out = ""
+        for attempt in range(attempts):
+            if attempt:
+                time.sleep(delay)
+            out = (self.run_adb_command(args, device=device_id) or "").strip()
+            if out:
+                return out
+        return out
+
     def _adb_installed_version(self, device_id, package):
-        out = self.run_adb_command(["shell", "dumpsys", "package", package],
-                                   device=device_id) or ""
+        out = self._adb_read(["shell", "dumpsys", "package", package], device_id)
         m = _VERSION_NAME_RE.search(out)
         return m.group(1) if m else None
 
     def _adb_get_setting(self, device_id, namespace, key):
-        out = self.run_adb_command(["shell", "settings", "get", namespace, key],
-                                   device=device_id)
-        out = (out or "").strip()
+        out = self._adb_read(["shell", "settings", "get", namespace, key], device_id)
         return None if out in ("", "null") else out
 
     # ------------------------------------------------------------------
@@ -533,9 +543,14 @@ class FleetPolicyMixin:
                 value = self._resolve_or_generate_secret(step)
             else:
                 value = step["value"]
-            self.run_adb_command(["shell", "settings", "put", ns, key, str(value)],
-                                 device=device_id)
-            actual = self._adb_get_setting(device_id, ns, key)
+            put = ["shell", "settings", "put", ns, key, str(value)]
+            # A put that lands in an adb-server restart is silently lost; verify by
+            # read-back and re-put once before declaring the step failed.
+            for _ in range(2):
+                self.run_adb_command(put, device=device_id)
+                actual = self._adb_get_setting(device_id, ns, key)
+                if actual == str(value):
+                    break
             if actual != str(value):
                 raise RuntimeError(
                     f"settings put verification failed for {ns}.{key} (got {actual!r})")

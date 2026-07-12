@@ -1,6 +1,12 @@
 # Plan 23 — Desired-State Fleet Policy (`devicekit.yaml`)
 
-**Status:** proposed
+**Status:** ✅ shipped (2026-07-12) — all 6 phases. Engine in `backend/devicekit/policy/`
+(spec/planner/scaffold, pure) + `mixins/fleet_policy.py` (live seams, jobs, drift) +
+`routes/fleet_policies.py`; format doc at `docs/DEVICEKIT_YAML.md`; 74 tests
+(`test_fleet_policy*.py`). **Live-verified end-to-end on the Samsung A03s**: scaffold →
+adopt (plan empty) → apply → hand-induced drift detected (edge-triggered notification) →
+reconcile job restored the device → re-plan empty → second apply short-circuited on the
+unchanged hash. Deviations logged at the end of this doc.
 **Inspired by:** ServerKit's `serverkit.yaml` is a full desired-state reconcile loop, framed
 exactly right in `docs/SERVERKIT_YAML.md`: *"live panel state is the state; the manifest is the
 desired state."* The pipeline is worth porting almost 1:1: **spec**
@@ -79,14 +85,14 @@ as declarable state), 22 (declared automations are graph automations).
 
 ## Phases
 
-| Phase | Delivers | Proves |
-|---|---|---|
-| 1 | `devicekit.yaml` schema + validator + normalize | desired state is declarable + validated |
-| 2 | `FleetPolicy` persistence (raw + normalized + sha256 + status) scoped to device/group | policy is durable + hashed |
-| 3 | plan: desired-vs-live diff → ordered steps + hard blockers (honesty rule) | dry-run is safe + explicit |
-| 4 | apply as a job (snapshots, idempotent, per-device fan-out) | policy → real device state |
-| 5 | drift detection (shared with plan 24) + reconcile (pending-by-default, opt-in autoApply) | drift is visible + fixable |
-| 6 | scaffold YAML from live state (secrets → `fromSecret`) | adopt an existing fleet |
+| Phase | Delivers | Proves | Status |
+|---|---|---|---|
+| 1 | `devicekit.yaml` schema + validator + normalize | desired state is declarable + validated | ✅ |
+| 2 | `FleetPolicy` persistence (raw + normalized + sha256 + status) scoped to device/group | policy is durable + hashed | ✅ |
+| 3 | plan: desired-vs-live diff → ordered steps + hard blockers (honesty rule) | dry-run is safe + explicit | ✅ |
+| 4 | apply as a job (snapshots, idempotent, per-device fan-out) | policy → real device state | ✅ |
+| 5 | drift detection (shared with plan 24) + reconcile (pending-by-default, opt-in autoApply) | drift is visible + fixable | ✅ |
+| 6 | scaffold YAML from live state (secrets → `fromSecret`) | adopt an existing fleet | ✅ |
 
 Phases 1→2→3→4 sequential. Phase 5 needs 4 (+ plan 24's drift primitive). Phase 6 needs 1+2
 (+ plan 20 vault).
@@ -108,6 +114,31 @@ Phases 1→2→3→4 sequential. Phase 5 needs 4 (+ plan 24's drift primitive). 
 - **Auto-authoring app adapters** from a running app (plan 18 named this out of scope too).
 - **Cross-policy inheritance trees.** Group + per-device override only; no deep template
   inheritance in v1.
+
+## Shipped — deviations & decisions (2026-07-12)
+
+- **Step order:** `attach_extension` runs FIRST (weight 10), not last — DeviceKit app
+  provisioning is performed *by* the app's driver extension, so it must be active before
+  `provision_app`. (Deliberate deviation from the ServerKit `_STEP_ORDER` sketch above.)
+- **Plan 24 wasn't built yet**, so the drift primitive lives here: the drift check *is* a
+  re-plan (`policy/planner.plan_policy` over a fresh live snapshot). Plan 24 can share it.
+- **`fromSecret` convention defined here** (plan 20 left it open): `{vault: <id|slug>,
+  key: <KEY>}`, resolved at plan time (masked in output) and re-resolved at apply time;
+  `generate: true` mints + stores on first use. Scaffold redacts sensitive keys to bare
+  refs and never emits `generate` (adoption must not rotate live credentials).
+- **ADB transport required for apps/settings** enforcement in v1 — agent-only devices get
+  a plan-time `adb_required` blocker; automations/extensions enforce without ADB.
+- **Decisions from the list above:** group + per-device override (merge-by-key, no
+  inheritance); autoApply defaults off (edge-triggered only, never through blockers);
+  policies DB-stored (git-webhook reconcile is a follow-on via plan 22).
+- **Plan-time honesty is best-effort for not-yet-installed extensions**: an app whose
+  declared extension attaches during the same apply can't have its APK config verified at
+  plan time — surfaced as an `extension_pending` issue; a real problem fails the step
+  loudly at apply (stop-on-first-failure keeps the device safe).
+- **Live-test hardening:** hosts with multiple adb installs (SDK + standalone +
+  adbutils-bundled) fight over the adb server, making in-process adb calls intermittently
+  return empty output. The policy engine retries empty reads and re-puts once on failed
+  settings verification — this turned a live reconcile failure into a pass.
 
 ## ServerKit source map (for implementers)
 

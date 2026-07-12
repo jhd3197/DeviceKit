@@ -531,12 +531,12 @@ See [docs/plans/22-automation-engine-v2.md](docs/plans/22-automation-engine-v2.m
 **Goal**: Declare a device/group's desired apps + automations + config as code; plan a diff, apply in a job, detect drift, reconcile — MDM-grade policy.
 See [docs/plans/23-desired-state-fleet-policy.md](docs/plans/23-desired-state-fleet-policy.md).
 
-- [ ] `devicekit.yaml` schema + validator + normalize
-- [ ] `FleetPolicy` persistence (raw + normalized + sha256 + status) scoped to device/group
-- [ ] Plan: desired-vs-live diff → ordered steps + hard blockers (the "honesty rule")
-- [ ] Apply as a job (before/after snapshots, idempotent unchanged-hash short-circuit, per-device fan-out)
-- [ ] Drift detection (shared with Phase 44) + reconcile (pending-by-default, opt-in autoApply)
-- [ ] Scaffold YAML from live state (secrets → `fromSecret` refs into the vault)
+- [x] `devicekit.yaml` schema + validator + normalize *(Draft-7 JSON-Schema, snake_case aliases, stable hash — `backend/devicekit/policy/spec.py`)*
+- [x] `FleetPolicy` persistence (raw + normalized + sha256 + status) scoped to device/group *(workspace-scoped, `applied_hash` kept across edits)*
+- [x] Plan: desired-vs-live diff → ordered steps + hard blockers (the "honesty rule") *(pure `plan_policy`; `attach_extension` ordered first — provisioning rides driver extensions)*
+- [x] Apply as a job (before/after snapshots, idempotent unchanged-hash short-circuit, per-device fan-out) *(`policy.apply` parent + concurrency-capped `policy.apply.device` children)*
+- [x] Drift detection (shared with Phase 44) + reconcile (pending-by-default, opt-in autoApply) *(plan 24 not built yet — the re-plan IS the drift primitive; edge-triggered notifications)*
+- [x] Scaffold YAML from live state (secrets → `fromSecret` refs into the vault) *(adopt-then-plan-empty + drift/reconcile verified live on the Samsung A03s)*
 
 ### Phase 44: Fleet Health, Sweeps & Auto-Remediation
 **Goal**: Bounded fleet-wide sweeps, allowlisted capability-gated remediation, and the predictive-health layer Phase 22 still needs — the disciplined answer to "fleet scale" (not multi-node).
