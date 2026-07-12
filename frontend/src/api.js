@@ -188,6 +188,25 @@ export const api = {
   cancelAutomationRun: (id) =>
     request(`/automations/runs/${id}/cancel`, { method: 'POST' }),
 
+  // Workflow graphs (plan 22) — tramo WorkflowDoc storage + node pack + triggers
+  getNodePack: () => request('/automations/node-pack'),
+  getAutomationGraph: (id) => request(`/automations/${id}/graph`),
+  saveAutomationGraph: (id, graph) =>
+    request(`/automations/${id}/graph`, { method: 'PUT', body: JSON.stringify({ graph }) }),
+  validateAutomationGraph: (id, graph) =>
+    request(`/automations/${id}/validate`, {
+      method: 'POST',
+      body: JSON.stringify(graph ? { graph } : {}),
+    }),
+  getWebhookToken: (id) => request(`/automations/${id}/webhook-token`),
+  createWebhookToken: (id, rotate = false) =>
+    request(`/automations/${id}/webhook-token`, {
+      method: 'POST',
+      body: JSON.stringify({ rotate }),
+    }),
+  revokeWebhookToken: (id) =>
+    request(`/automations/${id}/webhook-token`, { method: 'DELETE' }),
+
   // Recording
   startRecording: (deviceId) =>
     request('/automations/record/start', {
@@ -707,6 +726,10 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('pending_action_resolved', (e) => {
     handlers.onPendingActionResolved?.(JSON.parse(e.data))
+  })
+  es.addEventListener('automation_run', (e) => {
+    // Graph run events in tramo RunEvent shapes (plan 22) — {run_id, type, nodeId, …}.
+    handlers.onAutomationRun?.(JSON.parse(e.data))
   })
   es.onerror = () => {
     handlers.onError?.()

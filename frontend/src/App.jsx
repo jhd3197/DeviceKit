@@ -27,6 +27,7 @@ import RemoteADB from './views/RemoteADB'
 import Automations from './views/Automations'
 import AutomationEditor from './views/AutomationEditor'
 import AutomationRunDetail from './views/AutomationRunDetail'
+import WorkflowEditor from './views/WorkflowEditor'
 import Profiles from './views/Profiles'
 import ProfileEditor from './views/ProfileEditor'
 import FleetGroups from './views/FleetGroups'
@@ -210,6 +211,7 @@ export default function App() {
           <Route path="/automations" element={<Automations />} />
           <Route path="/automations/new" element={<AutomationEditor />} />
           <Route path="/automations/:id/edit" element={<AutomationEditor />} />
+          <Route path="/automations/:id/graph" element={<WorkflowEditor />} />
           <Route path="/automations/runs/:runId" element={<AutomationRunDetail />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/notifications" element={<Notifications />} />

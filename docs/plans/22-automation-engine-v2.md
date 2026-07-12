@@ -1,6 +1,6 @@
 # Plan 22 — Automation Engine v2: DAG + Triggers (tramo-powered)
 
-**Status:** 🚧 in progress — phases 1–5 shipped; phase 6 (editor embed) remaining
+**Status:** ✅ shipped — all six phases (stretch NL-patch bridge not started)
 **Inspired by:** plan 18 calls the current engine "the linear automation engine" — an ordered list
 of steps with no branching, loops, parallelism, or sub-flows. Two sources shape the upgrade:
 
@@ -165,7 +165,7 @@ fleet wants — port the shape, fix these:
 | 3 | ✅ | error contract: per-node `retry {count, delayMs, backoff}` + `runAfter: on-error/always` + compensation branches | flows fail safe, not silently |
 | 4 | ✅ | triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run` | external + internal events start runs |
 | 5 | ✅ | parallel device fan-out — `for-each` device branches as concurrency-capped jobs | "run across the fleet", bounded |
-| 6 | ⏳ | embed tramo editor (Canvas/RightRail/useWorkflow, node-pack endpoint wired, validate, live run view); stretch: NL patches | operators author visually in our own editor |
+| 6 | ✅ | embed tramo editor (Canvas/RightRail/useWorkflow, node-pack endpoint wired, validate, live run view); stretch: NL patches | operators author visually in our own editor |
 
 Phases 1→2→3 sequential. Phase 4 needs 1 (+ plan 05/06). Phase 5 needs 1+2 (+ plan 05). Phase 6
 needs 1+2 (the node pack must exist) — it is **no longer gated on plan 30** building canvas

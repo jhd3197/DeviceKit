@@ -33,12 +33,18 @@ def make_blueprint(client, limiter):
         name = data.get('name', '')
         if not name:
             return jsonify({'error': 'Name is required'}), 400
+        graph = data.get('graph')
+        if graph is not None:
+            check = client.validate_workflow_doc(graph)
+            if not check['ok']:
+                return jsonify({'error': '; '.join(check['errors'])}), 400
         automation = client.create_automation(
             name=name,
             description=data.get('description', ''),
             steps=data.get('steps', []),
             tags=data.get('tags', []),
             workspace_id=_workspace_id(),   # born into the active workspace, if any
+            graph=graph,                    # a tramo WorkflowDoc (plan 22), or None
         )
         return jsonify(automation), 201
 

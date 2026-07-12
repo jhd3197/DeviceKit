@@ -525,7 +525,7 @@ See [docs/plans/22-automation-engine-v2.md](docs/plans/22-automation-engine-v2.m
 - [x] Error contract: per-node retry/backoff + `on_failure` edge + compensation node *(shipped as tramo `retry {count,delayMs,backoff}` + `runAfter: on-error/always` branches)*
 - [x] Triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run`
 - [x] Parallel device fan-out — `for_each` device branches as concurrency-capped jobs
-- [ ] Frontend graph builder (canvas, validate, dry-run)
+- [x] Frontend graph builder (canvas, validate, dry-run) *(embedded tramo editor: Canvas/RightRail/useWorkflow + node pack + live SSE run view)*
 
 ### Phase 43: Desired-State Fleet Policy (`devicekit.yaml`)
 **Goal**: Declare a device/group's desired apps + automations + config as code; plan a diff, apply in a job, detect drift, reconcile — MDM-grade policy.

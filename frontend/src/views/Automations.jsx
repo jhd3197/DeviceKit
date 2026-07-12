@@ -15,6 +15,7 @@ import {
   Pause,
   Lightbulb,
   HeartPulse,
+  Workflow,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -314,6 +315,15 @@ export default function Automations() {
                           title="Edit"
                         >
                           <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/automations/${a.id}/graph`)}
+                          className={`p-1.5 rounded hover:bg-zinc-800 transition-colors ${
+                            a.graph ? 'text-accent hover:text-accent-hover' : 'text-zinc-400 hover:text-white'
+                          }`}
+                          title={a.graph ? 'Edit graph' : 'Open as graph'}
+                        >
+                          <Workflow className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => openRunDialog(a)}
