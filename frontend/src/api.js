@@ -594,6 +594,15 @@ export const api = {
   onboardDevice: (deviceId) =>
     request(`/agent-device/${deviceId}/onboard`, { method: 'POST', body: '{}' }),
 
+  // Backup / DR (plan 25 part 6)
+  getBackups: () => request('/backups'),
+  createBackup: () => request('/backups', { method: 'POST', body: '{}' }),
+  deleteBackup: (id) => request(`/backups/${id}`, { method: 'DELETE' }),
+  verifyBackup: (id) => request(`/backups/${id}/verify`, { method: 'POST' }),
+  runBackupDrill: (backupId) =>
+    request('/backups/drill', { method: 'POST', body: JSON.stringify({ backup_id: backupId }) }),
+  getRestoreConfidence: () => request('/backups/restore-confidence'),
+
   // Agent-plugin manifest contract (plan 25 part 5)
   getAgentPlugins: () => request('/agent-plugins'),
   getAgentPluginOrder: () => request('/agent-plugins/order'),
@@ -766,6 +775,9 @@ export function subscribeToEvents(handlers = {}) {
   })
   es.addEventListener('onboarding', (e) => {
     handlers.onOnboarding?.(JSON.parse(e.data))
+  })
+  es.addEventListener('backup', (e) => {
+    handlers.onBackup?.(JSON.parse(e.data))
   })
   es.addEventListener('job', (e) => {
     handlers.onJob?.(JSON.parse(e.data))

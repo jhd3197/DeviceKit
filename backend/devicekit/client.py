@@ -32,6 +32,7 @@ from devicekit.mixins.agent_survey import AgentSurveyMixin
 from devicekit.mixins.agent_ota import AgentOtaMixin
 from devicekit.mixins.onboarding import OnboardingMixin
 from devicekit.mixins.agent_plugin import AgentPluginMixin
+from devicekit.mixins.backup import BackupMixin
 from devicekit.mixins.pairing import PairingMixin
 from devicekit.mixins.extensions import ExtensionsMixin
 from devicekit.mixins.extension_ai import ExtensionAiMixin
@@ -72,6 +73,7 @@ class Client(
     AgentOtaMixin,
     OnboardingMixin,
     AgentPluginMixin,
+    BackupMixin,
     PairingMixin,
     ExtensionsMixin,
     ExtensionAiMixin,
@@ -153,6 +155,13 @@ class Client(
             self.init_onboarding()
         except Exception as e:
             logging.getLogger('devicekit').warning(f"Onboarding init skipped: {e}")
+
+        # Backup / DR (plan 25): register the backup + restore-drill job kinds, the drill
+        # schedule, and the edge-triggered drill alerts (after jobs + notifications are live).
+        try:
+            self.init_backup()
+        except Exception as e:
+            logging.getLogger('devicekit').warning(f"Backup init skipped: {e}")
 
         # Apply any persisted AI provider keys to the environment so Prompture picks them
         # up without a restart (plan 12 settings).

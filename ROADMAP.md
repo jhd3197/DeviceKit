@@ -558,4 +558,4 @@ See [docs/plans/25-agent-lifecycle-and-backup.md](docs/plans/25-agent-lifecycle-
 - [x] **OTA agent updates**: signed APK versions + rollout policy (canary→staged→full+rollback) as jobs *(greenfield)*
 - [x] Onboarding state machine (`pending → validating → provisioning → ready | failed`) on the job bus
 - [x] Agent-plugin manifest contract (capabilities + typed perms + limits + deps); runtime deferred
-- [ ] Backup/DR of own state: tarball + manifest + verify ladder + **restore drill** + scrub-first debug bundles
+- [x] Backup/DR of own state: tarball + manifest + verify ladder + **restore drill** + scrub-first debug bundles

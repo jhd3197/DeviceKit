@@ -74,6 +74,8 @@ backend/recordings/
 backend/output/debug_bundles/
 # OTA (plan 25): signed APK releases + the Ed25519 private signing key — never commit these
 backend/output/ota/
+# Backups (plan 25): tarballs contain full DB snapshots — never commit these
+backend/output/backups/
 backend/.apk_cache/
 
 # Installed extensions are extracted here at runtime (tracked: only the package marker)

@@ -57,6 +57,13 @@ OTA_ROLLOUT_ADVANCE_INTERVAL = int(os.getenv("DEVICEKIT_OTA_ADVANCE_INTERVAL", "
 # Crash-loop backoff: a device that fails an install this many times stops being offered it.
 OTA_MAX_UPDATE_ATTEMPTS = int(os.getenv("DEVICEKIT_OTA_MAX_UPDATE_ATTEMPTS", "3"))
 
+# Backup / DR of DeviceKit's own state (plan 25 part 6)
+# How often the scheduled restore drill runs (default daily). The drill restores the latest
+# backup into a throwaway scratch DB and tears it down — it never touches live.
+BACKUP_DRILL_INTERVAL = int(os.getenv("DEVICEKIT_BACKUP_DRILL_INTERVAL", "86400"))
+# Keep this many most-recent backups on disk (older ones are pruned after a new one lands).
+BACKUP_RETENTION = int(os.getenv("DEVICEKIT_BACKUP_RETENTION", "7"))
+
 # AI Agent (Prompture)
 PROMPTURE_DEFAULT_MODEL = os.environ.get("PROMPTURE_DEFAULT_MODEL", "claude/claude-sonnet-4-20250514")
 

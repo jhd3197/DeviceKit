@@ -31,6 +31,7 @@ from devicekit.models.agent_rollout import AgentRollout
 from devicekit.models.agent_update_state import AgentUpdateState
 from devicekit.models.onboarding import OnboardingSession
 from devicekit.models.agent_plugin import AgentPlugin
+from devicekit.models.backup import Backup
 
 # Queue Bus + Jobs live in their own packages (plan 05) but must register on the shared
 # ``Base`` here so ``create_all`` and Alembic's autogenerate see every table.
@@ -78,6 +79,7 @@ __all__ = [
     "AgentUpdateState",
     "OnboardingSession",
     "AgentPlugin",
+    "Backup",
     "QueueGroup",
     "Queue",
     "QueueMessage",

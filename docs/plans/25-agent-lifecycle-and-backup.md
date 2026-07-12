@@ -1,6 +1,8 @@
 # Plan 25 — Agent Lifecycle, OTA & Backup/DR
 
-**Status:** 🚧 in progress — phases 1–5 shipped (backend + frontend + Kotlin source; APK rebuild pending)
+**Status:** ✅ all 6 phases shipped (backend + frontend + Kotlin source). The Android agent
+changes (survey primitives, capability/version map, OTA self-updater) are committed as source
+but need an **APK rebuild + flash** to go live on devices; everything else is verified running.
 **Inspired by:** three ServerKit lessons — two for the agent, one for the platform's own
 durability.
 1. **The agent trust boundary** (`docs/AGENT_SURVEY_SPEC.md`): the agent enforces a **fixed
@@ -95,7 +97,7 @@ flashed by hand today** (`build-agent-apk` skill) — untenable past a handful o
 | 3 ✅ | OTA agent updates: signed APK versions + rollout policy (canary→staged→full+rollback) as jobs | reflash the fleet without touching it |
 | 4 ✅ | onboarding state machine (`pending→…→ready`) on the job bus | formal enrollment, policy-on-ready |
 | 5 ✅ | agent-plugin manifest contract (capabilities + typed perms + limits + deps); runtime deferred | a declarable on-device plugin surface |
-| 6 | backup/DR of own state: tarball + manifest + verify ladder + **restore drill** + scrub-first bundles | the platform can survive its own box dying |
+| 6 ✅ | backup/DR of own state: tarball + manifest + verify ladder + **restore drill** + scrub-first bundles | the platform can survive its own box dying |
 
 Phases 1→2 sequential (2 builds on the primitive set). Phase 3 needs 2 (version negotiation) + plan
 07/29 signing. Phase 4 needs plan 05. Phase 5 is independent (schema only). Phase 6 is independent

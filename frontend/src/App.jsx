@@ -21,6 +21,7 @@ import {
   Bell,
   ShieldCheck,
   History,
+  DatabaseBackup,
 } from 'lucide-react'
 
 import Dashboard from './views/Dashboard'
@@ -46,6 +47,7 @@ import Enrollment from './views/Enrollment'
 import Onboarding from './views/Onboarding'
 import CommandHistory from './views/CommandHistory'
 import SettingsView from './views/Settings'
+import Backups from './views/Backups'
 
 import NotificationBell from './components/NotificationBell'
 import CommandPalette from './components/CommandPalette'
@@ -82,6 +84,7 @@ const navSections = [
       { to: '/automations', icon: Workflow, label: 'Automations' },
       { to: '/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/notifications', icon: Bell, label: 'Notifications' },
+      { to: '/backups', icon: DatabaseBackup, label: 'Backup & DR' },
       { to: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
@@ -242,6 +245,7 @@ export default function App() {
           <Route path="/agent-plugins" element={<AgentPlugins />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/settings/:tab" element={<SettingsView />} />
+          <Route path="/backups" element={<Backups />} />
           {extensionRoutes}
         </Routes>
       </main>

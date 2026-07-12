@@ -9,6 +9,7 @@ import os
 
 from devicekit.db import session_scope
 from devicekit.models import DebugBundle
+from devicekit.scrub import scrub
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +65,15 @@ class DebugBundleMixin:
             logger.warning(f"Bundle: screenshot failed: {e}")
             collected['screenshot_error.txt'] = str(e).encode('utf-8')
 
-        # 2. Logcat (last 100 lines)
+        # 2. Logcat (last 100 lines) — scrubbed of secrets (JWTs, auth headers, key=secret).
         try:
             logcat_output = self.run_adb_command(
                 ['shell', 'logcat', '-d', '-t', '100'], device=device_id
             )
             if logcat_output:
-                collected['logcat.txt'] = logcat_output.encode('utf-8') if isinstance(logcat_output, str) else logcat_output
+                if isinstance(logcat_output, bytes):
+                    logcat_output = logcat_output.decode('utf-8', errors='replace')
+                collected['logcat.txt'] = scrub(logcat_output).encode('utf-8')
         except Exception as e:
             logger.warning(f"Bundle: logcat failed: {e}")
             collected['logcat_error.txt'] = str(e).encode('utf-8')
@@ -103,14 +106,20 @@ class DebugBundleMixin:
         state['trigger'] = trigger
         state['context'] = context
         state['collected_at'] = time.time()
-        collected['state.json'] = json.dumps(state, indent=2, default=str).encode('utf-8')
+        # Scrub the serialized state — the trigger context may carry an error string with a
+        # token/header in it.
+        collected['state.json'] = scrub(
+            json.dumps(state, indent=2, default=str)).encode('utf-8')
 
         # 4. UI Hierarchy XML
         try:
             self.run_adb_command(['shell', 'uiautomator', 'dump', '/sdcard/window_dump.xml'], device=device_id)
             hierarchy = self.run_adb_command(['shell', 'cat', '/sdcard/window_dump.xml'], device=device_id)
             if hierarchy:
-                collected['ui_hierarchy.xml'] = hierarchy.encode('utf-8') if isinstance(hierarchy, str) else hierarchy
+                if isinstance(hierarchy, bytes):
+                    hierarchy = hierarchy.decode('utf-8', errors='replace')
+                # On-screen text may include a pasted token; scrub before archiving.
+                collected['ui_hierarchy.xml'] = scrub(hierarchy).encode('utf-8')
             self.run_adb_command(['shell', 'rm', '/sdcard/window_dump.xml'], device=device_id)
         except Exception as e:
             logger.warning(f"Bundle: UI hierarchy failed: {e}")
@@ -122,12 +131,14 @@ class DebugBundleMixin:
         except Exception:
             collected['actions.json'] = b'[]'
 
-        # 6. Device properties
+        # 6. Device properties — scrubbed (getprop can surface tokens / keys in vendor props).
         try:
             props = self.run_adb_command(['shell', 'getprop'], device=device_id)
             if props:
+                if isinstance(props, bytes):
+                    props = props.decode('utf-8', errors='replace')
                 collected['properties.json'] = json.dumps(
-                    {'raw_getprop': props}, indent=2
+                    {'raw_getprop': scrub(props)}, indent=2
                 ).encode('utf-8')
         except Exception:
             pass
