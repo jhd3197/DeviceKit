@@ -25,6 +25,7 @@ from devicekit.models.audit_log import AuditLog
 from devicekit.models.workspace import Workspace, WorkspaceMember, ResourceGrant
 from devicekit.models.secret_vault import Vault, Secret
 from devicekit.models.invitation import Invitation
+from devicekit.models.fleet_policy import FleetPolicy
 
 # Queue Bus + Jobs live in their own packages (plan 05) but must register on the shared
 # ``Base`` here so ``create_all`` and Alembic's autogenerate see every table.
@@ -66,6 +67,7 @@ __all__ = [
     "Vault",
     "Secret",
     "Invitation",
+    "FleetPolicy",
     "QueueGroup",
     "Queue",
     "QueueMessage",
