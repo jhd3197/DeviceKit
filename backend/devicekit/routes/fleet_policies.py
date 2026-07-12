@@ -50,6 +50,25 @@ def make_blueprint(client, limiter):
         data = request.get_json(silent=True) or {}
         return jsonify(client.validate_fleet_policy_yaml(data.get("yaml") or ""))
 
+    @bp.route("/fleet-policies/scaffold", methods=["POST"])
+    def scaffold_policy():
+        """Render a devicekit.yaml from a live device's current state (adopt-then-edit).
+        Pass ``save: true`` to persist it as a pending policy in one call."""
+        data = request.get_json(silent=True) or {}
+        device_id = data.get("device_id") or data.get("deviceId")
+        if not device_id:
+            return jsonify({"error": "device_id is required"}), 400
+        try:
+            result = client.scaffold_fleet_policy(device_id, name=data.get("name"))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 404
+        if data.get("save"):
+            policy = client.create_fleet_policy(
+                result["yaml"], name=data.get("name"),
+                workspace_id=_workspace_id(), created_by=_principal_name())
+            return jsonify({**result, "policy": policy}), 201
+        return jsonify(result)
+
     @bp.route("/fleet-policies/<policy_id>/plan", methods=["GET"])
     def plan_policy(policy_id):
         """Dry-run diff: ordered steps + issues + hard blockers. Never mutates."""

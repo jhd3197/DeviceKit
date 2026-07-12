@@ -18,6 +18,8 @@ from devicekit.policy.spec import (
     effective_spec_for_device,
     dump_policy_yaml,
 )
+from devicekit.policy.planner import plan_policy
+from devicekit.policy.scaffold import render_scaffold
 
 __all__ = [
     "PolicySpecError",
@@ -26,4 +28,6 @@ __all__ = [
     "policy_hash",
     "effective_spec_for_device",
     "dump_policy_yaml",
+    "plan_policy",
+    "render_scaffold",
 ]

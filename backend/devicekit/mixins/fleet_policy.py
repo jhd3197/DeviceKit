@@ -680,6 +680,58 @@ class FleetPolicyMixin:
                 p.status_detail = detail
 
     # ------------------------------------------------------------------
+    # Scaffold (part 6): YAML from live state
+    # ------------------------------------------------------------------
+    def scaffold_fleet_policy(self, device_id, name=None):
+        """Capture a live device as a starting-point ``devicekit.yaml``: driver-backed apps
+        at their installed versions, this device's schedules, a curated settings whitelist,
+        and the active extension set. Sensitive keys come back as ``fromSecret`` refs."""
+        from devicekit.policy.scaffold import SCAFFOLD_SETTINGS, render_scaffold
+
+        devices = self.all_devices_for_query()
+        index = {d.get("device_id") or d.get("serial"): d for d in devices if d}
+        device = index.get(device_id)
+        if not device:
+            raise ValueError(f"device not found: {device_id}")
+        adb_reachable = device.get("source") != "agent" and bool(device.get("online"))
+        issues = []
+        facts = {"apps": [], "automations": [], "settings": {}, "extensions": []}
+        for ext in (self.list_extensions() if hasattr(self, "list_extensions") else []):
+            if ext.get("status") != "active":
+                continue
+            facts["extensions"].append(ext["slug"])
+            package = ((ext.get("manifest") or {}).get("device_requirements")
+                       or {}).get("package")
+            if package and adb_reachable:
+                version = self._adb_installed_version(device_id, package)
+                if version:
+                    facts["apps"].append({"package": package, "version": version,
+                                          "extension": ext["slug"]})
+        if adb_reachable:
+            for ns, keys in SCAFFOLD_SETTINGS.items():
+                for key in keys:
+                    value = self._adb_get_setting(device_id, ns, key)
+                    if value is not None:
+                        facts["settings"].setdefault(ns, {})[key] = value
+        else:
+            issues.append("device is not ADB-reachable — installed apps and settings "
+                          "were not captured")
+        for schedule in (self.list_schedules()
+                         if hasattr(self, "list_schedules") else []):
+            if schedule.get("device_id") != device_id:
+                continue
+            facts["automations"].append({
+                "automation": schedule.get("automation_name")
+                              or schedule.get("automation_id"),
+                "enabled": bool(schedule.get("enabled")),
+                "schedule": {"intervalMinutes":
+                             int(schedule.get("interval_minutes") or 60)},
+            })
+        out = render_scaffold(device_id, facts, name=name)
+        out["issues"] = issues
+        return out
+
+    # ------------------------------------------------------------------
     # Shared internals
     # ------------------------------------------------------------------
     def _set_policy_status(self, policy_id, status, detail=None, applied_hash=None):
