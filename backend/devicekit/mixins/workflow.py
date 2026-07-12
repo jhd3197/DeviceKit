@@ -17,7 +17,9 @@ import uuid
 from devicekit.db import session_scope
 from devicekit.jobs.service import JobService
 from devicekit.models import Automation, AutomationRun
-from devicekit.workflow import WorkflowEngine, linear_steps_to_doc, validate_doc
+from devicekit.workflow import (
+    WorkflowEngine, build_node_pack, linear_steps_to_doc, validate_doc,
+)
 from devicekit.workflow.doc import is_workflow_doc
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,12 @@ class WorkflowMixin:
         if is_workflow_doc(graph):
             return {"graph": graph, "derived": False}
         return {"graph": linear_steps_to_doc(automation), "derived": True}
+
+    def get_node_pack(self):
+        """tramo NodeDefinitions for every registered step type (core + extensions),
+        plus the list of tramo builtins the Python engine executes. The editor folds
+        this into its registry next to ``BUILTIN_NODES`` (plan 22 part 2)."""
+        return build_node_pack(self.get_step_types())
 
     def validate_workflow_doc(self, doc):
         """Structural + Kahn validation (the backend authority behind

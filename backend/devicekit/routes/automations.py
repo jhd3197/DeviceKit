@@ -68,6 +68,11 @@ def make_blueprint(client, limiter):
         return jsonify({'error': 'Automation not found'}), 404
 
     # ── Workflow graph (plan 22) ──
+    @bp.route('/automations/node-pack')
+    @require_scope('automations:read')
+    def automations_node_pack():
+        return jsonify(client.get_node_pack())
+
     @bp.route('/automations/<automation_id>/graph')
     @require_scope('automations:read')
     def automations_graph_get(automation_id):

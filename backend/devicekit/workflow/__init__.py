@@ -24,6 +24,8 @@ from devicekit.workflow.doc import (
     is_workflow_doc,
 )
 from devicekit.workflow.engine import WorkflowEngine
+import devicekit.workflow.control  # noqa: F401 — registers the control-flow executors
+from devicekit.workflow.node_pack import build_node_pack
 
 __all__ = [
     "topo_sort",
@@ -33,4 +35,5 @@ __all__ = [
     "slugify",
     "is_workflow_doc",
     "WorkflowEngine",
+    "build_node_pack",
 ]
