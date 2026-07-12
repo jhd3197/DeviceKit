@@ -100,6 +100,10 @@ def make_blueprint(client, limiter):
         # Attribute the gate decision to the resolved principal (plan 20 part 3), falling back
         # to the API-key prefix for a legacy/keyed caller.
         principal = getattr(g, 'principal', None)
+        # Approval is a *human* act: a scoped dk_ key may never release the gate — otherwise
+        # a devices:write key could approve its own pending actions (plan 21: no side door).
+        if principal is not None and getattr(principal, 'scopes', None) is not None:
+            return jsonify({'error': 'API keys cannot approve gated actions'}), 403
         approver = (getattr(principal, 'username', None)
                     or request.headers.get('X-API-Key', '')[:8] or 'api')
         result = client.confirm_action(action_id, approve, approver=approver,

@@ -366,6 +366,40 @@ def test_solo_session_supervised_still_gates(host, app):
     assert host.clicks == [(1, 2, DEV)]
 
 
+def test_scoped_key_cannot_self_approve(host, app):
+    """No side door: the key that triggered a gated action can't also release the gate."""
+    from devicekit.routes import ai_agent
+
+    gate_app = Flask("gate")
+    limiter = Limiter(get_remote_address, app=gate_app, default_limits=[],
+                      storage_uri="memory://")
+    gate_app.register_blueprint(ai_agent.make_blueprint(host, limiter))
+
+    @gate_app.before_request
+    def _gate():
+        principal, error = authorize(host, request)
+        g.principal = principal
+        if error:
+            body, status = error
+            return jsonify(body), status
+        return None
+
+    h = _key(host, ["devices:*", "agents:*", "commands:*"])
+    t, box = _invoke_async(app, {"device_id": DEV, "action": "tap",
+                                 "args": {"x": 1, "y": 1}}, headers=h)
+    pending = _wait_pending(host, DEV)
+
+    r = gate_app.test_client().post(f"/devices/{DEV}/agent/confirm", headers=h,
+                                    json={"action_id": pending[0]["id"], "approve": True})
+    assert r.status_code == 403
+    assert "cannot approve" in r.get_json()["error"]
+    assert host.clicks == [], "key self-approval released the gate"
+
+    host.confirm_action(pending[0]["id"], False, approver="tester", device_id=DEV)
+    body = _finish(t, box)
+    assert body["status"] == "denied"
+
+
 def test_gate_timeout_returns_denied(host, tc):
     host._gate_timeout = 1
     start = time.time()
