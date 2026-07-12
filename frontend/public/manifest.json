@@ -1,0 +1,36 @@
+{
+    "name": "DeviceKit",
+    "short_name": "DeviceKit",
+    "description": "Android fleet control plane — manage, automate, and observe your devices",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#4f46e5",
+    "orientation": "any",
+    "icons": [
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["utilities", "productivity"],
+    "shortcuts": [
+        {
+            "name": "Fleet Overview",
+            "url": "/",
+            "description": "View the device fleet dashboard"
+        },
+        {
+            "name": "Automations",
+            "url": "/automations",
+            "description": "Manage device automations"
+        },
+        {
+            "name": "Remote ADB",
+            "url": "/remote-adb",
+            "description": "Open a remote ADB terminal"
+        }
+    ]
+}

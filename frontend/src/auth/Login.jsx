@@ -2,7 +2,8 @@
 // login_required. Handles the two-step 2FA flow (password → authenticator code) and, when the
 // URL carries ?invite=<token>, an account-creation form for an invited teammate.
 import React, { useEffect, useState } from 'react'
-import { Layers, Loader2, ShieldCheck, KeyRound, LogIn } from 'lucide-react'
+import { Loader2, ShieldCheck, KeyRound, LogIn } from 'lucide-react'
+import Logo from '../components/Logo'
 import { api, setSessionToken } from '../api'
 import { useAuth } from './AuthContext'
 
@@ -14,9 +15,7 @@ function Card({ children }) {
     <div className="min-h-screen flex items-center justify-center bg-black px-4">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-9 h-9 bg-white rounded flex items-center justify-center">
-            <Layers className="text-black w-5 h-5" />
-          </div>
+          <Logo size={36} className="rounded shrink-0" />
           <span className="font-bold tracking-tight text-xl">DeviceKit</span>
         </div>
         <div className="border border-main rounded-lg bg-zinc-950 p-6">{children}</div>

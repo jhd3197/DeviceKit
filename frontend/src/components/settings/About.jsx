@@ -1,7 +1,8 @@
 // About pane (plan 12): version + build info for this DeviceKit instance.
 import React, { useEffect, useState } from 'react'
-import { Layers, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { Pane } from './fields'
+import Logo from '../Logo'
 import { api } from '../../api'
 
 const APP_VERSION = '1.0.0' // mirrors frontend/package.json
@@ -40,9 +41,7 @@ export default function About({ settings, register }) {
   return (
     <Pane title="About" description="Version and build details for this instance.">
       <div className="flex items-center gap-4 rounded-lg border border-main bg-card p-5">
-        <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shrink-0">
-          <Layers className="text-black w-7 h-7" />
-        </div>
+        <Logo size={64} className="rounded-lg shrink-0" />
         <div>
           <p className="font-bold text-lg tracking-tight">{instanceName}</p>
           <p className="text-xs text-zinc-500">DeviceKit — Android fleet control plane</p>

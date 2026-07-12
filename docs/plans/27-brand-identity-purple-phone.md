@@ -1,6 +1,6 @@
 # Plan 27 — Brand Identity: the Purple Phone Logo, Everywhere
 
-**Status:** 📝 planned
+**Status:** 🚧 in progress — Phase 1 ✅ (web mark everywhere), Phases 2–3 pending
 **Inspired by:** ServerKit's branding pipeline — one master SVG
 (`frontend/src/assets/ServerKitLogo.svg`: 2048 viewBox, white squircle tile, diagonal
 indigo gradient `#6366f1 → #4f46e5`), a JSX twin (`components/ServerKitLogo.jsx`) whose
@@ -113,9 +113,16 @@ properly as one master SVG in ServerKit's style, and roll it out to every surfac
 
 | Phase | Delivers | Proves |
 |---|---|---|
-| 1 | Master SVG + `Logo.jsx` + sidebar/login/About swap + favicon + manifest | one mark everywhere on web; changing the accent re-tints the sidebar logo live |
+| 1 ✅ | Master SVG + `Logo.jsx` + sidebar/login/About swap + favicon + manifest | one mark everywhere on web; changing the accent re-tints the sidebar logo live |
 | 2 | Purple default accent (`#6d7cff`), presets updated, settings default | a fresh install boots purple; an existing user's chosen accent survives |
 | 3 | Android adaptive-icon gradient + glyph alignment + APK rebuild | the launcher icon on a real device matches the web favicon family |
+
+**Phase 1 notes (shipped):** `Logo.jsx` wires stop 1 → `--accent`, stop 2 → `--accent-dim`
+(not `--accent-hover` as the plan sketched — DeviceKit's `--accent-hover` is *brighter* than
+the base, which flattens the gradient; `--accent-dim` is the darker ramp stop and reproduces
+the master's `#6366f1 → #4f46e5` diagonal). Sidebar/login/About render `<Logo/>` directly (no
+white wrapper — the mark carries its own white tile). Raster `.ico`/png favicons skipped (SVG
+link covers modern browsers; no rasterizer wired). `index.html` title normalized to `DeviceKit`.
 
 ## Decisions to make while executing (log, don't stop)
 

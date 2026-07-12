@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
-  Layers,
   LayoutGrid,
   Cpu,
   Terminal,
@@ -49,6 +48,7 @@ import CommandHistory from './views/CommandHistory'
 import SettingsView from './views/Settings'
 import Backups from './views/Backups'
 
+import Logo from './components/Logo'
 import NotificationBell from './components/NotificationBell'
 import CommandPalette from './components/CommandPalette'
 import { useContributions } from './extensions/contributions'
@@ -151,9 +151,7 @@ function Sidebar() {
     <aside className="w-64 border-r border-main flex flex-col bg-black shrink-0">
       {/* Logo */}
       <div className="p-6 flex items-center gap-3 border-b border-main">
-        <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
-          <Layers className="text-black w-5 h-5" />
-        </div>
+        <Logo size={32} className="rounded shrink-0" />
         <span className="font-bold tracking-tight text-lg">DeviceKit</span>
         <div className="ml-auto">
           <NotificationBell />
