@@ -252,9 +252,14 @@ class WorkflowEngine:
             upstream = self.node_results.get(source)
             if isinstance(upstream, dict) and from_port in upstream:
                 value = upstream[from_port]
-            elif from_port == "out":
-                value = upstream
+            elif from_port == "out" and upstream is None:
+                # Upstream emitted nothing at all — an undefined input, not a gate.
+                value = None
             elif run_after == "on-success":
+                # The upstream emitted a *different* port (e.g. `{error}` while this
+                # edge reads `out`) — the branch gate. Note: tramo's runner originally
+                # passed the whole result through for `out` here; fixed at source to
+                # match this gating (error envelopes must not leak into happy paths).
                 self._skip(node, f"upstream {source} did not emit port \"{from_port}\"")
                 return
             else:

@@ -522,7 +522,7 @@ See [docs/plans/22-automation-engine-v2.md](docs/plans/22-automation-engine-v2.m
 
 - [x] nodes+edges model + Kahn cycle-validation + topo executor + linear→graph compat shim (no user migration) + AST interpolation (not `eval`)
 - [x] Control-flow nodes: `logic_if`, bounded `for_each`, `sub_automation`, typed step variables *(shipped as tramo types: `if`/`switch`/`merge`, bounded `for-each`, `call-flow`, `set-var`)*
-- [ ] Error contract: per-node retry/backoff + `on_failure` edge + compensation node
+- [x] Error contract: per-node retry/backoff + `on_failure` edge + compensation node *(shipped as tramo `retry {count,delayMs,backoff}` + `runAfter: on-error/always` branches)*
 - [ ] Triggers: manual + webhook (`/hooks/<token>`) + cron + event → one `enqueue_run`
 - [ ] Parallel device fan-out — `for_each` device branches as concurrency-capped jobs
 - [ ] Frontend graph builder (canvas, validate, dry-run)
