@@ -5,6 +5,7 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -23,6 +24,17 @@ class DeviceKitClient {
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .writeTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * Separate client for OTA APK downloads (plan 25 phase 3): an APK can be several MB, so the
+     * default 10s read timeout is too tight. Longer connect/read timeouts keep large streamed
+     * bodies from being killed mid-download.
+     */
+    private val downloadClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -212,6 +224,89 @@ class DeviceKitClient {
             }
         } catch (e: IOException) {
             null
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // OTA self-update (plan 25 phase 3)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Ask the backend whether a newer agent build is being rolled out to this device.
+     * Returns the raw response object — either `{"update": false}` or an offer carrying
+     * `{manifest, signature, public_key, download_path, rollout_id}` — or null on failure.
+     */
+    fun checkUpdate(deviceId: String): JSONObject? {
+        return try {
+            val request = Request.Builder()
+                .url("$baseUrl/agent-device/$deviceId/update-check")
+                .get()
+                .signed(deviceId)
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) JSONObject(response.body?.string() ?: "{}") else null
+            }
+        } catch (e: IOException) {
+            null
+        }
+    }
+
+    /**
+     * Stream the APK bytes at `{base}{downloadPath}` into [dest]. Uses [downloadClient] for its
+     * longer read timeout. Returns true only if the request succeeded and the body streamed to
+     * disk without error.
+     */
+    fun downloadApk(downloadPath: String, dest: File): Boolean {
+        return try {
+            dest.parentFile?.mkdirs()
+            val request = Request.Builder()
+                .url("$baseUrl$downloadPath")
+                .get()
+                .build()
+            downloadClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return false
+                val body = response.body ?: return false
+                body.byteStream().use { input ->
+                    dest.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                true
+            }
+        } catch (e: IOException) {
+            false
+        }
+    }
+
+    /**
+     * Report OTA progress back to the backend so the rollout can track per-device status.
+     * `status` is one of downloading|installing|installed|failed. Signed like every other
+     * enrolled request.
+     */
+    fun reportUpdateStatus(
+        deviceId: String,
+        rolloutId: String,
+        status: String,
+        versionCode: Int?,
+        error: String?,
+    ): Boolean {
+        return try {
+            val payload = JSONObject().apply {
+                put("device_id", deviceId)
+                put("rollout_id", rolloutId)
+                put("status", status)
+                if (versionCode != null) put("version_code", versionCode)
+                if (error != null) put("error", error)
+            }
+            val body = payload.toString().toRequestBody(jsonMediaType)
+            val request = Request.Builder()
+                .url("$baseUrl/agent-device/$deviceId/update-status")
+                .post(body)
+                .signed(deviceId)
+                .build()
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (e: IOException) {
+            false
         }
     }
 

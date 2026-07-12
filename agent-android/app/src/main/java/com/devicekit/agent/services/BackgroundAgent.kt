@@ -44,6 +44,7 @@ class BackgroundAgent : Service() {
     private var heartbeatJob: Job? = null
     private var stateReportJob: Job? = null
     private var commandPoller: CommandPoller? = null
+    private var otaUpdater: OtaUpdater? = null
     private var metricsCollector: MetricsCollector? = null
     private var httpServer: AgentHttpServer? = null
     private var discoveryService: DiscoveryService? = null
@@ -90,6 +91,7 @@ class BackgroundAgent : Service() {
                     startHeartbeat()
                     startStateReporting()
                     startCommandPolling()
+                    startOtaUpdater()
                 } else {
                     LogBuffer.log("BackgroundAgent", "Server connection attempt $attempts/$maxAttempts failed", LogBuffer.Level.ERROR)
                     if (attempts < maxAttempts) {
@@ -198,6 +200,15 @@ class BackgroundAgent : Service() {
         LogBuffer.log("BackgroundAgent", "Command poller started (survey primitives only)")
     }
 
+    /** Periodically check for and apply signed OTA agent updates (plan 25 phase 3). */
+    private fun startOtaUpdater() {
+        otaUpdater?.stop()
+        otaUpdater = OtaUpdater(this, client, scope).also {
+            it.start { DeviceState.deviceId }
+        }
+        LogBuffer.log("BackgroundAgent", "OTA updater started")
+    }
+
     private fun startHttpServer() {
         try {
             httpServer?.stop()
@@ -254,6 +265,8 @@ class BackgroundAgent : Service() {
         DeviceState.isConnected = false
         commandPoller?.stop()
         commandPoller = null
+        otaUpdater?.stop()
+        otaUpdater = null
         discoveryService?.stop()
         discoveryService = null
         httpServer?.stop()

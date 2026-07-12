@@ -15,6 +15,11 @@ android {
         versionName = "1.0.0"
 
         buildConfigField("String", "DEVICEKIT_SERVER_URL", "\"http://127.0.0.1:7317\"")
+
+        // plan 25 phase 3: pinned Ed25519 public key (hex) for verifying OTA update manifests.
+        // Empty by default (dev builds skip signature verification but still enforce sha256).
+        // Release builds should override this with the real publisher key.
+        buildConfigField("String", "OTA_PUBLIC_KEY", "\"\"")
     }
 
     buildTypes {
@@ -61,6 +66,9 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Ed25519 signature verification for OTA update manifests (plan 25 phase 3)
+    implementation("org.bouncycastle:bcprov-jdk15on:1.70")
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
