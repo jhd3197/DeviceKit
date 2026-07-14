@@ -117,14 +117,21 @@ object FaroAgentController {
         if (multicastLock != null) return
         val wifi = context.applicationContext
             .getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
-        multicastLock = wifi.createMulticastLock("faro-agent-mdns").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
-        wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "faro-agent").apply {
-            setReferenceCounted(false)
-            acquire()
-        }
+        // Both locks are best-effort — the daemon serves fine without them (they
+        // only help mDNS receive and keep the Wi-Fi radio at full power), so a
+        // permission quirk on some OEM build must never block the agent.
+        try {
+            multicastLock = wifi.createMulticastLock("faro-agent-mdns").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Throwable) {}
+        try {
+            wifiLock = wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "faro-agent").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Throwable) {}
     }
 
     private fun releaseLocks() {

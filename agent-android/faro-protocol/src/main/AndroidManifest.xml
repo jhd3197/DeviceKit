@@ -5,5 +5,7 @@
          Android filters out unless the app holds a WifiManager MulticastLock. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- WifiLock(WIFI_MODE_FULL_HIGH_PERF) requires WAKE_LOCK on many OEM builds. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
 </manifest>
