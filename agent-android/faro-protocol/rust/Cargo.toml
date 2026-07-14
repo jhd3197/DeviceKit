@@ -1,0 +1,27 @@
+[package]
+name = "faro-agent-jni"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "faro_agent_jni"
+crate-type = ["cdylib"]
+
+[dependencies]
+# The real Faro agent daemon, reused verbatim — the protocol implementation
+# lives in the Faro repo; this crate is only the Android embedding shim.
+# Bump the tag to pick up protocol changes.
+faro-agentd = { git = "https://github.com/jhd3197/faro", tag = "v1.3.17" }
+faro-agent-proto = { git = "https://github.com/jhd3197/faro", tag = "v1.3.17" }
+
+jni = "0.21"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "macros"] }
+serde_json = "1"
+anyhow = "1"
+log = "0.4"
+android_logger = "0.14"
+
+[profile.release]
+lto = true
+strip = true

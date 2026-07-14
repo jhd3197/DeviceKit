@@ -32,6 +32,24 @@ android {
         }
     }
 
+    // Two editions of the same app:
+    //   full — the DeviceKit fleet agent (plus Faro remote-control support)
+    //   faro — lean "Faro Agent": only the Faro daemon; no DeviceKit HTTP
+    //          server/backend/accessibility/overlay (see src/full/AndroidManifest.xml
+    //          for everything the faro edition deliberately leaves out)
+    flavorDimensions += "edition"
+    productFlavors {
+        create("full") {
+            dimension = "edition"
+            resValue("string", "app_name", "DeviceKit Agent")
+        }
+        create("faro") {
+            dimension = "edition"
+            applicationId = "com.faro.agent"
+            resValue("string", "app_name", "Faro Agent")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
@@ -47,6 +65,9 @@ android {
 }
 
 dependencies {
+    // Embedded Faro agent daemon (Rust via JNI) + Kotlin controller
+    implementation(project(":faro-protocol"))
+
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
