@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DeviceKitAgent"
 include(":app")
+include(":faro-protocol")

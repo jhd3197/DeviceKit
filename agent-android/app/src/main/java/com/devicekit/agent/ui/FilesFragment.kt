@@ -134,7 +134,7 @@ class FilesFragment : Fragment() {
     }
 
     private fun checkAndShow() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+        if (!com.devicekit.agent.StoragePermission.isGranted()) {
             showPermissionPrompt()
         } else if (currentPath == null) {
             showStoragePicker()
@@ -154,17 +154,7 @@ class FilesFragment : Fragment() {
     }
 
     private fun requestStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = Uri.parse("package:${requireContext().packageName}")
-                }
-                startActivity(intent)
-            } catch (_: Exception) {
-                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                startActivity(intent)
-            }
-        }
+        com.devicekit.agent.StoragePermission.request(requireContext())
     }
 
     private fun showStoragePicker() {

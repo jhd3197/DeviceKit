@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DeviceKit-only surface, merged additively into the FULL edition. The faro
+     edition is defined by NOT merging this file: no accessibility service, no
+     overlay, no notification listener, no DeviceKit background agent — just
+     the Faro daemon declared in src/main. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <application>
+
+        <!-- Accessibility Service: detects focused fields, UI changes, keyboard state -->
+        <service
+            android:name=".services.AccessibilityAgent"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+
+        <!-- Background Agent: heartbeat, state reporting to DeviceKit server -->
+        <service
+            android:name=".services.BackgroundAgent"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <!-- Floating Overlay: quick actions FAB -->
+        <service
+            android:name=".services.FloatingOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <!-- Notification Listener: forwards notifications to DeviceKit -->
+        <service
+            android:name=".services.NotificationAgent"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- ADB command receiver: accept commands via broadcast -->
+        <receiver
+            android:name=".receivers.CommandReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.devicekit.agent.COMMAND" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>

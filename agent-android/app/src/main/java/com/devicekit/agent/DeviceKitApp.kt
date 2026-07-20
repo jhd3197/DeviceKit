@@ -16,9 +16,12 @@ class DeviceKitApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // Load any per-device HMAC secret issued at enrollment (plan 07) so signed requests
-        // resume across restarts.
-        com.devicekit.agent.api.AgentCredentials.init(this)
+        if (BuildConfig.FLAVOR == "full") {
+            // Load any per-device HMAC secret issued at enrollment (plan 07) so signed
+            // requests resume across restarts. The faro edition never talks to a
+            // DeviceKit backend.
+            com.devicekit.agent.api.AgentCredentials.init(this)
+        }
         createNotificationChannel()
     }
 

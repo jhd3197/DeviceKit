@@ -20,6 +20,9 @@ on:
 permissions:
   contents: write
 
+env:
+  NDK_VERSION: '27.0.12077973'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,19 +42,39 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      # The Faro protocol module embeds Rust (faro-agentd via JNI); cargo-ndk
+      # cross-compiles it during the Gradle build.
+      - name: Install Android NDK
+        run: |
+          sdkmanager "ndk;${NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Add Rust Android targets
+        run: rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-ndk*
+            agent-android/faro-protocol/rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('agent-android/faro-protocol/rust/Cargo.lock') }}
+
+      - name: Install cargo-ndk
+        run: command -v cargo-ndk || cargo install cargo-ndk --locked
+
+      # The repo's own wrapper is 8.13 (AGP 8.13.2 requires >= 8.13); use it
+      # as-is instead of regenerating with an older Gradle.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.5'
 
-      - name: Generate Gradle wrapper
-        run: gradle wrapper
+      - name: Build debug APKs (both editions)
+        run: ./gradlew assembleFullDebug assembleFaroDebug
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
-
-      - name: Build release APK
-        run: ./gradlew assembleRelease
+      - name: Build release APKs (both editions)
+        run: ./gradlew assembleFullRelease assembleFaroRelease
 
       - name: Rename APKs for release
         run: |
@@ -60,8 +83,10 @@ jobs:
             VERSION="${GITHUB_REF_NAME#agent-v}"
           fi
           mkdir -p release
-          cp app/build/outputs/apk/debug/*.apk "release/DeviceKitAgent-${VERSION}-debug.apk"
-          cp app/build/outputs/apk/release/*.apk "release/DeviceKitAgent-${VERSION}-release.apk"
+          cp app/build/outputs/apk/full/debug/*.apk   "release/DeviceKitAgent-${VERSION}-debug.apk"
+          cp app/build/outputs/apk/full/release/*.apk "release/DeviceKitAgent-${VERSION}-release.apk"
+          cp app/build/outputs/apk/faro/debug/*.apk   "release/FaroAgent-${VERSION}-debug.apk"
+          cp app/build/outputs/apk/faro/release/*.apk "release/FaroAgent-${VERSION}-release.apk"
 
       - name: Upload APKs as artifact
         uses: actions/upload-artifact@v4

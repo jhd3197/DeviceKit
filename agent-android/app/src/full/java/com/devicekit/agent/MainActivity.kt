@@ -20,6 +20,7 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
 import com.devicekit.agent.services.BackgroundAgent
 import com.devicekit.agent.ui.DashboardFragment
+import com.devicekit.agent.ui.FaroFragment
 import com.devicekit.agent.ui.FilesFragment
 import com.devicekit.agent.ui.LogsFragment
 import com.devicekit.agent.ui.MetricsFragment
@@ -126,6 +127,7 @@ class MainActivity : AppCompatActivity() {
                     // Non-paged section — show fragment container
                     val fragment = when (id) {
                         R.id.nav_files -> FilesFragment()
+                        R.id.nav_faro -> FaroFragment()
                         R.id.nav_settings -> SettingsFragment()
                         else -> return@setNavigationItemSelectedListener true
                     }
@@ -194,6 +196,7 @@ class MainActivity : AppCompatActivity() {
         fragmentContainer.visibility = View.VISIBLE
         toolbarTitle.text = when (currentNavItemId) {
             R.id.nav_files -> "Files"
+            R.id.nav_faro -> "Faro Remote"
             R.id.nav_settings -> "Settings"
             else -> "DeviceKit Agent"
         }
@@ -259,6 +262,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             val fragment = when (navItemId) {
                 R.id.nav_files -> FilesFragment()
+                R.id.nav_faro -> FaroFragment()
                 R.id.nav_settings -> SettingsFragment()
                 else -> return
             }
